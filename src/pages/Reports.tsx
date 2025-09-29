@@ -1,0 +1,785 @@
+import { useState } from "react";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { 
+  BarChart3, 
+  TrendingUp, 
+  TrendingDown,
+  Brain,
+  FileText,
+  Download,
+  Calendar as CalendarIcon,
+  Phone,
+  Users,
+  Target,
+  DollarSign,
+  Clock,
+  Star,
+  AlertTriangle,
+  CheckCircle,
+  MessageSquare,
+  Lightbulb,
+  Filter,
+  Eye,
+  Play
+} from "lucide-react";
+import { formatUGX } from "@/data/sampleData";
+
+const dateRanges = [
+  { label: "Today", value: "today" },
+  { label: "Yesterday", value: "yesterday" },
+  { label: "Last 7 days", value: "7d" },
+  { label: "Last 30 days", value: "30d" },
+  { label: "This month", value: "month" },
+  { label: "Last month", value: "last-month" },
+  { label: "Custom", value: "custom" },
+];
+
+const campaigns = ["All Campaigns", "Summer Promo", "Welcome Back", "Premium Tier", "Win Back"];
+const agents = ["All Agents", "Sarah Nakato", "John Mukasa", "Grace Nalwanga", "David Ssali"];
+
+const funnelData = [
+  { stage: "Dials", count: 1245, rate: 100, color: "bg-blue-500" },
+  { stage: "Connects", count: 892, rate: 71.6, color: "bg-green-500" },
+  { stage: "Qualified", count: 534, rate: 59.9, color: "bg-yellow-500" },
+  { stage: "Converted", count: 127, rate: 23.8, color: "bg-primary" },
+];
+
+const aiInsights = [
+  {
+    type: "opportunity",
+    title: "Peak Performance Hours",
+    description: "Agents show 35% higher conversion rates between 2-4 PM. Consider increasing team capacity during these hours.",
+    impact: "High",
+    category: "Schedule Optimization"
+  },
+  {
+    type: "warning",
+    title: "Script Deviation",
+    description: "15% of calls show significant script deviations. Top performers follow script more closely.",
+    impact: "Medium",
+    category: "Quality Assurance"
+  },
+  {
+    type: "insight",
+    title: "Objection Patterns",
+    description: "Price objections increased 20% this week. Consider training on value proposition techniques.",
+    impact: "High",
+    category: "Sales Training"
+  },
+  {
+    type: "opportunity",
+    title: "Callback Success",
+    description: "Scheduled callbacks have 40% higher conversion than immediate transfers. Promote callback scheduling.",
+    impact: "Medium",
+    category: "Process Improvement"
+  }
+];
+
+const callTranscripts = [
+  {
+    id: 1,
+    agent: "Sarah Nakato",
+    customer: "Robert Kiprotich",
+    campaign: "Summer Promo",
+    duration: "04:32",
+    sentiment: "positive",
+    outcome: "converted",
+    aiScore: 4.2,
+    transcript: "Agent: Good afternoon, this is Sarah from Betsure. How are you today Robert?\nCustomer: I'm fine, thanks. What's this about?\nAgent: I'm calling about our exclusive summer promotion. You've been selected for our VIP betting package...\nCustomer: That sounds interesting. Tell me more about the bonus.\nAgent: Great! You'll get a 100% match bonus up to 500,000 UGX on your first deposit...",
+    keyMoments: [
+      { time: "0:15", type: "objection", text: "Customer asked about credibility" },
+      { time: "1:30", type: "interest", text: "Customer showed interest in bonus structure" },
+      { time: "3:45", type: "close", text: "Successfully closed with deposit commitment" }
+    ],
+    suggestions: [
+      "Excellent rapport building at the start",
+      "Could have addressed credibility concerns earlier",
+      "Strong close technique demonstrated"
+    ]
+  },
+  {
+    id: 2,
+    agent: "John Mukasa",
+    customer: "Mary Namukasa",
+    campaign: "Welcome Back",
+    duration: "06:18",
+    sentiment: "neutral",
+    outcome: "callback",
+    aiScore: 3.8,
+    transcript: "Agent: Hello Mary, this is John from Betsure. I hope you're having a good day?\nCustomer: Yes, hello. Is this about betting again?\nAgent: Yes, we've noticed you haven't been active recently and wanted to offer you a special welcome back bonus...\nCustomer: I've been busy with work. Can you call me back next week?\nAgent: Of course! When would be a good time for you?",
+    keyMoments: [
+      { time: "0:30", type: "objection", text: "Customer seemed hesitant about betting" },
+      { time: "2:15", type: "information", text: "Customer mentioned being busy with work" },
+      { time: "5:30", type: "callback", text: "Scheduled callback for next week" }
+    ],
+    suggestions: [
+      "Good at accommodating customer's schedule",
+      "Could have explored work situation as conversation starter",
+      "Consider shorter initial pitch for busy customers"
+    ]
+  }
+];
+
+export default function Reports() {
+  const [selectedDateRange, setSelectedDateRange] = useState("30d");
+  const [selectedCampaign, setSelectedCampaign] = useState("All Campaigns");
+  const [selectedAgent, setSelectedAgent] = useState("All Agents");
+  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [selectedTranscript, setSelectedTranscript] = useState(callTranscripts[0]);
+
+  const getInsightIcon = (type: string) => {
+    switch (type) {
+      case "opportunity": return <Lightbulb className="h-4 w-4 text-green-600" />;
+      case "warning": return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+      case "insight": return <Brain className="h-4 w-4 text-blue-600" />;
+      default: return <CheckCircle className="h-4 w-4 text-primary" />;
+    }
+  };
+
+  const getInsightColor = (type: string) => {
+    switch (type) {
+      case "opportunity": return "border-green-500/20 bg-green-500/5";
+      case "warning": return "border-yellow-500/20 bg-yellow-500/5";
+      case "insight": return "border-blue-500/20 bg-blue-500/5";
+      default: return "border-primary/20 bg-primary/5";
+    }
+  };
+
+  const getSentimentColor = (sentiment: string) => {
+    switch (sentiment) {
+      case "positive": return "text-green-600 bg-green-500/10";
+      case "negative": return "text-red-600 bg-red-500/10";
+      case "neutral": return "text-yellow-600 bg-yellow-500/10";
+      default: return "text-muted-foreground bg-muted";
+    }
+  };
+
+  const getOutcomeColor = (outcome: string) => {
+    switch (outcome) {
+      case "converted": return "text-green-600 bg-green-500/10 border-green-500/20";
+      case "callback": return "text-blue-600 bg-blue-500/10 border-blue-500/20";
+      case "no-interest": return "text-red-600 bg-red-500/10 border-red-500/20";
+      default: return "text-muted-foreground bg-muted border-border";
+    }
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Reports & Analytics</h1>
+            <p className="text-muted-foreground">Performance insights & AI recommendations</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm">
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Filters:</span>
+              </div>
+              
+              <Select value={selectedDateRange} onValueChange={setSelectedDateRange}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {dateRanges.map((range) => (
+                    <SelectItem key={range.value} value={range.value}>
+                      {range.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {selectedDateRange === "custom" && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <CalendarIcon className="h-4 w-4 mr-2" />
+                      {date ? format(date, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={date}
+                      onSelect={setDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+
+              <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {campaigns.map((campaign) => (
+                    <SelectItem key={campaign} value={campaign}>
+                      {campaign}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent} value={agent}>
+                      {agent}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="funnel">Funnel</TabsTrigger>
+            <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
+            <TabsTrigger value="transcripts">Transcripts</TabsTrigger>
+            <TabsTrigger value="agents">Agents</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Phone className="h-4 w-4 text-primary" />
+                    <TrendingUp className="h-3 w-3 text-green-500" />
+                  </div>
+                  <div className="text-2xl font-bold">1,245</div>
+                  <div className="text-xs text-muted-foreground">Total Calls</div>
+                  <div className="text-xs text-green-600">+12% vs last period</div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Users className="h-4 w-4 text-blue-500" />
+                    <TrendingUp className="h-3 w-3 text-green-500" />
+                  </div>
+                  <div className="text-2xl font-bold">71.6%</div>
+                  <div className="text-xs text-muted-foreground">Connect Rate</div>
+                  <div className="text-xs text-green-600">+3.2% vs last period</div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Target className="h-4 w-4 text-green-500" />
+                    <TrendingDown className="h-3 w-3 text-red-500" />
+                  </div>
+                  <div className="text-2xl font-bold">23.8%</div>
+                  <div className="text-xs text-muted-foreground">Conversion Rate</div>
+                  <div className="text-xs text-red-600">-1.4% vs last period</div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <DollarSign className="h-4 w-4 text-amber-500" />
+                    <TrendingUp className="h-3 w-3 text-green-500" />
+                  </div>
+                  <div className="text-2xl font-bold">{formatUGX(15400000)}</div>
+                  <div className="text-xs text-muted-foreground">Revenue Generated</div>
+                  <div className="text-xs text-green-600">+18% vs last period</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Daily Performance</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {[
+                      { day: "Mon", calls: 85, conversions: 12 },
+                      { day: "Tue", calls: 92, conversions: 15 },
+                      { day: "Wed", calls: 78, conversions: 8 },
+                      { day: "Thu", calls: 105, conversions: 22 },
+                      { day: "Fri", calls: 88, conversions: 14 },
+                      { day: "Sat", calls: 45, conversions: 6 },
+                      { day: "Sun", calls: 32, conversions: 3 },
+                    ].map((day) => (
+                      <div key={day.day} className="flex items-center gap-3">
+                        <div className="w-12 text-sm font-medium">{day.day}</div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="text-xs text-muted-foreground">Calls</div>
+                            <div className="text-xs font-medium">{day.calls}</div>
+                          </div>
+                          <Progress value={(day.calls / 105) * 100} className="h-2" />
+                        </div>
+                        <div className="w-16 text-right">
+                          <div className="text-xs text-muted-foreground">Conv</div>
+                          <div className="text-xs font-medium">{day.conversions}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Campaign Performance</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {[
+                      { name: "Summer Promo", calls: 425, conv: 18.2, revenue: 5200000 },
+                      { name: "Welcome Back", calls: 312, conv: 24.1, revenue: 4100000 },
+                      { name: "Premium Tier", calls: 298, conv: 28.5, revenue: 3800000 },
+                      { name: "Win Back", calls: 210, conv: 15.7, revenue: 2300000 },
+                    ].map((campaign) => (
+                      <div key={campaign.name} className="p-3 border border-border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="font-medium text-sm">{campaign.name}</div>
+                          <Badge variant="outline" className="text-xs">
+                            {campaign.conv}% conv
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div>
+                            <div className="text-muted-foreground">Calls</div>
+                            <div className="font-medium">{campaign.calls}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Revenue</div>
+                            <div className="font-medium">{formatUGX(campaign.revenue).replace('UGX', 'K')}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="funnel" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Conversion Funnel</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {funnelData.map((stage, index) => (
+                    <div key={stage.stage} className="relative">
+                      <div className="flex items-center gap-4">
+                        <div className="w-24 text-sm font-medium">{stage.stage}</div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-lg font-bold">{stage.count.toLocaleString()}</div>
+                            <div className="text-sm text-muted-foreground">{stage.rate}%</div>
+                          </div>
+                          <div className="relative h-8 bg-muted rounded-lg overflow-hidden">
+                            <div 
+                              className={`h-full ${stage.color} transition-all duration-500`}
+                              style={{ width: `${stage.rate}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      {index < funnelData.length - 1 && (
+                        <div className="absolute left-12 top-12 w-0.5 h-4 bg-border" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Drop-off Analysis</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center p-3 bg-red-500/10 rounded-lg border border-red-500/20">
+                      <div>
+                        <div className="font-medium text-sm">Dials → Connects</div>
+                        <div className="text-xs text-muted-foreground">28.4% drop-off</div>
+                      </div>
+                      <div className="text-red-600 font-bold">353 lost</div>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
+                      <div>
+                        <div className="font-medium text-sm">Connects → Qualified</div>
+                        <div className="text-xs text-muted-foreground">40.1% drop-off</div>
+                      </div>
+                      <div className="text-yellow-600 font-bold">358 lost</div>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                      <div>
+                        <div className="font-medium text-sm">Qualified → Converted</div>
+                        <div className="text-xs text-muted-foreground">76.2% drop-off</div>
+                      </div>
+                      <div className="text-blue-600 font-bold">407 lost</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Improvement Opportunities</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="p-3 border border-border rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Target className="h-4 w-4 text-primary" />
+                        <span className="font-medium text-sm">Qualification Rate</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-2">
+                        Improve by 5% to gain +45 conversions/month
+                      </div>
+                      <div className="text-xs text-green-600 font-medium">
+                        Potential: +{formatUGX(1800000)} revenue
+                      </div>
+                    </div>
+                    <div className="p-3 border border-border rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Phone className="h-4 w-4 text-blue-500" />
+                        <span className="font-medium text-sm">Connect Rate</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-2">
+                        Improve by 3% to gain +37 connects/month
+                      </div>
+                      <div className="text-xs text-green-600 font-medium">
+                        Potential: +{formatUGX(980000)} revenue
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ai-insights" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-primary" />
+                  AI-Powered Insights
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {aiInsights.map((insight, index) => (
+                    <div key={index} className={`p-4 border rounded-lg ${getInsightColor(insight.type)}`}>
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 mt-0.5">
+                          {getInsightIcon(insight.type)}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="font-medium text-sm">{insight.title}</h3>
+                            <Badge variant="outline" className="text-xs">
+                              {insight.impact} Impact
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {insight.description}
+                          </p>
+                          <div className="text-xs text-muted-foreground">
+                            Category: {insight.category}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Recommended Actions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {[
+                      {
+                        action: "Schedule team training on objection handling",
+                        priority: "High",
+                        impact: "15% conversion improvement"
+                      },
+                      {
+                        action: "Adjust calling hours to focus on 2-4 PM slot",
+                        priority: "Medium", 
+                        impact: "8% efficiency gain"
+                      },
+                      {
+                        action: "Implement callback scheduling workflow",
+                        priority: "Medium",
+                        impact: "12% lead recovery"
+                      }
+                    ].map((item, index) => (
+                      <div key={index} className="p-3 border border-border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-sm">{item.action}</span>
+                          <Badge variant={item.priority === "High" ? "destructive" : "secondary"} className="text-xs">
+                            {item.priority}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-green-600">{item.impact}</div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Performance Predictions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp className="h-4 w-4 text-green-600" />
+                        <span className="font-medium text-sm">Next 30 Days</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        Predicted conversion rate: <span className="font-medium">26.2%</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Expected revenue: <span className="font-medium">{formatUGX(18200000)}</span>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="h-4 w-4 text-blue-600" />
+                        <span className="font-medium text-sm">Optimal Timing</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Best calling windows: 10-11 AM, 2-4 PM, 7-8 PM
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="transcripts" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-1">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Recent Calls</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="space-y-1">
+                      {callTranscripts.map((call) => (
+                        <div 
+                          key={call.id}
+                          className={`p-3 cursor-pointer transition-colors border-l-2 ${
+                            selectedTranscript.id === call.id 
+                              ? 'bg-primary/10 border-l-primary' 
+                              : 'hover:bg-muted/50 border-l-transparent'
+                          }`}
+                          onClick={() => setSelectedTranscript(call)}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="font-medium text-sm">{call.customer}</div>
+                            <Badge className={getSentimentColor(call.sentiment)}>
+                              {call.sentiment}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-1">
+                            {call.agent} • {call.campaign}
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Badge className={getOutcomeColor(call.outcome)}>
+                              {call.outcome}
+                            </Badge>
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                              {call.aiScore}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      Call Transcript: {selectedTranscript.customer}
+                    </CardTitle>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>Duration: {selectedTranscript.duration}</span>
+                      <span>Agent: {selectedTranscript.agent}</span>
+                      <span>Campaign: {selectedTranscript.campaign}</span>
+                      <div className="flex items-center gap-1">
+                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                        AI Score: {selectedTranscript.aiScore}/5
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <FileText className="h-4 w-4 text-primary" />
+                        <span className="font-medium text-sm">Transcript</span>
+                        <Button variant="ghost" size="sm">
+                          <Play className="h-3 w-3 mr-1" />
+                          Play Audio
+                        </Button>
+                      </div>
+                      <div className="p-4 bg-muted/30 rounded-lg">
+                        <div className="text-sm leading-relaxed whitespace-pre-line">
+                          {selectedTranscript.transcript}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock className="h-4 w-4 text-blue-500" />
+                        <span className="font-medium text-sm">Key Moments</span>
+                      </div>
+                      <div className="space-y-2">
+                        {selectedTranscript.keyMoments.map((moment, index) => (
+                          <div key={index} className="flex items-start gap-3 p-2 rounded-lg bg-muted/30">
+                            <div className="text-xs font-mono bg-background px-2 py-1 rounded">
+                              {moment.time}
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-xs font-medium mb-1 capitalize">{moment.type}</div>
+                              <div className="text-xs text-muted-foreground">{moment.text}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Brain className="h-4 w-4 text-green-500" />
+                        <span className="font-medium text-sm">AI Coaching Suggestions</span>
+                      </div>
+                      <div className="space-y-2">
+                        {selectedTranscript.suggestions.map((suggestion, index) => (
+                          <div key={index} className="flex items-start gap-3 p-3 border border-border rounded-lg">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm">{suggestion}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="agents" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              {[
+                { name: "Sarah Nakato", calls: 89, conv: 18.2, score: 4.2, handle: "4:32" },
+                { name: "Grace Nalwanga", calls: 76, conv: 22.1, score: 4.9, handle: "3:45" },
+                { name: "John Mukasa", calls: 82, conv: 15.8, score: 4.7, handle: "5:12" },
+                { name: "David Ssali", calls: 65, conv: 12.3, score: 3.8, handle: "6:18" },
+                { name: "Mary Nakamya", calls: 71, conv: 19.7, score: 4.4, handle: "4:02" },
+                { name: "Peter Kato", calls: 58, conv: 16.5, score: 4.1, handle: "4:55" }
+              ].map((agent, index) => (
+                <Card key={index}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback className="text-sm font-medium">
+                          {agent.name.split(' ').map(n => n[0]).join('')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="font-medium text-sm">{agent.name}</div>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          {agent.score} AI Score
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Calls</div>
+                        <div className="font-bold">{agent.calls}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Conversion</div>
+                        <div className="font-bold">{agent.conv}%</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Avg Handle</div>
+                        <div className="font-bold">{agent.handle}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Rank</div>
+                        <div className="font-bold">#{index + 1}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span>Performance</span>
+                        <span>{agent.conv}%</span>
+                      </div>
+                      <Progress value={agent.conv} className="h-2" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </DashboardLayout>
+  );
+}
