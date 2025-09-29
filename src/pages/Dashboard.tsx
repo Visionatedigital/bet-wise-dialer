@@ -77,15 +77,15 @@ function DashboardContent() {
 
       {/* Main Working Area */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left Column - Queue & Softphone */}
+        {/* Left Column - Softphone & Queue */}
         <div className="lg:col-span-1 space-y-6">
+          <Softphone currentLead={currentLead} />
+          
           <QueueCard 
             nextLead={nextLead}
             queueLength={queueLeads.length}
             onCallLead={handleCallLead}
           />
-          
-          <Softphone currentLead={currentLead} />
           
           {/* Quick Actions */}
           <Card>
