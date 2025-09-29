@@ -6,6 +6,7 @@ import { Bell, Search, User, Settings, Moon, Sun } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +21,24 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme();
+  const { user } = useAuth();
   const [notifications] = useState(3); // Mock notification count
+
+  // Generate initials from email
+  const getInitials = (email: string): string => {
+    if (!email) return "U";
+    const emailPrefix = email.split("@")[0];
+    const words = emailPrefix.split(/[._-]/);
+    
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    
+    return emailPrefix.substring(0, 2).toUpperCase();
+  };
+
+  const userEmail = user?.email || "user@example.com";
+  const userInitials = getInitials(userEmail);
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -85,14 +103,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="flex items-center gap-2">
                       <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
-                        RS
+                        {userInitials}
                       </div>
-                      <span className="hidden md:inline text-sm">Robert Ssemakula</span>
+                      <span className="hidden md:inline text-sm">{userEmail}</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5 text-sm font-medium">
-                      Robert Ssemakula
+                      {userEmail}
                     </div>
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">
                       Agent • Online
