@@ -10,6 +10,7 @@ import Leads from "./pages/Leads";
 import Campaigns from "./pages/Campaigns";
 import Monitor from "./pages/Monitor";
 import Reports from "./pages/Reports";
+import Integrations from "./pages/Integrations";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/leads" element={<Leads />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/campaigns" element={<Campaigns />} />
+            <Route path="/integrations" element={<Integrations />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
