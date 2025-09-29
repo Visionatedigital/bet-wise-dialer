@@ -43,7 +43,7 @@ const SignIn = () => {
             <img 
               src={betsureLogo} 
               alt="Betsure Logo" 
-              className="w-32 h-32 object-contain"
+              className="w-96 h-96 object-contain"
             />
           </div>
         </div>
