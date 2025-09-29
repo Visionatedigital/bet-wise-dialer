@@ -37,11 +37,13 @@ export default function Campaigns() {
     return sampleLeads.filter(lead => lead.campaign === campaignName);
   };
 
-  const calculateConversionRate = (campaign: Campaign) => {
+  const calculateConversionRate = (campaign: Campaign | null) => {
+    if (!campaign) return 0;
     return campaign.kpis.connects > 0 ? Math.round((campaign.kpis.converts / campaign.kpis.connects) * 100) : 0;
   };
 
-  const calculateConnectRate = (campaign: Campaign) => {
+  const calculateConnectRate = (campaign: Campaign | null) => {
+    if (!campaign) return 0;
     return campaign.kpis.dials > 0 ? Math.round((campaign.kpis.connects / campaign.kpis.dials) * 100) : 0;
   };
 
@@ -145,7 +147,7 @@ export default function Campaigns() {
                                          {selectedCampaign?.kpis.dials.toLocaleString()}
                                        </div>
                                        <div className="text-xs text-muted-foreground">
-                                         {calculateConnectRate(selectedCampaign!)}% connect rate
+                                         {calculateConnectRate(selectedCampaign)}% connect rate
                                        </div>
                                      </CardContent>
                                    </Card>
@@ -161,7 +163,7 @@ export default function Campaigns() {
                                        {selectedCampaign?.kpis.converts.toLocaleString()}
                                      </div>
                                      <div className="text-xs text-muted-foreground">
-                                       {calculateConversionRate(selectedCampaign!)}% conversion rate
+                                       {calculateConversionRate(selectedCampaign)}% conversion rate
                                      </div>
                                    </CardContent>
                                  </Card>
