@@ -14,6 +14,132 @@ export type Database = {
   }
   public: {
     Tables: {
+      call_activities: {
+        Row: {
+          call_type: string | null
+          created_at: string
+          deposit_amount: number | null
+          duration_seconds: number | null
+          end_time: string | null
+          id: string
+          lead_name: string | null
+          notes: string | null
+          phone_number: string | null
+          start_time: string
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          call_type?: string | null
+          created_at?: string
+          deposit_amount?: number | null
+          duration_seconds?: number | null
+          end_time?: string | null
+          id?: string
+          lead_name?: string | null
+          notes?: string | null
+          phone_number?: string | null
+          start_time?: string
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          call_type?: string | null
+          created_at?: string
+          deposit_amount?: number | null
+          duration_seconds?: number | null
+          end_time?: string | null
+          id?: string
+          lead_name?: string | null
+          notes?: string | null
+          phone_number?: string | null
+          start_time?: string
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      callbacks: {
+        Row: {
+          created_at: string
+          id: string
+          lead_name: string
+          notes: string | null
+          phone_number: string | null
+          scheduled_for: string
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lead_name: string
+          notes?: string | null
+          phone_number?: string | null
+          scheduled_for: string
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lead_name?: string
+          notes?: string | null
+          phone_number?: string | null
+          scheduled_for?: string
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      daily_metrics: {
+        Row: {
+          callbacks_due: number | null
+          calls_made: number | null
+          connects: number | null
+          conversions: number | null
+          created_at: string
+          date: string
+          id: string
+          total_deposit_value: number | null
+          total_handle_time_seconds: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          callbacks_due?: number | null
+          calls_made?: number | null
+          connects?: number | null
+          conversions?: number | null
+          created_at?: string
+          date: string
+          id?: string
+          total_deposit_value?: number | null
+          total_handle_time_seconds?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          callbacks_due?: number | null
+          calls_made?: number | null
+          connects?: number | null
+          conversions?: number | null
+          created_at?: string
+          date?: string
+          id?: string
+          total_deposit_value?: number | null
+          total_handle_time_seconds?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

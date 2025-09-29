@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useCallMetrics } from "@/hooks/useCallMetrics";
+import { toast } from "sonner";
 
 type CallStatus = "idle" | "ringing" | "connected" | "hold" | "muted";
 
@@ -19,27 +21,83 @@ export function Softphone({ currentLead }: SoftphoneProps) {
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [currentCallId, setCurrentCallId] = useState<string | null>(null);
+  const [callStartTime, setCallStartTime] = useState<Date | null>(null);
+  const { createCallActivity, updateCallActivity } = useCallMetrics();
 
-  const handleCall = () => {
+  const handleCall = async () => {
     if (callStatus === "idle") {
-      setCallStatus("ringing");
-      // Simulate call connection after 2 seconds
-      setTimeout(() => {
-        setCallStatus("connected");
-        // Start timer
-        const timer = setInterval(() => {
-          setCallDuration(prev => prev + 1);
-        }, 1000);
-        return () => clearInterval(timer);
-      }, 2000);
+      try {
+        setCallStatus("ringing");
+        
+        // Create call activity record
+        const callActivity = await createCallActivity({
+          lead_name: currentLead?.name || 'Unknown Lead',
+          phone_number: currentLead?.phone || 'Unknown',
+          call_type: 'outbound',
+          status: 'connected',
+          start_time: new Date().toISOString()
+        });
+        
+        setCurrentCallId(callActivity.id);
+        setCallStartTime(new Date());
+        
+        toast.success(`Calling ${currentLead?.name || 'Unknown Lead'}...`);
+        
+        // Simulate call connection after 2 seconds
+        setTimeout(() => {
+          setCallStatus("connected");
+          // Start timer
+          const timer = setInterval(() => {
+            setCallDuration(prev => prev + 1);
+          }, 1000);
+          // Store timer for cleanup
+          (window as any).callTimer = timer;
+        }, 2000);
+      } catch (error) {
+        console.error('Error starting call:', error);
+        toast.error('Failed to start call');
+        setCallStatus("idle");
+      }
     }
   };
 
-  const handleHangup = () => {
-    setCallStatus("idle");
-    setCallDuration(0);
-    setIsMuted(false);
-    setIsRecording(false);
+  const handleHangup = async () => {
+    try {
+      // Clear timer
+      if ((window as any).callTimer) {
+        clearInterval((window as any).callTimer);
+      }
+      
+      // Update call activity with end time and duration
+      if (currentCallId && callStartTime) {
+        const endTime = new Date();
+        const durationSeconds = Math.floor((endTime.getTime() - callStartTime.getTime()) / 1000);
+        
+        await updateCallActivity(currentCallId, {
+          end_time: endTime.toISOString(),
+          duration_seconds: durationSeconds,
+          status: 'connected' // You could make this dynamic based on call outcome
+        });
+        
+        toast.success(`Call completed (${Math.floor(durationSeconds / 60)}:${(durationSeconds % 60).toString().padStart(2, '0')})`);
+      }
+      
+      setCallStatus("idle");
+      setCallDuration(0);
+      setIsMuted(false);
+      setIsRecording(false);
+      setCurrentCallId(null);
+      setCallStartTime(null);
+    } catch (error) {
+      console.error('Error ending call:', error);
+      toast.error('Error ending call');
+      // Reset state even if update fails
+      setCallStatus("idle");
+      setCallDuration(0);
+      setCurrentCallId(null);
+      setCallStartTime(null);
+    }
   };
 
   const handleHold = () => {
