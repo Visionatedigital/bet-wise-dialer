@@ -38,18 +38,13 @@ const SignIn = () => {
       <div className="relative z-10 w-full max-w-6xl mx-auto px-4 flex items-center justify-between">
         {/* Left side - Logo */}
         <div className="flex-1 flex justify-center lg:justify-start">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center justify-center">
             {/* Logo image */}
             <img 
               src={betsureLogo} 
               alt="Betsure Logo" 
-              className="w-20 h-20 object-contain"
+              className="w-32 h-32 object-contain"
             />
-            {/* Logo text */}
-            <div className="text-white">
-              <h1 className="text-6xl font-bold tracking-wider">BET</h1>
-              <h1 className="text-6xl font-bold tracking-wider -mt-2">SURE</h1>
-            </div>
           </div>
         </div>
 
