@@ -8,8 +8,10 @@ import {
   Settings, 
   Monitor,
   Plug,
-  Home
+  Home,
+  LogOut
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 import {
   Sidebar,
@@ -73,6 +75,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
+  const { signOut, user } = useAuth();
   
   const isCollapsed = state === "collapsed";
 
@@ -123,6 +126,18 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              
+              {/* User Profile and Logout */}
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  onClick={signOut}
+                  className="text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                  title={isCollapsed ? "Sign out" : undefined}
+                >
+                  <LogOut className="h-4 w-4" />
+                  {!isCollapsed && <span>Sign Out</span>}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
