@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import loginBackground from "@/assets/login-background.png";
+import betsureLogo from "@/assets/betsure-logo.png";
 import { useNavigate } from "react-router-dom";
 
 const SignIn = () => {
@@ -37,15 +38,13 @@ const SignIn = () => {
       <div className="relative z-10 w-full max-w-6xl mx-auto px-4 flex items-center justify-between">
         {/* Left side - Logo */}
         <div className="flex-1 flex justify-center lg:justify-start">
-          <div className="flex items-center gap-4">
-            {/* Hexagon logo */}
-            <div className="w-16 h-16 bg-green-500 transform rotate-90 relative">
-              <div className="absolute inset-2 bg-green-500 transform -rotate-90" 
-                   style={{
-                     clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)"
-                   }}
-              />
-            </div>
+          <div className="flex items-center gap-6">
+            {/* Logo image */}
+            <img 
+              src={betsureLogo} 
+              alt="Betsure Logo" 
+              className="w-20 h-20 object-contain"
+            />
             {/* Logo text */}
             <div className="text-white">
               <h1 className="text-6xl font-bold tracking-wider">BET</h1>
