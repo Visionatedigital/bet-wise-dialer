@@ -15,11 +15,11 @@ export default function Campaigns() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "live": return "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400";
-      case "planned": return "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400";
-      case "paused": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400";
-      case "done": return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400";
-      default: return "bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400";
+      case "live": return "bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400 border border-green-500/20";
+      case "planned": return "bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-500/20";
+      case "paused": return "bg-yellow-500/10 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400 border border-yellow-500/20";
+      case "done": return "bg-muted text-muted-foreground border border-border";
+      default: return "bg-muted text-muted-foreground border border-border";
     }
   };
 
@@ -82,20 +82,23 @@ export default function Campaigns() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {Object.entries(groupedCampaigns).map(([status, campaigns]) => (
             <div key={status} className="space-y-4">
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold capitalize text-foreground">{status}</h3>
-                <Badge variant="secondary" className="text-xs">
+              <div className="flex items-center gap-3 pb-2 border-b border-border/50">
+                <div className="flex items-center gap-2">
+                  {getStatusIcon(status)}
+                  <h3 className="font-semibold capitalize text-foreground">{status}</h3>
+                </div>
+                <Badge variant="outline" className="text-xs font-medium">
                   {campaigns.length}
                 </Badge>
               </div>
 
               <div className="space-y-3">
                 {campaigns.map((campaign) => (
-                  <Card key={campaign.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                  <Card key={campaign.id} className="group hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 cursor-pointer border-border/50 hover:border-primary/20">
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <CardTitle className="text-base font-semibold mb-2">
+                          <CardTitle className="text-base font-semibold mb-3 group-hover:text-primary transition-colors">
                             {campaign.name}
                           </CardTitle>
                           <Badge className={getStatusColor(campaign.status)}>
@@ -130,62 +133,70 @@ export default function Campaigns() {
 
                             <div className="mt-6 space-y-6">
                               <div className="grid grid-cols-2 gap-4">
-                                <Card>
-                                  <CardContent className="p-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <Phone className="h-4 w-4 text-muted-foreground" />
-                                      <span className="text-sm font-medium">Dials</span>
-                                    </div>
-                                    <div className="text-2xl font-bold">
-                                      {selectedCampaign?.kpis.dials}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {calculateConnectRate(selectedCampaign!)}% connect rate
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                                <Card>
-                                  <CardContent className="p-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                                      <span className="text-sm font-medium">Converts</span>
-                                    </div>
-                                    <div className="text-2xl font-bold">
-                                      {selectedCampaign?.kpis.converts}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {calculateConversionRate(selectedCampaign!)}% conversion rate
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                                <Card>
-                                  <CardContent className="p-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                      <span className="text-sm font-medium">Revenue</span>
-                                    </div>
-                                    <div className="text-2xl font-bold">
-                                      {formatUGX(selectedCampaign?.kpis.revenueUgx || 0)}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Total generated
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                                <Card>
-                                  <CardContent className="p-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <Users className="h-4 w-4 text-muted-foreground" />
-                                      <span className="text-sm font-medium">Queue Size</span>
-                                    </div>
-                                    <div className="text-2xl font-bold">
-                                      {getCampaignLeads(selectedCampaign?.name || "").length}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Active leads
-                                    </div>
-                                  </CardContent>
-                                </Card>
+                                   <Card className="border-primary/10">
+                                     <CardContent className="p-4">
+                                       <div className="flex items-center gap-2 mb-3">
+                                         <div className="p-1.5 rounded-md bg-primary/10">
+                                           <Phone className="h-4 w-4 text-primary" />
+                                         </div>
+                                         <span className="text-sm font-medium">Dials</span>
+                                       </div>
+                                       <div className="text-2xl font-bold mb-1">
+                                         {selectedCampaign?.kpis.dials.toLocaleString()}
+                                       </div>
+                                       <div className="text-xs text-muted-foreground">
+                                         {calculateConnectRate(selectedCampaign!)}% connect rate
+                                       </div>
+                                     </CardContent>
+                                   </Card>
+                                 <Card className="border-green-500/10">
+                                   <CardContent className="p-4">
+                                     <div className="flex items-center gap-2 mb-3">
+                                       <div className="p-1.5 rounded-md bg-green-500/10">
+                                         <TrendingUp className="h-4 w-4 text-green-600" />
+                                       </div>
+                                       <span className="text-sm font-medium">Converts</span>
+                                     </div>
+                                     <div className="text-2xl font-bold mb-1">
+                                       {selectedCampaign?.kpis.converts.toLocaleString()}
+                                     </div>
+                                     <div className="text-xs text-muted-foreground">
+                                       {calculateConversionRate(selectedCampaign!)}% conversion rate
+                                     </div>
+                                   </CardContent>
+                                 </Card>
+                                 <Card className="border-amber-500/10">
+                                   <CardContent className="p-4">
+                                     <div className="flex items-center gap-2 mb-3">
+                                       <div className="p-1.5 rounded-md bg-amber-500/10">
+                                         <DollarSign className="h-4 w-4 text-amber-600" />
+                                       </div>
+                                       <span className="text-sm font-medium">Revenue</span>
+                                     </div>
+                                     <div className="text-2xl font-bold mb-1">
+                                       {formatUGX(selectedCampaign?.kpis.revenueUgx || 0)}
+                                     </div>
+                                     <div className="text-xs text-muted-foreground">
+                                       Total generated
+                                     </div>
+                                   </CardContent>
+                                 </Card>
+                                 <Card className="border-blue-500/10">
+                                   <CardContent className="p-4">
+                                     <div className="flex items-center gap-2 mb-3">
+                                       <div className="p-1.5 rounded-md bg-blue-500/10">
+                                         <Users className="h-4 w-4 text-blue-600" />
+                                       </div>
+                                       <span className="text-sm font-medium">Queue Size</span>
+                                     </div>
+                                     <div className="text-2xl font-bold mb-1">
+                                       {getCampaignLeads(selectedCampaign?.name || "").length.toLocaleString()}
+                                     </div>
+                                     <div className="text-xs text-muted-foreground">
+                                       Active leads
+                                     </div>
+                                   </CardContent>
+                                 </Card>
                               </div>
 
                               <Tabs defaultValue="overview" className="w-full">
@@ -301,52 +312,70 @@ export default function Campaigns() {
                     </CardHeader>
                     
                     <CardContent className="pt-0">
-                      <div className="space-y-3">
-                        <div className="text-sm text-muted-foreground">
+                      <div className="space-y-4">
+                        <div className="text-sm text-muted-foreground leading-relaxed">
                           {campaign.objective}
                         </div>
                         
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <span className="text-muted-foreground">Dials:</span>
-                            <span className="font-medium ml-1">{campaign.kpis.dials}</span>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-muted/30">
+                            <Phone className="h-3 w-3 text-primary" />
+                            <div>
+                              <div className="text-xs text-muted-foreground">Dials</div>
+                              <div className="font-semibold">{campaign.kpis.dials}</div>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-muted-foreground">Connects:</span>
-                            <span className="font-medium ml-1">{campaign.kpis.connects}</span>
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-muted/30">
+                            <Users className="h-3 w-3 text-blue-500" />
+                            <div>
+                              <div className="text-xs text-muted-foreground">Connects</div>
+                              <div className="font-semibold">{campaign.kpis.connects}</div>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-muted-foreground">Converts:</span>
-                            <span className="font-medium ml-1">{campaign.kpis.converts}</span>
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-muted/30">
+                            <TrendingUp className="h-3 w-3 text-green-500" />
+                            <div>
+                              <div className="text-xs text-muted-foreground">Converts</div>
+                              <div className="font-semibold">{campaign.kpis.converts}</div>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-muted-foreground">Revenue:</span>
-                            <span className="font-medium ml-1">
-                              {formatUGX(campaign.kpis.revenueUgx).replace('UGX', 'K')}
-                            </span>
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-muted/30">
+                            <DollarSign className="h-3 w-3 text-amber-500" />
+                            <div>
+                              <div className="text-xs text-muted-foreground">Revenue</div>
+                              <div className="font-semibold">
+                                {formatUGX(campaign.kpis.revenueUgx).replace('UGX', 'K')}
+                              </div>
+                            </div>
                           </div>
                         </div>
                         
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                            <span>Connect Rate</span>
-                            <span>{calculateConnectRate(campaign)}%</span>
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-muted-foreground">Connect Rate</span>
+                              <span className="font-medium">{calculateConnectRate(campaign)}%</span>
+                            </div>
+                            <Progress value={calculateConnectRate(campaign)} className="h-2" />
                           </div>
-                          <Progress value={calculateConnectRate(campaign)} className="h-2" />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                            <span>Conversion Rate</span>
-                            <span>{calculateConversionRate(campaign)}%</span>
+                          
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-muted-foreground">Conversion Rate</span>
+                              <span className="font-medium">{calculateConversionRate(campaign)}%</span>
+                            </div>
+                            <Progress value={calculateConversionRate(campaign)} className="h-2" />
                           </div>
-                          <Progress value={calculateConversionRate(campaign)} className="h-2" />
                         </div>
 
-                        <div className="text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1">
+                        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
                             <Users className="h-3 w-3" />
                             {getCampaignLeads(campaign.name).length} leads in queue
+                          </div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {campaign.startAt}
                           </div>
                         </div>
                       </div>
@@ -356,8 +385,11 @@ export default function Campaigns() {
               </div>
 
               {campaigns.length === 0 && (
-                <div className="text-center text-muted-foreground text-sm p-8 border-2 border-dashed border-border rounded-lg">
-                  No {status} campaigns
+                <div className="text-center text-muted-foreground text-sm p-8 border-2 border-dashed border-border/50 rounded-xl bg-muted/20">
+                  <div className="flex flex-col items-center gap-2">
+                    {getStatusIcon(status)}
+                    <div>No {status} campaigns</div>
+                  </div>
                 </div>
               )}
             </div>
