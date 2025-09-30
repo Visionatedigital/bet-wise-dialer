@@ -2,11 +2,12 @@ import { useState } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Bell, Search, User, Settings, Moon, Sun } from "lucide-react";
+import { Bell, Search, User, Settings, Moon, Sun, Coffee } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAgentStatus } from "@/hooks/useAgentStatus";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +22,8 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const { status, updateStatus } = useAgentStatus();
   const [notifications] = useState(3); // Mock notification count
 
   // Generate initials from email
@@ -113,8 +115,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       {userEmail}
                     </div>
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                      Agent • Online
+                      Agent • <span className="capitalize">{status}</span>
                     </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => updateStatus(status === 'break' ? 'online' : 'break')}
+                    >
+                      <Coffee className="mr-2 h-4 w-4" />
+                      {status === 'break' ? 'End Break' : 'Take Break'}
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem>
                       <User className="mr-2 h-4 w-4" />
@@ -125,7 +134,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-destructive">
+                    <DropdownMenuItem className="text-destructive" onClick={() => signOut()}>
                       Sign out
                     </DropdownMenuItem>
                   </DropdownMenuContent>

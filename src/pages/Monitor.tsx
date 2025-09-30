@@ -7,38 +7,25 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useMonitorData } from "@/hooks/useMonitorData";
 import { 
-  MonitorIcon, 
-  Users, 
   Phone, 
   Clock, 
-  TrendingUp, 
-  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Pause,
   Headphones,
   Mic,
   PhoneCall,
   Star,
-  CheckCircle,
-  XCircle,
-  Pause,
-  Play,
-  MessageSquare,
   Eye,
   BarChart3,
   UserCheck,
   Timer,
-  Target
+  Target,
+  AlertTriangle
 } from "lucide-react";
-
-const agentStatuses = [
-  { id: 1, name: "Sarah Nakato", status: "in-call", duration: "03:24", campaign: "Summer Promo", avatar: "SN", score: 4.2, calls: 12 },
-  { id: 2, name: "John Mukasa", status: "wrap-up", duration: "01:15", campaign: "Welcome Back", avatar: "JM", score: 4.7, calls: 8 },
-  { id: 3, name: "Grace Nalwanga", status: "available", duration: "00:00", campaign: "Premium Tier", avatar: "GN", score: 4.9, calls: 15 },
-  { id: 4, name: "David Ssali", status: "in-call", duration: "07:42", campaign: "Win Back", avatar: "DS", score: 3.8, calls: 6 },
-  { id: 5, name: "Mary Nakamya", status: "break", duration: "08:30", campaign: "Summer Promo", avatar: "MN", score: 4.4, calls: 10 },
-  { id: 6, name: "Peter Kato", status: "available", duration: "00:00", campaign: "Welcome Back", avatar: "PK", score: 4.1, calls: 9 },
-];
 
 const queueMetrics = [
   { name: "Summer Promo", waiting: 23, longest: "04:32", agents: 3 },
@@ -65,26 +52,27 @@ const qualityChecklist = [
 ];
 
 export default function Monitor() {
-  const [selectedAgent, setSelectedAgent] = useState(agentStatuses[0]);
+  const { agents, loading } = useMonitorData();
+  const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [qualityScores, setQualityScores] = useState<{[key: string]: number}>({});
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "in-call": return "bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400 border border-green-500/20";
-      case "available": return "bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-500/20";
-      case "wrap-up": return "bg-yellow-500/10 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400 border border-yellow-500/20";
-      case "break": return "bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400 border border-red-500/20";
+      case "on-call": return "bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400 border border-green-500/20";
+      case "online": return "bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-500/20";
+      case "break": return "bg-yellow-500/10 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400 border border-yellow-500/20";
+      case "offline": return "bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400 border border-red-500/20";
       default: return "bg-muted text-muted-foreground border border-border";
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "in-call": return <PhoneCall className="h-3 w-3" />;
-      case "available": return <UserCheck className="h-3 w-3" />;
-      case "wrap-up": return <Timer className="h-3 w-3" />;
+      case "on-call": return <PhoneCall className="h-3 w-3" />;
+      case "online": return <UserCheck className="h-3 w-3" />;
       case "break": return <Pause className="h-3 w-3" />;
-      default: return <Users className="h-3 w-3" />;
+      case "offline": return <XCircle className="h-3 w-3" />;
+      default: return <XCircle className="h-3 w-3" />;
     }
   };
 
@@ -205,12 +193,31 @@ export default function Monitor() {
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-foreground">Agent Status</h3>
               <Badge variant="outline" className="text-xs">
-                {agentStatuses.length} agents
+                {agents.length} agents
               </Badge>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {agentStatuses.map((agent) => (
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4 space-y-3">
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : agents.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <p className="text-muted-foreground">No active agents found</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {agents.map((agent) => (
                 <Card key={agent.id} className="group hover:shadow-lg hover:shadow-primary/5 transition-all duration-200">
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between mb-3">
@@ -256,8 +263,8 @@ export default function Monitor() {
                             variant="outline" 
                             size="sm" 
                             className="flex-1"
-                            onClick={() => setSelectedAgent(agent)}
-                            disabled={agent.status !== "in-call"}
+                          onClick={() => setSelectedAgent(agent)}
+                          disabled={agent.status !== "on-call"}
                           >
                             <Headphones className="h-3 w-3 mr-1" />
                             Listen
@@ -369,19 +376,12 @@ export default function Monitor() {
                           </div>
                         </SheetContent>
                       </Sheet>
-                      
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        disabled={agent.status === "break"}
-                      >
-                        <MessageSquare className="h-3 w-3" />
-                      </Button>
                     </div>
                   </CardContent>
                 </Card>
               ))}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Queue Status */}
