@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Phone, Mail, MessageSquare, Search, Filter, Download, UserMinus, Calendar, Clock, DollarSign, Target, Tag, User, Zap } from "lucide-react";
 import { sampleCalls, formatUGX, formatKampalaTime, type Lead } from "@/data/sampleData";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export default function Leads() {
