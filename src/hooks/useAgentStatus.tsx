@@ -21,7 +21,7 @@ export function useAgentStatus() {
         .single();
 
       if (!error && data) {
-        setStatus(data.status as AgentStatus);
+        setStatus((data as any).status as AgentStatus);
       }
       setLoading(false);
     };
@@ -58,7 +58,7 @@ export function useAgentStatus() {
       .update({ 
         status: newStatus,
         current_call_start: newStatus === 'on-call' ? new Date().toISOString() : null
-      })
+      } as any)
       .eq('id', user.id);
 
     if (!error) {

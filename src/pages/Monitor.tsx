@@ -9,7 +9,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMonitorData } from "@/hooks/useMonitorData";
-import { 
+import { useTodayMetrics } from "@/hooks/useTodayMetrics";
+import {
   Phone, 
   Clock, 
   CheckCircle,
@@ -53,6 +54,7 @@ const qualityChecklist = [
 
 export default function Monitor() {
   const { agents, loading } = useMonitorData();
+  const { metrics, loading: metricsLoading } = useTodayMetrics();
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [qualityScores, setQualityScores] = useState<{[key: string]: number}>({});
 
@@ -112,8 +114,14 @@ export default function Monitor() {
                 </div>
                 <span className="text-sm font-medium">Total Calls</span>
               </div>
-              <div className="text-2xl font-bold">{todayMetrics.totalCalls}</div>
-              <div className="text-xs text-muted-foreground">Today</div>
+              {metricsLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{metrics.totalCalls}</div>
+                  <div className="text-xs text-muted-foreground">Today</div>
+                </>
+              )}
             </CardContent>
           </Card>
           
@@ -125,10 +133,18 @@ export default function Monitor() {
                 </div>
                 <span className="text-sm font-medium">Answered</span>
               </div>
-              <div className="text-2xl font-bold">{todayMetrics.answered}</div>
-              <div className="text-xs text-muted-foreground">
-                {Math.round((todayMetrics.answered / todayMetrics.totalCalls) * 100)}% rate
-              </div>
+              {metricsLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{metrics.answered}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {metrics.totalCalls > 0 
+                      ? Math.round((metrics.answered / metrics.totalCalls) * 100)
+                      : 0}% rate
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -140,10 +156,18 @@ export default function Monitor() {
                 </div>
                 <span className="text-sm font-medium">Abandoned</span>
               </div>
-              <div className="text-2xl font-bold">{todayMetrics.abandoned}</div>
-              <div className="text-xs text-muted-foreground">
-                {Math.round((todayMetrics.abandoned / todayMetrics.totalCalls) * 100)}% rate
-              </div>
+              {metricsLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{metrics.abandoned}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {metrics.totalCalls > 0
+                      ? Math.round((metrics.abandoned / metrics.totalCalls) * 100)
+                      : 0}% rate
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -155,8 +179,14 @@ export default function Monitor() {
                 </div>
                 <span className="text-sm font-medium">Avg Handle</span>
               </div>
-              <div className="text-2xl font-bold">{todayMetrics.avgHandleTime}</div>
-              <div className="text-xs text-muted-foreground">Average time</div>
+              {metricsLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{metrics.avgHandleTime}</div>
+                  <div className="text-xs text-muted-foreground">Average time</div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -168,8 +198,14 @@ export default function Monitor() {
                 </div>
                 <span className="text-sm font-medium">Avg Speed</span>
               </div>
-              <div className="text-2xl font-bold">{todayMetrics.avgSpeedAnswer}</div>
-              <div className="text-xs text-muted-foreground">To answer</div>
+              {metricsLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{metrics.avgSpeedAnswer}</div>
+                  <div className="text-xs text-muted-foreground">To answer</div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -181,8 +217,14 @@ export default function Monitor() {
                 </div>
                 <span className="text-sm font-medium">Conversion</span>
               </div>
-              <div className="text-2xl font-bold">{todayMetrics.conversionRate}%</div>
-              <div className="text-xs text-muted-foreground">Success rate</div>
+              {metricsLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{metrics.conversionRate}%</div>
+                  <div className="text-xs text-muted-foreground">Success rate</div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

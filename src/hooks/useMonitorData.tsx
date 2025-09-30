@@ -24,7 +24,7 @@ export function useMonitorData() {
       // Fetch all profiles with their call data
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, email, status, current_call_start, last_status_change');
+        .select('id, full_name, email, status, current_call_start, last_status_change') as any;
 
       if (profilesError) throw profilesError;
 
@@ -46,7 +46,7 @@ export function useMonitorData() {
       const campaignMap = new Map(campaigns?.map(c => [c.id, c.name]) || []);
 
       // Process agent data
-      const agentsData: AgentData[] = profiles?.map(profile => {
+      const agentsData: AgentData[] = profiles?.map((profile: any) => {
         const agentCalls = callData?.filter(c => c.user_id === profile.id) || [];
         const currentCampaignId = agentCalls[0]?.campaign_id;
         const currentCampaign = currentCampaignId ? campaignMap.get(currentCampaignId) : 'No Campaign';
