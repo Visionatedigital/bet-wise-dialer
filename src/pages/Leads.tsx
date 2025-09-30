@@ -16,6 +16,8 @@ import { sampleCalls, formatUGX, formatKampalaTime, type Lead } from "@/data/sam
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
+import { EditLeadModal } from "@/components/leads/EditLeadModal";
 
 export default function Leads() {
   const { user } = useAuth();
@@ -26,6 +28,9 @@ export default function Leads() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [leadToEdit, setLeadToEdit] = useState<Lead | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -136,7 +141,7 @@ export default function Leads() {
               <Download className="h-4 w-4 mr-2" />
               Export CSV
             </Button>
-            <Button size="sm">
+            <Button size="sm" onClick={() => setImportModalOpen(true)}>
               <Target className="h-4 w-4 mr-2" />
               Import Leads
             </Button>
@@ -237,8 +242,15 @@ export default function Leads() {
                     </TableCell>
                   </TableRow>
                 ) : filteredLeads.map((lead) => (
-                  <TableRow key={lead.id}>
-                    <TableCell>
+                  <TableRow 
+                    key={lead.id} 
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => {
+                      setLeadToEdit(lead);
+                      setEditModalOpen(true);
+                    }}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={selectedLeads.includes(lead.id)}
                         onCheckedChange={(checked) => handleSelectLead(lead.id, checked as boolean)}
@@ -485,6 +497,20 @@ export default function Leads() {
           </CardContent>
         </Card>
       </div>
+
+      <ImportLeadsModal 
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
+        onImportComplete={fetchLeads}
+        userId={user?.id || ""}
+      />
+
+      <EditLeadModal
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        lead={leadToEdit}
+        onUpdateComplete={fetchLeads}
+      />
     </DashboardLayout>
   );
 }
