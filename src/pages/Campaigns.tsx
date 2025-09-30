@@ -12,6 +12,7 @@ import { formatUGX } from "@/data/sampleData";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { CreateCampaignModal } from "@/components/campaigns/CreateCampaignModal";
 
 interface Campaign {
   id: string;
@@ -34,6 +35,7 @@ export default function Campaigns() {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -96,11 +98,18 @@ export default function Campaigns() {
             <h1 className="text-2xl font-bold text-foreground">Campaigns</h1>
             <p className="text-muted-foreground">Campaign performance & management</p>
           </div>
-          <Button>
+          <Button onClick={() => setCreateModalOpen(true)}>
             <Target className="h-4 w-4 mr-2" />
             New Campaign
           </Button>
         </div>
+
+        <CreateCampaignModal
+          open={createModalOpen}
+          onOpenChange={setCreateModalOpen}
+          onCreateComplete={fetchCampaigns}
+          userId={user?.id || ''}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {loading ? (
