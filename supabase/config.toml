@@ -2,3 +2,6 @@ project_id = "hahkgifqajdnhvkbzwfx"
 
 [functions.generate-report]
 verify_jwt = false
+
+[functions.analyze-funnel]
+verify_jwt = false
