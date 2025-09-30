@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMonitorData } from "@/hooks/useMonitorData";
 import { useTodayMetrics } from "@/hooks/useTodayMetrics";
+import { useQueueMetrics } from "@/hooks/useQueueMetrics";
 import {
   Phone, 
   Clock, 
@@ -28,22 +29,6 @@ import {
   AlertTriangle
 } from "lucide-react";
 
-const queueMetrics = [
-  { name: "Summer Promo", waiting: 23, longest: "04:32", agents: 3 },
-  { name: "Welcome Back", waiting: 8, longest: "02:15", agents: 2 },
-  { name: "Premium Tier", waiting: 12, longest: "06:20", agents: 1 },
-  { name: "Win Back", waiting: 5, longest: "01:45", agents: 1 },
-];
-
-const todayMetrics = {
-  totalCalls: 342,
-  answered: 298,
-  abandoned: 44,
-  avgHandleTime: "4:32",
-  avgSpeedAnswer: "0:45",
-  conversionRate: 12.4
-};
-
 const qualityChecklist = [
   { item: "Proper greeting used", weight: 20 },
   { item: "Customer verification completed", weight: 15 },
@@ -55,6 +40,7 @@ const qualityChecklist = [
 export default function Monitor() {
   const { agents, loading } = useMonitorData();
   const { metrics, loading: metricsLoading } = useTodayMetrics();
+  const { queues, loading: queuesLoading } = useQueueMetrics();
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [qualityScores, setQualityScores] = useState<{[key: string]: number}>({});
 
@@ -431,13 +417,30 @@ export default function Monitor() {
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-foreground">Queue Status</h3>
               <Badge variant="outline" className="text-xs">
-                {queueMetrics.reduce((sum, q) => sum + q.waiting, 0)} waiting
+                {queues.reduce((sum, q) => sum + q.waiting, 0)} waiting
               </Badge>
             </div>
 
-            <div className="space-y-3">
-              {queueMetrics.map((queue, index) => (
-                <Card key={index}>
+            {queuesLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <Skeleton className="h-16 w-full" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : queues.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <p className="text-muted-foreground">No active campaigns found</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {queues.map((queue) => (
+                <Card key={queue.id}>
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div>
@@ -463,29 +466,43 @@ export default function Monitor() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                  Alerts
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2 p-2 bg-yellow-500/10 rounded-md">
-                    <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                    <span>Premium Tier queue over 5 mins</span>
+            {!queuesLoading && queues.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                    Alerts
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  <div className="space-y-2 text-sm">
+                    {queues.filter(q => q.waiting > 15).map(queue => (
+                      <div key={queue.id} className="flex items-center gap-2 p-2 bg-yellow-500/10 rounded-md">
+                        <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                        <span>{queue.name} queue over 15 waiting</span>
+                      </div>
+                    ))}
+                    {metrics.abandoned > 0 && (metrics.abandoned / metrics.totalCalls) > 0.15 && (
+                      <div className="flex items-center gap-2 p-2 bg-red-500/10 rounded-md">
+                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                        <span>Abandonment rate above 15%</span>
+                      </div>
+                    )}
+                    {queues.filter(q => q.waiting > 15).length === 0 && 
+                     (!metrics.abandoned || (metrics.abandoned / metrics.totalCalls) <= 0.15) && (
+                      <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-md">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span>All queues operating normally</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 p-2 bg-red-500/10 rounded-md">
-                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                    <span>Abandonment rate above 15%</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>
