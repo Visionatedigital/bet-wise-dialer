@@ -8,6 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Lead } from "@/data/sampleData";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface EditLeadModalProps {
   open: boolean;
@@ -16,9 +17,16 @@ interface EditLeadModalProps {
   onUpdateComplete: () => void;
 }
 
+interface Campaign {
+  id: string;
+  name: string;
+}
+
 export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: EditLeadModalProps) {
+  const { user } = useAuth();
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [formData, setFormData] = useState({
-    campaign: "",
+    campaign_id: "",
     intent: "",
     score: 0,
     priority: "low",
@@ -27,9 +35,15 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (user) {
+      fetchCampaigns();
+    }
+  }, [user]);
+
+  useEffect(() => {
     if (lead) {
       setFormData({
-        campaign: lead.campaign || "",
+        campaign_id: "", // Will be set when we fetch from database with proper campaign_id
         intent: lead.intent || "",
         score: lead.score || 0,
         priority: lead.priority || "low",
@@ -37,6 +51,21 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
       });
     }
   }, [lead]);
+
+  const fetchCampaigns = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('campaigns')
+        .select('id, name')
+        .eq('user_id', user?.id)
+        .order('name');
+
+      if (error) throw error;
+      setCampaigns(data || []);
+    } catch (error) {
+      console.error('Error fetching campaigns:', error);
+    }
+  };
 
   const handleSave = async () => {
     if (!lead) return;
@@ -46,7 +75,7 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
       const { error } = await supabase
         .from('leads')
         .update({
-          campaign: formData.campaign || null,
+          campaign_id: formData.campaign_id || null,
           intent: formData.intent || null,
           score: formData.score,
           priority: formData.priority,
@@ -92,12 +121,19 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
 
           <div className="space-y-2">
             <Label htmlFor="campaign">Campaign</Label>
-            <Input
-              id="campaign"
-              value={formData.campaign}
-              onChange={(e) => setFormData({ ...formData, campaign: e.target.value })}
-              placeholder="Enter campaign name"
-            />
+            <Select value={formData.campaign_id} onValueChange={(value) => setFormData({ ...formData, campaign_id: value })}>
+              <SelectTrigger id="campaign">
+                <SelectValue placeholder="Select campaign" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">No Campaign</SelectItem>
+                {campaigns.map((campaign) => (
+                  <SelectItem key={campaign.id} value={campaign.id}>
+                    {campaign.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

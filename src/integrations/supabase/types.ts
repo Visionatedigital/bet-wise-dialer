@@ -17,6 +17,7 @@ export type Database = {
       call_activities: {
         Row: {
           call_type: string | null
+          campaign_id: string | null
           created_at: string
           deposit_amount: number | null
           duration_seconds: number | null
@@ -32,6 +33,7 @@ export type Database = {
         }
         Insert: {
           call_type?: string | null
+          campaign_id?: string | null
           created_at?: string
           deposit_amount?: number | null
           duration_seconds?: number | null
@@ -47,6 +49,7 @@ export type Database = {
         }
         Update: {
           call_type?: string | null
+          campaign_id?: string | null
           created_at?: string
           deposit_amount?: number | null
           duration_seconds?: number | null
@@ -60,7 +63,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "call_activities_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       callbacks: {
         Row: {
@@ -93,6 +104,60 @@ export type Database = {
           phone_number?: string | null
           scheduled_for?: string
           status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      campaigns: {
+        Row: {
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          name: string
+          start_date: string | null
+          status: string
+          target_calls: number | null
+          target_conversions: number | null
+          total_calls: number | null
+          total_conversions: number | null
+          total_deposits: number | null
+          total_leads: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          start_date?: string | null
+          status?: string
+          target_calls?: number | null
+          target_conversions?: number | null
+          total_calls?: number | null
+          total_conversions?: number | null
+          total_deposits?: number | null
+          total_leads?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          start_date?: string | null
+          status?: string
+          target_calls?: number | null
+          target_conversions?: number | null
+          total_calls?: number | null
+          total_conversions?: number | null
+          total_deposits?: number | null
+          total_leads?: number | null
           updated_at?: string
           user_id?: string
         }
@@ -143,6 +208,7 @@ export type Database = {
       leads: {
         Row: {
           campaign: string | null
+          campaign_id: string | null
           created_at: string
           id: string
           intent: string | null
@@ -163,6 +229,7 @@ export type Database = {
         }
         Insert: {
           campaign?: string | null
+          campaign_id?: string | null
           created_at?: string
           id?: string
           intent?: string | null
@@ -183,6 +250,7 @@ export type Database = {
         }
         Update: {
           campaign?: string | null
+          campaign_id?: string | null
           created_at?: string
           id?: string
           intent?: string | null
@@ -201,7 +269,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
