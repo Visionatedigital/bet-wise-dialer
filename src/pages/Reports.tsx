@@ -47,37 +47,6 @@ const dateRanges = [
   { label: "Custom", value: "custom" },
 ];
 
-const aiInsights = [
-  {
-    type: "opportunity",
-    title: "Peak Performance Hours",
-    description: "Agents show 35% higher conversion rates between 2-4 PM. Consider increasing team capacity during these hours.",
-    impact: "High",
-    category: "Schedule Optimization"
-  },
-  {
-    type: "warning",
-    title: "Script Deviation",
-    description: "15% of calls show significant script deviations. Top performers follow script more closely.",
-    impact: "Medium",
-    category: "Quality Assurance"
-  },
-  {
-    type: "insight",
-    title: "Objection Patterns",
-    description: "Price objections increased 20% this week. Consider training on value proposition techniques.",
-    impact: "High",
-    category: "Sales Training"
-  },
-  {
-    type: "opportunity",
-    title: "Callback Success",
-    description: "Scheduled callbacks have 40% higher conversion than immediate transfers. Promote callback scheduling.",
-    impact: "Medium",
-    category: "Process Improvement"
-  }
-];
-
 const callTranscripts = [
   {
     id: 1,
@@ -250,9 +219,8 @@ export default function Reports() {
         </Card>
 
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="funnel">Funnel</TabsTrigger>
             <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
             <TabsTrigger value="transcripts">Transcripts</TabsTrigger>
             <TabsTrigger value="agents">Agents</TabsTrigger>
@@ -394,15 +362,14 @@ export default function Reports() {
             </div>
           </TabsContent>
 
-          <TabsContent value="funnel" className="space-y-6">
+
+          <TabsContent value="ai-insights" className="space-y-6">
             {funnelLoading ? (
-              <div className="space-y-6">
-                <Card>
-                  <CardContent className="p-6">
-                    <Skeleton className="h-64 w-full" />
-                  </CardContent>
-                </Card>
-              </div>
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <Skeleton className="h-64 w-full" />
+                </CardContent>
+              </Card>
             ) : message ? (
               <Card>
                 <CardContent className="p-12 text-center">
@@ -411,217 +378,88 @@ export default function Reports() {
                   <p className="text-muted-foreground">{message}</p>
                 </CardContent>
               </Card>
-            ) : (
+            ) : insights && insights.length > 0 ? (
               <>
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Conversion Funnel</CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Brain className="h-5 w-5 text-primary" />
+                      AI-Powered Performance Insights
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      GPT-5 analyzed your call data to identify opportunities and improvements
+                    </p>
                   </CardHeader>
                   <CardContent>
-                    {funnelData && (
-                      <div className="space-y-6">
-                        {[
-                          { stage: "Dials", count: funnelData.dials, rate: 100, color: "bg-blue-500" },
-                          { stage: "Connects", count: funnelData.connects, rate: Number(funnelData.connectRate), color: "bg-green-500" },
-                          { stage: "Qualified", count: funnelData.qualified, rate: Number(funnelData.qualificationRate), color: "bg-yellow-500" },
-                          { stage: "Converted", count: funnelData.conversions, rate: Number(funnelData.conversionRate), color: "bg-primary" },
-                        ].map((stage, index, array) => (
-                          <div key={stage.stage} className="relative">
-                            <div className="flex items-center gap-4">
-                              <div className="w-24 text-sm font-medium">{stage.stage}</div>
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="text-lg font-bold">{stage.count.toLocaleString()}</div>
-                                  <div className="text-sm text-muted-foreground">{stage.rate}%</div>
-                                </div>
-                                <div className="relative h-8 bg-muted rounded-lg overflow-hidden">
-                                  <div 
-                                    className={`h-full ${stage.color} transition-all duration-500`}
-                                    style={{ width: `${stage.rate}%` }}
-                                  />
-                                </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {insights.map((insight, index) => (
+                        <div key={index} className={`p-4 border rounded-lg ${getInsightColor(insight.type)}`}>
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 mt-0.5">
+                              {getInsightIcon(insight.type)}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="font-medium text-sm">{insight.title}</h3>
+                                <Badge variant="outline" className="text-xs">
+                                  {insight.impact} Impact
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {insight.description}
+                              </p>
+                              <div className="text-xs text-muted-foreground">
+                                {insight.category}
                               </div>
                             </div>
-                            {index < array.length - 1 && stage.count > 0 && (
-                              <div className="ml-24 mt-2 text-xs text-muted-foreground">
-                                Drop: {((1 - array[index + 1].count / stage.count) * 100).toFixed(1)}%
-                              </div>
-                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
 
-                {/* AI-Powered Improvement Opportunities */}
-                {insights && insights.length > 0 && (
+                {funnelData && (
                   <Card>
                     <CardHeader>
-                      <div className="flex items-center gap-2">
-                        <Brain className="h-5 w-5 text-primary" />
-                        <CardTitle className="text-base">AI-Powered Improvement Opportunities</CardTitle>
-                      </div>
+                      <CardTitle className="text-base">Funnel Overview</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-3">
-                        {insights.map((insight, index) => {
-                          const iconMap = {
-                            opportunity: Lightbulb,
-                            warning: AlertTriangle,
-                            insight: Brain,
-                          };
-                          const colorMap = {
-                            opportunity: "green",
-                            warning: "yellow",
-                            insight: "blue",
-                          };
-                          const Icon = iconMap[insight.type];
-                          const color = colorMap[insight.type];
-
-                          return (
-                            <div 
-                              key={index}
-                              className={`p-4 border border-${color}-500/20 bg-${color}-500/5 rounded-lg`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`p-2 bg-${color}-500/10 rounded-lg`}>
-                                  <Icon className={`h-4 w-4 text-${color}-600`} />
-                                </div>
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <div className="font-semibold text-sm">{insight.title}</div>
-                                    <Badge variant="outline" className={`text-xs border-${color}-500/30`}>
-                                      {insight.impact} Impact
-                                    </Badge>
-                                  </div>
-                                  <p className="text-sm text-muted-foreground">
-                                    {insight.description}
-                                  </p>
-                                  <div className="mt-2">
-                                    <div className="text-xs font-medium text-muted-foreground">
-                                      {insight.category}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-3 border border-border rounded-lg">
+                          <div className="text-xs text-muted-foreground mb-1">Dials</div>
+                          <div className="text-2xl font-bold">{funnelData.dials}</div>
+                          <div className="text-xs text-muted-foreground">100%</div>
+                        </div>
+                        <div className="p-3 border border-border rounded-lg">
+                          <div className="text-xs text-muted-foreground mb-1">Connects</div>
+                          <div className="text-2xl font-bold">{funnelData.connects}</div>
+                          <div className="text-xs text-muted-foreground">{funnelData.connectRate}%</div>
+                        </div>
+                        <div className="p-3 border border-border rounded-lg">
+                          <div className="text-xs text-muted-foreground mb-1">Qualified</div>
+                          <div className="text-2xl font-bold">{funnelData.qualified}</div>
+                          <div className="text-xs text-muted-foreground">{funnelData.qualificationRate}%</div>
+                        </div>
+                        <div className="p-3 border border-border rounded-lg">
+                          <div className="text-xs text-muted-foreground mb-1">Conversions</div>
+                          <div className="text-2xl font-bold">{funnelData.conversions}</div>
+                          <div className="text-xs text-muted-foreground">{funnelData.conversionRate}%</div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
                 )}
               </>
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <Brain className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Insights Available</h3>
+                  <p className="text-muted-foreground">Unable to generate insights. Please try again.</p>
+                </CardContent>
+              </Card>
             )}
-          </TabsContent>
-
-          <TabsContent value="ai-insights" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Brain className="h-5 w-5 text-primary" />
-                  AI-Powered Insights
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {aiInsights.map((insight, index) => (
-                    <div key={index} className={`p-4 border rounded-lg ${getInsightColor(insight.type)}`}>
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 mt-0.5">
-                          {getInsightIcon(insight.type)}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="font-medium text-sm">{insight.title}</h3>
-                            <Badge variant="outline" className="text-xs">
-                              {insight.impact} Impact
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground mb-2">
-                            {insight.description}
-                          </p>
-                          <div className="text-xs text-muted-foreground">
-                            Category: {insight.category}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Recommended Actions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {[
-                      {
-                        action: "Schedule team training on objection handling",
-                        priority: "High",
-                        impact: "15% conversion improvement"
-                      },
-                      {
-                        action: "Adjust calling hours to focus on 2-4 PM slot",
-                        priority: "Medium", 
-                        impact: "8% efficiency gain"
-                      },
-                      {
-                        action: "Implement callback scheduling workflow",
-                        priority: "Medium",
-                        impact: "12% lead recovery"
-                      }
-                    ].map((item, index) => (
-                      <div key={index} className="p-3 border border-border rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium text-sm">{item.action}</span>
-                          <Badge variant={item.priority === "High" ? "destructive" : "secondary"} className="text-xs">
-                            {item.priority}
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-green-600">{item.impact}</div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Performance Predictions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="p-3 bg-green-500/10 rounded-lg border border-green-500/20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <TrendingUp className="h-4 w-4 text-green-600" />
-                        <span className="font-medium text-sm">Next 30 Days</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mb-1">
-                        Predicted conversion rate: <span className="font-medium">26.2%</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Expected revenue: <span className="font-medium">{formatUGX(18200000)}</span>
-                      </div>
-                    </div>
-                    <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Clock className="h-4 w-4 text-blue-600" />
-                        <span className="font-medium text-sm">Optimal Timing</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Best calling windows: 10-11 AM, 2-4 PM, 7-8 PM
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
           </TabsContent>
 
           <TabsContent value="transcripts" className="space-y-6">
