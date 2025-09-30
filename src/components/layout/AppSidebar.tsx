@@ -52,10 +52,10 @@ const navigationItems = [
     description: "Live call monitoring"
   },
   { 
-    title: "Reports", 
+    title: "Performance", 
     url: "/reports", 
     icon: BarChart3,
-    description: "Analytics & insights"
+    description: "Performance & analytics"
   },
   { 
     title: "Integrations", 

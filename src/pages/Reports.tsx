@@ -33,6 +33,8 @@ import {
   Play
 } from "lucide-react";
 import { formatUGX } from "@/data/sampleData";
+import { usePerformanceData } from "@/hooks/usePerformanceData";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const dateRanges = [
   { label: "Today", value: "today" },
@@ -44,8 +46,6 @@ const dateRanges = [
   { label: "Custom", value: "custom" },
 ];
 
-const campaigns = ["All Campaigns", "Summer Promo", "Welcome Back", "Premium Tier", "Win Back"];
-const agents = ["All Agents", "Sarah Nakato", "John Mukasa", "Grace Nalwanga", "David Ssali"];
 
 const funnelData = [
   { stage: "Dials", count: 1245, rate: 100, color: "bg-blue-500" },
@@ -132,10 +132,14 @@ const callTranscripts = [
 
 export default function Reports() {
   const [selectedDateRange, setSelectedDateRange] = useState("30d");
-  const [selectedCampaign, setSelectedCampaign] = useState("All Campaigns");
-  const [selectedAgent, setSelectedAgent] = useState("All Agents");
+  const [selectedCampaign, setSelectedCampaign] = useState("all");
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [selectedTranscript, setSelectedTranscript] = useState(callTranscripts[0]);
+  
+  const { campaigns, metrics, dailyPerformance, loading } = usePerformanceData(
+    selectedDateRange,
+    selectedCampaign
+  );
 
   const getInsightIcon = (type: string) => {
     switch (type) {
@@ -178,8 +182,8 @@ export default function Reports() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Reports & Analytics</h1>
-            <p className="text-muted-foreground">Performance insights & AI recommendations</p>
+            <h1 className="text-2xl font-bold text-foreground">Performance & Analytics</h1>
+            <p className="text-muted-foreground">Your personal performance insights & metrics</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm">
@@ -232,25 +236,13 @@ export default function Reports() {
 
               <Select value={selectedCampaign} onValueChange={setSelectedCampaign}>
                 <SelectTrigger className="w-48">
-                  <SelectValue />
+                  <SelectValue placeholder="All Campaigns" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">All Campaigns</SelectItem>
                   {campaigns.map((campaign) => (
-                    <SelectItem key={campaign} value={campaign}>
-                      {campaign}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {agents.map((agent) => (
-                    <SelectItem key={agent} value={agent}>
-                      {agent}
+                    <SelectItem key={campaign.id} value={campaign.id}>
+                      {campaign.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -270,55 +262,59 @@ export default function Reports() {
 
           <TabsContent value="overview" className="space-y-6">
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <Phone className="h-4 w-4 text-primary" />
-                    <TrendingUp className="h-3 w-3 text-green-500" />
-                  </div>
-                  <div className="text-2xl font-bold">1,245</div>
-                  <div className="text-xs text-muted-foreground">Total Calls</div>
-                  <div className="text-xs text-green-600">+12% vs last period</div>
-                </CardContent>
-              </Card>
+            {loading ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map(i => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <Skeleton className="h-20 w-full" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <Phone className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="text-2xl font-bold">{metrics.totalCalls}</div>
+                    <div className="text-xs text-muted-foreground">Total Calls</div>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <Users className="h-4 w-4 text-blue-500" />
-                    <TrendingUp className="h-3 w-3 text-green-500" />
-                  </div>
-                  <div className="text-2xl font-bold">71.6%</div>
-                  <div className="text-xs text-muted-foreground">Connect Rate</div>
-                  <div className="text-xs text-green-600">+3.2% vs last period</div>
-                </CardContent>
-              </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <Users className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <div className="text-2xl font-bold">{metrics.connectRate.toFixed(1)}%</div>
+                    <div className="text-xs text-muted-foreground">Connect Rate</div>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <Target className="h-4 w-4 text-green-500" />
-                    <TrendingDown className="h-3 w-3 text-red-500" />
-                  </div>
-                  <div className="text-2xl font-bold">23.8%</div>
-                  <div className="text-xs text-muted-foreground">Conversion Rate</div>
-                  <div className="text-xs text-red-600">-1.4% vs last period</div>
-                </CardContent>
-              </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <Target className="h-4 w-4 text-green-500" />
+                    </div>
+                    <div className="text-2xl font-bold">{metrics.conversionRate.toFixed(1)}%</div>
+                    <div className="text-xs text-muted-foreground">Conversion Rate</div>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <DollarSign className="h-4 w-4 text-amber-500" />
-                    <TrendingUp className="h-3 w-3 text-green-500" />
-                  </div>
-                  <div className="text-2xl font-bold">{formatUGX(15400000)}</div>
-                  <div className="text-xs text-muted-foreground">Revenue Generated</div>
-                  <div className="text-xs text-green-600">+18% vs last period</div>
-                </CardContent>
-              </Card>
-            </div>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <DollarSign className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <div className="text-2xl font-bold">{formatUGX(metrics.totalRevenue)}</div>
+                    <div className="text-xs text-muted-foreground">Revenue Generated</div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -327,32 +323,31 @@ export default function Reports() {
                   <CardTitle className="text-base">Daily Performance</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {[
-                      { day: "Mon", calls: 85, conversions: 12 },
-                      { day: "Tue", calls: 92, conversions: 15 },
-                      { day: "Wed", calls: 78, conversions: 8 },
-                      { day: "Thu", calls: 105, conversions: 22 },
-                      { day: "Fri", calls: 88, conversions: 14 },
-                      { day: "Sat", calls: 45, conversions: 6 },
-                      { day: "Sun", calls: 32, conversions: 3 },
-                    ].map((day) => (
-                      <div key={day.day} className="flex items-center gap-3">
-                        <div className="w-12 text-sm font-medium">{day.day}</div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="text-xs text-muted-foreground">Calls</div>
-                            <div className="text-xs font-medium">{day.calls}</div>
+                  {loading ? (
+                    <Skeleton className="h-64 w-full" />
+                  ) : (
+                    <div className="space-y-4">
+                      {dailyPerformance.map((day) => {
+                        const maxCalls = Math.max(...dailyPerformance.map(d => d.calls), 1);
+                        return (
+                          <div key={day.day} className="flex items-center gap-3">
+                            <div className="w-12 text-sm font-medium">{day.day}</div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="text-xs text-muted-foreground">Calls</div>
+                                <div className="text-xs font-medium">{day.calls}</div>
+                              </div>
+                              <Progress value={(day.calls / maxCalls) * 100} className="h-2" />
+                            </div>
+                            <div className="w-16 text-right">
+                              <div className="text-xs text-muted-foreground">Conv</div>
+                              <div className="text-xs font-medium">{day.conversions}</div>
+                            </div>
                           </div>
-                          <Progress value={(day.calls / 105) * 100} className="h-2" />
-                        </div>
-                        <div className="w-16 text-right">
-                          <div className="text-xs text-muted-foreground">Conv</div>
-                          <div className="text-xs font-medium">{day.conversions}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -361,33 +356,41 @@ export default function Reports() {
                   <CardTitle className="text-base">Campaign Performance</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {[
-                      { name: "Summer Promo", calls: 425, conv: 18.2, revenue: 5200000 },
-                      { name: "Welcome Back", calls: 312, conv: 24.1, revenue: 4100000 },
-                      { name: "Premium Tier", calls: 298, conv: 28.5, revenue: 3800000 },
-                      { name: "Win Back", calls: 210, conv: 15.7, revenue: 2300000 },
-                    ].map((campaign) => (
-                      <div key={campaign.name} className="p-3 border border-border rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-medium text-sm">{campaign.name}</div>
-                          <Badge variant="outline" className="text-xs">
-                            {campaign.conv}% conv
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-xs">
-                          <div>
-                            <div className="text-muted-foreground">Calls</div>
-                            <div className="font-medium">{campaign.calls}</div>
+                  {loading ? (
+                    <Skeleton className="h-64 w-full" />
+                  ) : campaigns.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No campaigns found. Create a campaign to see performance data.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {campaigns.map((campaign) => {
+                        const convRate = campaign.total_calls > 0 
+                          ? ((campaign.total_conversions / campaign.total_calls) * 100).toFixed(1)
+                          : "0.0";
+                        return (
+                          <div key={campaign.id} className="p-3 border border-border rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="font-medium text-sm">{campaign.name}</div>
+                              <Badge variant="outline" className="text-xs">
+                                {convRate}% conv
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 text-xs">
+                              <div>
+                                <div className="text-muted-foreground">Calls</div>
+                                <div className="font-medium">{campaign.total_calls}</div>
+                              </div>
+                              <div>
+                                <div className="text-muted-foreground">Revenue</div>
+                                <div className="font-medium">{formatUGX(Number(campaign.total_deposits))}</div>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-muted-foreground">Revenue</div>
-                            <div className="font-medium">{formatUGX(campaign.revenue).replace('UGX', 'K')}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
