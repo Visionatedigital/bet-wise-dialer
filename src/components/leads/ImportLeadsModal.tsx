@@ -40,19 +40,18 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete, userId 
       const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
       
       const nameIndex = headers.findIndex(h => h.includes('name'));
-      const phoneIndex = headers.findIndex(h => h.includes('phone'));
+      const phoneIndex = headers.findIndex(h => h.includes('phone') || h.includes('number'));
 
-      if (nameIndex === -1 || phoneIndex === -1) {
-        toast.error('CSV must contain "name" and "phone" columns');
-        setFile(null);
-        return;
-      }
+      // If no phone column found, assume first column is phone numbers
+      const actualPhoneIndex = phoneIndex !== -1 ? phoneIndex : 0;
 
       const previewData = lines.slice(1, 6).map(line => {
         const values = line.split(',').map(v => v.trim());
+        const phone = values[actualPhoneIndex] || '';
+        const name = nameIndex !== -1 ? values[nameIndex] : phone;
         return {
-          name: values[nameIndex] || '',
-          phone: values[phoneIndex] || ''
+          name: name || 'Unknown',
+          phone: phone
         };
       });
 
@@ -76,20 +75,26 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete, userId 
         const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
         
         const nameIndex = headers.findIndex(h => h.includes('name'));
-        const phoneIndex = headers.findIndex(h => h.includes('phone'));
+        const phoneIndex = headers.findIndex(h => h.includes('phone') || h.includes('number'));
+
+        // If no phone column found, assume first column is phone numbers
+        const actualPhoneIndex = phoneIndex !== -1 ? phoneIndex : 0;
 
         const leads = lines.slice(1).map(line => {
           const values = line.split(',').map(v => v.trim());
+          const phone = values[actualPhoneIndex] || '';
+          const name = nameIndex !== -1 ? values[nameIndex] : phone;
+          
           return {
             user_id: userId,
-            name: values[nameIndex] || 'Unknown',
-            phone: values[phoneIndex] || '',
+            name: name || 'Unknown',
+            phone: phone,
             segment: 'dormant',
             priority: 'low',
             score: 0,
             tags: []
           };
-        }).filter(lead => lead.name && lead.phone);
+        }).filter(lead => lead.phone); // Only require phone number
 
         const { error } = await supabase
           .from('leads')
@@ -118,7 +123,7 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete, userId 
         <DialogHeader>
           <DialogTitle>Import Leads from CSV</DialogTitle>
           <DialogDescription>
-            Upload a CSV file with columns "name" and "phone" to import your leads.
+            Upload a CSV file with phone numbers. Optional: include a "name" column for contact names.
           </DialogDescription>
         </DialogHeader>
 
@@ -178,8 +183,8 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete, userId 
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              <strong>CSV Format:</strong> Your file should have headers in the first row with at least "name" and "phone" columns.
-              Example: name,phone
+              <strong>CSV Format:</strong> Your file should have phone numbers. Include headers like "phone", "number", or just list numbers. 
+              Optionally add a "name" column: name,phone
             </AlertDescription>
           </Alert>
 
