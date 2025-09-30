@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ExportReportModal } from "@/components/dashboard/ExportReportModal";
 import { useMonitorData } from "@/hooks/useMonitorData";
 import { useTodayMetrics } from "@/hooks/useTodayMetrics";
 import { useQueueMetrics } from "@/hooks/useQueueMetrics";
@@ -43,6 +44,7 @@ export default function Monitor() {
   const { queues, loading: queuesLoading } = useQueueMetrics();
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [qualityScores, setQualityScores] = useState<{[key: string]: number}>({});
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -83,12 +85,14 @@ export default function Monitor() {
               <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
               Live
             </Badge>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => setShowExportModal(true)}>
               <BarChart3 className="h-4 w-4 mr-2" />
               Export Report
             </Button>
           </div>
         </div>
+
+        <ExportReportModal open={showExportModal} onOpenChange={setShowExportModal} />
 
         {/* Today's Overview */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
