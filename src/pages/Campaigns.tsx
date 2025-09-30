@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Target, Play, Pause, Square, BarChart3, Users, Phone, TrendingUp, Clock, DollarSign, Calendar, Settings } from "lucide-react";
+import { Target, Play, Pause, Square, BarChart3, Users, Phone, TrendingUp, Clock, DollarSign, Calendar, Settings, Trash2, CheckCircle } from "lucide-react";
 import { formatUGX } from "@/data/sampleData";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,6 +36,7 @@ export default function Campaigns() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -88,6 +89,52 @@ export default function Campaigns() {
     active: campaigns.filter(c => c.status === "active"),
     paused: campaigns.filter(c => c.status === "paused"),
     completed: campaigns.filter(c => c.status === "completed"),
+  };
+
+  const updateCampaignStatus = async (campaignId: string, newStatus: 'active' | 'paused' | 'completed') => {
+    setUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('campaigns')
+        .update({ status: newStatus })
+        .eq('id', campaignId);
+
+      if (error) throw error;
+
+      toast.success(`Campaign ${newStatus === 'active' ? 'activated' : newStatus === 'paused' ? 'paused' : 'completed'}`);
+      await fetchCampaigns();
+      setSelectedCampaign(prev => prev ? { ...prev, status: newStatus } : null);
+    } catch (error) {
+      console.error('Error updating campaign:', error);
+      toast.error('Failed to update campaign');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const deleteCampaign = async (campaignId: string) => {
+    if (!confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) {
+      return;
+    }
+
+    setUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('campaigns')
+        .delete()
+        .eq('id', campaignId);
+
+      if (error) throw error;
+
+      toast.success('Campaign deleted successfully');
+      await fetchCampaigns();
+      setSelectedCampaign(null);
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      toast.error('Failed to delete campaign');
+    } finally {
+      setUpdating(false);
+    }
   };
 
   return (
@@ -171,6 +218,56 @@ export default function Campaigns() {
                                   </div>
                                 </SheetTitle>
                               </SheetHeader>
+
+                              {/* Campaign Actions */}
+                              <div className="mt-4 flex gap-2 pb-4 border-b">
+                                {selectedCampaign?.status === 'active' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateCampaignStatus(selectedCampaign.id, 'paused')}
+                                    disabled={updating}
+                                  >
+                                    <Pause className="h-4 w-4 mr-2" />
+                                    Pause Campaign
+                                  </Button>
+                                )}
+                                
+                                {selectedCampaign?.status === 'paused' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateCampaignStatus(selectedCampaign.id, 'active')}
+                                    disabled={updating}
+                                  >
+                                    <Play className="h-4 w-4 mr-2" />
+                                    Activate Campaign
+                                  </Button>
+                                )}
+                                
+                                {selectedCampaign?.status !== 'completed' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateCampaignStatus(selectedCampaign.id, 'completed')}
+                                    disabled={updating}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Mark Complete
+                                  </Button>
+                                )}
+                                
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => selectedCampaign && deleteCampaign(selectedCampaign.id)}
+                                  disabled={updating}
+                                  className="ml-auto"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </Button>
+                              </div>
 
                               <div className="mt-6 space-y-6">
                                 <div className="grid grid-cols-2 gap-4">
