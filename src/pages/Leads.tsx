@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,16 +12,66 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Phone, Mail, MessageSquare, Search, Filter, Download, UserMinus, Calendar, Clock, DollarSign, Target, Tag, User, Zap } from "lucide-react";
-import { sampleLeads, sampleCalls, formatUGX, formatKampalaTime, type Lead } from "@/data/sampleData";
+import { sampleCalls, formatUGX, formatKampalaTime, type Lead } from "@/data/sampleData";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 export default function Leads() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [segmentFilter, setSegmentFilter] = useState<string>("all");
   const [campaignFilter, setCampaignFilter] = useState<string>("all");
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredLeads = sampleLeads.filter(lead => {
+  useEffect(() => {
+    if (user) {
+      fetchLeads();
+    }
+  }, [user]);
+
+  const fetchLeads = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedLeads: Lead[] = (data || []).map(lead => ({
+        id: lead.id,
+        name: lead.name,
+        phone: lead.phone,
+        segment: lead.segment as "dormant" | "semi-active" | "vip",
+        lastActivity: lead.last_activity || "Never",
+        lastDepositUgx: Number(lead.last_deposit_ugx) || 0,
+        lastBetDate: lead.last_bet_date || undefined,
+        intent: lead.intent || undefined,
+        score: lead.score || 0,
+        tags: lead.tags || [],
+        ownerUserId: lead.user_id,
+        nextAction: lead.next_action || undefined,
+        nextActionDue: lead.next_action_due || undefined,
+        campaign: lead.campaign || "No Campaign",
+        priority: lead.priority as "high" | "medium" | "low",
+        slaMinutes: lead.sla_minutes || 0,
+      }));
+
+      setLeads(formattedLeads);
+    } catch (error) {
+      console.error('Error fetching leads:', error);
+      toast.error('Failed to load leads');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredLeads = leads.filter(lead => {
     const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          lead.phone.includes(searchTerm);
     const matchesSegment = segmentFilter === "all" || lead.segment === segmentFilter;
@@ -29,7 +79,7 @@ export default function Leads() {
     return matchesSearch && matchesSegment && matchesCampaign;
   });
 
-  const uniqueCampaigns = [...new Set(sampleLeads.map(lead => lead.campaign))];
+  const uniqueCampaigns = [...new Set(leads.map(lead => lead.campaign))];
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -174,7 +224,19 @@ export default function Leads() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLeads.map((lead) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                      Loading leads...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredLeads.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                      No leads found. Start by importing your first leads!
+                    </TableCell>
+                  </TableRow>
+                ) : filteredLeads.map((lead) => (
                   <TableRow key={lead.id}>
                     <TableCell>
                       <Checkbox

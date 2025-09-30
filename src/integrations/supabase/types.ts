@@ -140,6 +140,69 @@ export type Database = {
         }
         Relationships: []
       }
+      leads: {
+        Row: {
+          campaign: string | null
+          created_at: string
+          id: string
+          intent: string | null
+          last_activity: string | null
+          last_bet_date: string | null
+          last_deposit_ugx: number | null
+          name: string
+          next_action: string | null
+          next_action_due: string | null
+          phone: string
+          priority: string
+          score: number | null
+          segment: string
+          sla_minutes: number | null
+          tags: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          campaign?: string | null
+          created_at?: string
+          id?: string
+          intent?: string | null
+          last_activity?: string | null
+          last_bet_date?: string | null
+          last_deposit_ugx?: number | null
+          name: string
+          next_action?: string | null
+          next_action_due?: string | null
+          phone: string
+          priority: string
+          score?: number | null
+          segment: string
+          sla_minutes?: number | null
+          tags?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          campaign?: string | null
+          created_at?: string
+          id?: string
+          intent?: string | null
+          last_activity?: string | null
+          last_bet_date?: string | null
+          last_deposit_ugx?: number | null
+          name?: string
+          next_action?: string | null
+          next_action_due?: string | null
+          phone?: string
+          priority?: string
+          score?: number | null
+          segment?: string
+          sla_minutes?: number | null
+          tags?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
