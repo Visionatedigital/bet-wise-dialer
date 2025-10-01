@@ -26,6 +26,7 @@ export type Database = {
           lead_name: string | null
           notes: string | null
           phone_number: string | null
+          recording_url: string | null
           start_time: string
           status: string | null
           updated_at: string
@@ -42,6 +43,7 @@ export type Database = {
           lead_name?: string | null
           notes?: string | null
           phone_number?: string | null
+          recording_url?: string | null
           start_time?: string
           status?: string | null
           updated_at?: string
@@ -58,6 +60,7 @@ export type Database = {
           lead_name?: string | null
           notes?: string | null
           phone_number?: string | null
+          recording_url?: string | null
           start_time?: string
           status?: string | null
           updated_at?: string
@@ -283,25 +286,34 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          current_call_start: string | null
           email: string | null
           full_name: string | null
           id: string
+          last_status_change: string | null
+          status: string | null
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          current_call_start?: string | null
           email?: string | null
           full_name?: string | null
           id: string
+          last_status_change?: string | null
+          status?: string | null
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
+          current_call_start?: string | null
           email?: string | null
           full_name?: string | null
           id?: string
+          last_status_change?: string | null
+          status?: string | null
           updated_at?: string
         }
         Relationships: []

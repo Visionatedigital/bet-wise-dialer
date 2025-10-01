@@ -35,7 +35,10 @@ import {
 import { formatUGX } from "@/data/sampleData";
 import { usePerformanceData } from "@/hooks/usePerformanceData";
 import { useFunnelAnalysis } from "@/hooks/useFunnelAnalysis";
+import { useRecentCalls } from "@/hooks/useRecentCalls";
 import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const dateRanges = [
   { label: "Today", value: "today" },
@@ -96,7 +99,12 @@ export default function Reports() {
   const [selectedDateRange, setSelectedDateRange] = useState("30d");
   const [selectedCampaign, setSelectedCampaign] = useState("all");
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [selectedTranscript, setSelectedTranscript] = useState(callTranscripts[0]);
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
+  const [transcriptText, setTranscriptText] = useState<string>("");
+  const [keyMoments, setKeyMoments] = useState<Array<{time: string; type: string; text: string}>>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isTranscribed, setIsTranscribed] = useState(false);
   
   const { campaigns, metrics, dailyPerformance, loading } = usePerformanceData(
     selectedDateRange,
@@ -107,6 +115,55 @@ export default function Reports() {
     selectedDateRange,
     selectedCampaign
   );
+
+  const { calls, loading: callsLoading } = useRecentCalls();
+
+  const handleTranscribeCall = async (callId: string) => {
+    setIsTranscribing(true);
+    setIsTranscribed(false);
+    
+    try {
+      // Simulate transcript generation (in production, this would come from audio transcription)
+      const simulatedTranscript = `Agent: Good afternoon, this is calling from Betsure. How are you today?
+Customer: I'm fine, thanks. What's this about?
+Agent: I'm calling about our exclusive sports betting promotion. You've been selected for our VIP betting package.
+Customer: That sounds interesting. Tell me more about the bonus.
+Agent: Great! You'll get a 100% match bonus up to 500,000 UGX on your first deposit.
+Customer: Okay, that's quite good. How do I get started?
+Agent: I can help you set up your account right now. Do you have a moment?
+Customer: Yes, let's do it.`;
+
+      setTranscriptText(simulatedTranscript);
+
+      // Call the edge function to analyze with GPT-5
+      const { data, error } = await supabase.functions.invoke('transcribe-call', {
+        body: { 
+          callId,
+          transcript: simulatedTranscript 
+        }
+      });
+
+      if (error) throw error;
+
+      setKeyMoments(data.keyMoments || []);
+      setSuggestions(data.suggestions || []);
+      setIsTranscribed(true);
+      toast.success('Transcript generated successfully!');
+    } catch (error) {
+      console.error('Error transcribing call:', error);
+      toast.error('Failed to generate transcript');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const selectedCall = calls.find(call => call.id === selectedCallId);
 
   const getInsightIcon = (type: string) => {
     switch (type) {
@@ -467,115 +524,187 @@ export default function Reports() {
               <div className="lg:col-span-1">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Recent Calls</CardTitle>
+                    <CardTitle className="text-base">Recent Calls (Today)</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
-                    <div className="space-y-1">
-                      {callTranscripts.map((call) => (
-                        <div 
-                          key={call.id}
-                          className={`p-3 cursor-pointer transition-colors border-l-2 ${
-                            selectedTranscript.id === call.id 
-                              ? 'bg-primary/10 border-l-primary' 
-                              : 'hover:bg-muted/50 border-l-transparent'
-                          }`}
-                          onClick={() => setSelectedTranscript(call)}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="font-medium text-sm">{call.customer}</div>
-                            <Badge className={getSentimentColor(call.sentiment)}>
-                              {call.sentiment}
-                            </Badge>
-                          </div>
-                          <div className="text-xs text-muted-foreground mb-1">
-                            {call.agent} • {call.campaign}
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <Badge className={getOutcomeColor(call.outcome)}>
-                              {call.outcome}
-                            </Badge>
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                              {call.aiScore}
+                    {callsLoading ? (
+                      <div className="p-4">
+                        <Skeleton className="h-20 w-full mb-2" />
+                        <Skeleton className="h-20 w-full mb-2" />
+                        <Skeleton className="h-20 w-full" />
+                      </div>
+                    ) : calls.length === 0 ? (
+                      <div className="p-8 text-center text-muted-foreground">
+                        <Phone className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No calls today yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {calls.map((call) => (
+                          <div 
+                            key={call.id}
+                            className={`p-3 cursor-pointer transition-colors border-l-2 ${
+                              selectedCallId === call.id 
+                                ? 'bg-primary/10 border-l-primary' 
+                                : 'hover:bg-muted/50 border-l-transparent'
+                            }`}
+                            onClick={() => {
+                              setSelectedCallId(call.id);
+                              setIsTranscribed(false);
+                              setTranscriptText("");
+                              setKeyMoments([]);
+                              setSuggestions([]);
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="font-medium text-sm">{call.lead_name}</div>
+                              <Badge variant="outline" className="text-xs">
+                                {call.status}
+                              </Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground mb-1">
+                              {call.phone_number}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-muted-foreground">
+                                Duration: {formatDuration(call.duration_seconds)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(call.start_time).toLocaleTimeString('en-US', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
 
               <div className="lg:col-span-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4" />
-                      Call Transcript: {selectedTranscript.customer}
-                    </CardTitle>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>Duration: {selectedTranscript.duration}</span>
-                      <span>Agent: {selectedTranscript.agent}</span>
-                      <span>Campaign: {selectedTranscript.campaign}</span>
-                      <div className="flex items-center gap-1">
-                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                        AI Score: {selectedTranscript.aiScore}/5
+                {selectedCall ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4" />
+                        Call: {selectedCall.lead_name}
+                      </CardTitle>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span>Duration: {formatDuration(selectedCall.duration_seconds)}</span>
+                        <span>Phone: {selectedCall.phone_number}</span>
+                        <span>Status: {selectedCall.status}</span>
                       </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <FileText className="h-4 w-4 text-primary" />
-                        <span className="font-medium text-sm">Transcript</span>
-                        <Button variant="ghost" size="sm">
-                          <Play className="h-3 w-3 mr-1" />
-                          Play Audio
-                        </Button>
-                      </div>
-                      <div className="p-4 bg-muted/30 rounded-lg">
-                        <div className="text-sm leading-relaxed whitespace-pre-line">
-                          {selectedTranscript.transcript}
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {!isTranscribed ? (
+                        <div className="text-center py-12">
+                          <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold mb-2">Call Recording Available</h3>
+                          <p className="text-muted-foreground mb-6">
+                            Generate a transcript and get AI-powered insights for this call
+                          </p>
+                          <div className="flex items-center justify-center gap-3">
+                            {selectedCall.recording_url && (
+                              <Button variant="outline" size="lg">
+                                <Play className="h-4 w-4 mr-2" />
+                                Play Audio
+                              </Button>
+                            )}
+                            <Button 
+                              size="lg"
+                              onClick={() => handleTranscribeCall(selectedCall.id)}
+                              disabled={isTranscribing}
+                            >
+                              {isTranscribing ? (
+                                <>
+                                  <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                                  Transcribing...
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Transcribe Call
+                                </>
+                              )}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Clock className="h-4 w-4 text-blue-500" />
-                        <span className="font-medium text-sm">Key Moments</span>
-                      </div>
-                      <div className="space-y-2">
-                        {selectedTranscript.keyMoments.map((moment, index) => (
-                          <div key={index} className="flex items-start gap-3 p-2 rounded-lg bg-muted/30">
-                            <div className="text-xs font-mono bg-background px-2 py-1 rounded">
-                              {moment.time}
+                      ) : (
+                        <>
+                          <div>
+                            <div className="flex items-center gap-2 mb-3">
+                              <FileText className="h-4 w-4 text-primary" />
+                              <span className="font-medium text-sm">Transcript</span>
+                              {selectedCall.recording_url && (
+                                <Button variant="ghost" size="sm">
+                                  <Play className="h-3 w-3 mr-1" />
+                                  Play Audio
+                                </Button>
+                              )}
                             </div>
-                            <div className="flex-1">
-                              <div className="text-xs font-medium mb-1 capitalize">{moment.type}</div>
-                              <div className="text-xs text-muted-foreground">{moment.text}</div>
+                            <div className="p-4 bg-muted/30 rounded-lg">
+                              <div className="text-sm leading-relaxed whitespace-pre-line">
+                                {transcriptText}
+                              </div>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
 
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Brain className="h-4 w-4 text-green-500" />
-                        <span className="font-medium text-sm">AI Coaching Suggestions</span>
-                      </div>
-                      <div className="space-y-2">
-                        {selectedTranscript.suggestions.map((suggestion, index) => (
-                          <div key={index} className="flex items-start gap-3 p-3 border border-border rounded-lg">
-                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                            <span className="text-sm">{suggestion}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                          {keyMoments.length > 0 && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-3">
+                                <Clock className="h-4 w-4 text-blue-500" />
+                                <span className="font-medium text-sm">Key Moments</span>
+                              </div>
+                              <div className="space-y-2">
+                                {keyMoments.map((moment, index) => (
+                                  <div key={index} className="flex items-start gap-3 p-2 rounded-lg bg-muted/30">
+                                    <div className="text-xs font-mono bg-background px-2 py-1 rounded">
+                                      {moment.time}
+                                    </div>
+                                    <div className="flex-1">
+                                      <div className="text-xs font-medium mb-1 capitalize">{moment.type}</div>
+                                      <div className="text-xs text-muted-foreground">{moment.text}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {suggestions.length > 0 && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-3">
+                                <Brain className="h-4 w-4 text-green-500" />
+                                <span className="font-medium text-sm">AI Coaching Suggestions</span>
+                              </div>
+                              <div className="space-y-2">
+                                {suggestions.map((suggestion, index) => (
+                                  <div key={index} className="flex items-start gap-3 p-3 border border-border rounded-lg">
+                                    <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                    <span className="text-sm">{suggestion}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="p-12 text-center">
+                      <Phone className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">Select a Call</h3>
+                      <p className="text-muted-foreground">
+                        Choose a call from the list to view transcript and AI insights
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
           </TabsContent>
