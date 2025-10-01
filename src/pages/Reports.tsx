@@ -30,12 +30,15 @@ import {
   Lightbulb,
   Filter,
   Eye,
-  Play
+  Play,
+  LayoutGrid,
+  List
 } from "lucide-react";
 import { formatUGX } from "@/data/sampleData";
 import { usePerformanceData } from "@/hooks/usePerformanceData";
 import { useFunnelAnalysis } from "@/hooks/useFunnelAnalysis";
 import { useRecentCalls } from "@/hooks/useRecentCalls";
+import { useAgentAnalysis } from "@/hooks/useAgentAnalysis";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -105,6 +108,7 @@ export default function Reports() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isTranscribed, setIsTranscribed] = useState(false);
+  const [agentViewMode, setAgentViewMode] = useState<"grid" | "list">("grid");
   
   const { campaigns, metrics, dailyPerformance, loading } = usePerformanceData(
     selectedDateRange,
@@ -117,6 +121,8 @@ export default function Reports() {
   );
 
   const { calls, loading: callsLoading } = useRecentCalls();
+
+  const { agents, insights: agentInsights, loading: agentsLoading, message: agentMessage } = useAgentAnalysis(selectedDateRange);
 
   const handleTranscribeCall = async (callId: string) => {
     setIsTranscribing(true);
@@ -161,6 +167,12 @@ Customer: Yes, let's do it.`;
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatHandleTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const selectedCall = calls.find(call => call.id === selectedCallId);
@@ -710,62 +722,214 @@ Customer: Yes, let's do it.`;
           </TabsContent>
 
           <TabsContent value="agents" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {[
-                { name: "Sarah Nakato", calls: 89, conv: 18.2, score: 4.2, handle: "4:32" },
-                { name: "Grace Nalwanga", calls: 76, conv: 22.1, score: 4.9, handle: "3:45" },
-                { name: "John Mukasa", calls: 82, conv: 15.8, score: 4.7, handle: "5:12" },
-                { name: "David Ssali", calls: 65, conv: 12.3, score: 3.8, handle: "6:18" },
-                { name: "Mary Nakamya", calls: 71, conv: 19.7, score: 4.4, handle: "4:02" },
-                { name: "Peter Kato", calls: 58, conv: 16.5, score: 4.1, handle: "4:55" }
-              ].map((agent, index) => (
-                <Card key={index}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3 mb-4">
-                      <Avatar className="h-10 w-10">
-                        <AvatarFallback className="text-sm font-medium">
-                          {agent.name.split(' ').map(n => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium text-sm">{agent.name}</div>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                          {agent.score} AI Score
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <div>
-                        <div className="text-xs text-muted-foreground">Calls</div>
-                        <div className="font-bold">{agent.calls}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Conversion</div>
-                        <div className="font-bold">{agent.conv}%</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Avg Handle</div>
-                        <div className="font-bold">{agent.handle}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Rank</div>
-                        <div className="font-bold">#{index + 1}</div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                        <span>Performance</span>
-                        <span>{agent.conv}%</span>
-                      </div>
-                      <Progress value={agent.conv} className="h-2" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                {agentInsights.length > 0 && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Brain className="h-4 w-4" />
+                    <span>AI-powered ranking and analysis</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={agentViewMode === "grid" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setAgentViewMode("grid")}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={agentViewMode === "list" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setAgentViewMode("list")}
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
+
+            {agentsLoading ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                {[1, 2, 3].map(i => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <Skeleton className="h-24 w-full" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : agents.length === 0 ? (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Agent Data</h3>
+                  <p className="text-muted-foreground">{agentMessage || 'No agent activity found for the selected period'}</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {agentInsights.length > 0 && (
+                  <Card className="mb-6">
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Brain className="h-4 w-4 text-primary" />
+                        Team Insights
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {agentInsights.map((insight, index) => (
+                          <div key={index} className="flex items-start gap-3 p-3 border border-border rounded-lg">
+                            <Lightbulb className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm">{insight}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {agentViewMode === "grid" ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {agents.map((agent) => (
+                      <Card key={agent.id}>
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-3 mb-4">
+                            <Avatar className="h-10 w-10">
+                              <AvatarFallback className="text-sm font-medium">
+                                {agent.name.split(' ').map(n => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{agent.name}</div>
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                {agent.score} AI Score
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="text-xs">
+                              #{agent.rank}
+                            </Badge>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 mb-4">
+                            <div>
+                              <div className="text-xs text-muted-foreground">Calls</div>
+                              <div className="font-bold">{agent.calls}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Conversion</div>
+                              <div className="font-bold">{agent.conversionRate}%</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Avg Handle</div>
+                              <div className="font-bold">{formatHandleTime(agent.avgHandleTime)}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground">Revenue</div>
+                              <div className="font-bold">{formatUGX(agent.revenue)}</div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-xs">
+                              <span>Performance</span>
+                              <span>{agent.score}/100</span>
+                            </div>
+                            <Progress value={agent.score} className="h-2" />
+                          </div>
+
+                          {(agent.strengths && agent.strengths.length > 0) && (
+                            <div className="mt-4 pt-4 border-t">
+                              <div className="text-xs font-medium mb-2">Strengths</div>
+                              <div className="space-y-1">
+                                {agent.strengths.map((strength, idx) => (
+                                  <div key={idx} className="flex items-start gap-2">
+                                    <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 flex-shrink-0" />
+                                    <span className="text-xs text-muted-foreground">{strength}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <Card>
+                    <CardContent className="p-0">
+                      <div className="divide-y">
+                        {agents.map((agent) => (
+                          <div key={agent.id} className="p-4 hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center gap-4">
+                              <Badge variant="outline" className="w-12 text-center">
+                                #{agent.rank}
+                              </Badge>
+                              
+                              <Avatar className="h-10 w-10">
+                                <AvatarFallback className="text-sm font-medium">
+                                  {agent.name.split(' ').map(n => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm">{agent.name}</div>
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                  {agent.score} Score
+                                </div>
+                              </div>
+
+                              <div className="hidden md:flex items-center gap-6 text-sm">
+                                <div className="text-center">
+                                  <div className="text-muted-foreground text-xs mb-1">Calls</div>
+                                  <div className="font-semibold">{agent.calls}</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-muted-foreground text-xs mb-1">Conv Rate</div>
+                                  <div className="font-semibold">{agent.conversionRate}%</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-muted-foreground text-xs mb-1">Avg Handle</div>
+                                  <div className="font-semibold">{formatHandleTime(agent.avgHandleTime)}</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-muted-foreground text-xs mb-1">Revenue</div>
+                                  <div className="font-semibold">{formatUGX(agent.revenue)}</div>
+                                </div>
+                              </div>
+
+                              <div className="w-24">
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span className="text-muted-foreground">Score</span>
+                                  <span>{agent.score}</span>
+                                </div>
+                                <Progress value={agent.score} className="h-2" />
+                              </div>
+                            </div>
+
+                            {(agent.strengths && agent.strengths.length > 0) && (
+                              <div className="mt-3 ml-16 pt-3 border-t">
+                                <div className="flex flex-wrap gap-2">
+                                  {agent.strengths.map((strength, idx) => (
+                                    <Badge key={idx} variant="secondary" className="text-xs">
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      {strength}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
           </TabsContent>
         </Tabs>
       </div>

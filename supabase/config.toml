@@ -9,5 +9,8 @@ verify_jwt = false
 [functions.cleanup-old-recordings]
 verify_jwt = false
 
+[functions.analyze-agents]
+verify_jwt = false
+
 [functions.analyze-funnel]
 verify_jwt = false
