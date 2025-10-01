@@ -118,42 +118,35 @@ const Settings = () => {
                       <Switch defaultChecked />
                     </div>
                     <Separator />
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label>Auto-assign Leads</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Automatically distribute new leads to available agents
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-                    <Separator />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="timezone">Default Timezone</Label>
-                        <Select defaultValue="america/new_york">
+                        <Select defaultValue="africa/nairobi">
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="africa/nairobi">East Africa Time (EAT)</SelectItem>
                             <SelectItem value="america/new_york">Eastern Time (EST)</SelectItem>
                             <SelectItem value="america/chicago">Central Time (CST)</SelectItem>
                             <SelectItem value="america/denver">Mountain Time (MST)</SelectItem>
                             <SelectItem value="america/los_angeles">Pacific Time (PST)</SelectItem>
+                            <SelectItem value="europe/london">Greenwich Mean Time (GMT)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="currency">Default Currency</Label>
-                        <Select defaultValue="usd">
+                        <Select defaultValue="ugx">
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="ugx">UGX (USh)</SelectItem>
                             <SelectItem value="usd">USD ($)</SelectItem>
                             <SelectItem value="eur">EUR (€)</SelectItem>
                             <SelectItem value="gbp">GBP (£)</SelectItem>
-                            <SelectItem value="cad">CAD ($)</SelectItem>
+                            <SelectItem value="kes">KES (KSh)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
