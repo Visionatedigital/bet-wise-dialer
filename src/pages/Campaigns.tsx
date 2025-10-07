@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Target, Play, Pause, Square, BarChart3, Users, Phone, TrendingUp, Clock, DollarSign, Calendar, Settings, Trash2, CheckCircle } from "lucide-react";
-import { formatUGX } from "@/data/sampleData";
+import { formatUGX } from "@/lib/formatters";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";

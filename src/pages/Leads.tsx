@@ -12,7 +12,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Phone, Mail, MessageSquare, Search, Filter, Download, UserMinus, Calendar, Clock, DollarSign, Target, Tag, User, Zap } from "lucide-react";
-import { sampleCalls, formatUGX, formatKampalaTime, type Lead } from "@/data/sampleData";
+import { type Lead } from "@/data/sampleData";
+import { formatUGX, formatKampalaTime } from "@/lib/formatters";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -31,12 +32,20 @@ export default function Leads() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [leadToEdit, setLeadToEdit] = useState<Lead | null>(null);
+  const [leadCalls, setLeadCalls] = useState<any[]>([]);
+  const [loadingCalls, setLoadingCalls] = useState(false);
 
   useEffect(() => {
     if (user) {
       fetchLeads();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (selectedLead) {
+      fetchLeadCalls(selectedLead.id);
+    }
+  }, [selectedLead]);
 
   const fetchLeads = async () => {
     try {
@@ -128,8 +137,23 @@ export default function Leads() {
     return phone.replace(/(\+256 \d{3}) \d{3}(\d{3})/, '$1 ***$2');
   };
 
-  const getLeadCalls = (leadId: string) => {
-    return sampleCalls.filter(call => call.leadId === leadId);
+  const fetchLeadCalls = async (leadId: string) => {
+    try {
+      setLoadingCalls(true);
+      const { data, error } = await supabase
+        .from('call_activities')
+        .select('*')
+        .eq('lead_name', leads.find(l => l.id === leadId)?.name)
+        .order('start_time', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setLeadCalls(data || []);
+    } catch (error) {
+      console.error('Error fetching lead calls:', error);
+    } finally {
+      setLoadingCalls(false);
+    }
   };
 
   return (
@@ -396,7 +420,15 @@ export default function Leads() {
                                 
                                 <TabsContent value="timeline" className="space-y-4">
                                   <div className="space-y-4">
-                                    {getLeadCalls(selectedLead?.id || "").map((call) => (
+                                    {loadingCalls ? (
+                                      <div className="text-center py-8 text-muted-foreground">
+                                        Loading call history...
+                                      </div>
+                                    ) : leadCalls.length === 0 ? (
+                                      <div className="text-center py-8 text-muted-foreground">
+                                        No call history yet
+                                      </div>
+                                    ) : leadCalls.map((call) => (
                                       <div key={call.id} className="flex gap-3 p-3 rounded-lg border border-border">
                                         <div className="flex-shrink-0">
                                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -407,28 +439,16 @@ export default function Leads() {
                                           <div className="flex items-center justify-between">
                                             <span className="text-sm font-medium">Call</span>
                                             <span className="text-xs text-muted-foreground">
-                                              {formatKampalaTime(call.startedAt)}
+                                              {formatKampalaTime(call.start_time)}
                                             </span>
                                           </div>
                                           <div className="text-sm text-muted-foreground">
-                                            Duration: {Math.floor(call.durationSeconds / 60)}m {call.durationSeconds % 60}s
+                                            Duration: {Math.floor((call.duration_seconds || 0) / 60)}m {(call.duration_seconds || 0) % 60}s
                                           </div>
                                           <div className="flex items-center gap-2 mt-1">
                                             <Badge variant="outline" className="text-xs">
-                                              {call.disposition}
+                                              {call.status}
                                             </Badge>
-                                            {call.sentiment && (
-                                              <Badge 
-                                                variant="outline" 
-                                                className={`text-xs ${
-                                                  call.sentiment === 'positive' ? 'text-green-600' :
-                                                  call.sentiment === 'negative' ? 'text-red-600' :
-                                                  'text-yellow-600'
-                                                }`}
-                                              >
-                                                {call.sentiment}
-                                              </Badge>
-                                            )}
                                           </div>
                                           {call.notes && (
                                             <div className="text-sm mt-2 p-2 bg-muted rounded">

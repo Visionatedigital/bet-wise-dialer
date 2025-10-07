@@ -34,7 +34,7 @@ import {
   LayoutGrid,
   List
 } from "lucide-react";
-import { formatUGX } from "@/data/sampleData";
+import { formatUGX } from "@/lib/formatters";
 import { usePerformanceData } from "@/hooks/usePerformanceData";
 import { useFunnelAnalysis } from "@/hooks/useFunnelAnalysis";
 import { useRecentCalls } from "@/hooks/useRecentCalls";

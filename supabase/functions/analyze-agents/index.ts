@@ -169,15 +169,49 @@ Return your analysis in this JSON format:
 
     console.log('GPT-5 analysis response received');
 
-    // Parse the JSON response
+    // Parse the JSON response with better error handling
     let analysis;
     try {
+      // Try to extract JSON from markdown code blocks or direct JSON
       const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/) || content.match(/(\{[\s\S]*\})/);
-      const jsonString = jsonMatch ? jsonMatch[1] : content;
+      const jsonString = jsonMatch ? jsonMatch[1].trim() : content.trim();
+      
+      console.log('Attempting to parse JSON string');
       analysis = JSON.parse(jsonString);
+      
+      // Validate the structure
+      if (!analysis.rankings || !Array.isArray(analysis.rankings)) {
+        throw new Error('Invalid analysis structure: missing rankings array');
+      }
     } catch (parseError) {
       console.error('Failed to parse GPT response:', parseError);
-      throw new Error('Failed to parse AI analysis');
+      console.error('Raw content:', content);
+      
+      // Return a fallback response with basic rankings
+      const rankedAgents = activeAgents
+        .sort((a, b) => {
+          // Sort by conversion rate (primary), then by calls (secondary)
+          if (b.conversionRate !== a.conversionRate) {
+            return b.conversionRate - a.conversionRate;
+          }
+          return b.calls - a.calls;
+        })
+        .map((agent, index) => ({
+          ...agent,
+          rank: index + 1,
+          score: Math.max(0, Math.min(100, Math.round(agent.conversionRate * 0.4 + (agent.calls / 100) * 30 + (agent.revenue / 100000) * 20 + (100 - agent.avgHandleTime / 10) * 0.1))),
+          strengths: [],
+          improvements: []
+        }));
+      
+      return new Response(
+        JSON.stringify({
+          agents: rankedAgents,
+          insights: ['AI analysis temporarily unavailable. Rankings based on performance metrics.'],
+          message: null
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Merge rankings with agent data
