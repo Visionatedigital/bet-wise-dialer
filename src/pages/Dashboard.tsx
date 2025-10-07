@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Softphone } from "@/components/dashboard/Softphone";
 import { QueueCard } from "@/components/dashboard/QueueCard";
 import { AfterCallSummary } from "@/components/dashboard/AfterCallSummary";
 import { AgentKPIs } from "@/components/dashboard/AgentKPIs";
-import { sampleLeads, type Lead } from "@/data/sampleData";
+import { type Lead } from "@/data/sampleData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -12,9 +12,15 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Lightbulb, MessageSquare, FileText, CheckSquare } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 function DashboardContent() {
-  const [currentLead, setCurrentLead] = useState<Lead | null>(sampleLeads[0]);
+  const { user } = useAuth();
+  const [currentLead, setCurrentLead] = useState<Lead | null>(null);
+  const [queueLeads, setQueueLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showACS, setShowACS] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [callNotes, setCallNotes] = useState("");
@@ -25,9 +31,59 @@ function DashboardContent() {
     recordingConsent: false
   });
 
-  // Queue management
-  const queueLeads = sampleLeads.slice(1, 5); // Next 4 leads in queue
-  const nextLead = queueLeads[0] || null;
+  useEffect(() => {
+    if (user) {
+      fetchLeads();
+    }
+  }, [user]);
+
+  const fetchLeads = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('leads')
+        .select(`
+          *,
+          campaigns(name)
+        `)
+        .order('priority', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      const formattedLeads: Lead[] = (data || []).map(lead => ({
+        id: lead.id,
+        name: lead.name,
+        phone: lead.phone,
+        segment: lead.segment as "dormant" | "semi-active" | "vip",
+        lastActivity: lead.last_activity || "Never",
+        lastDepositUgx: Number(lead.last_deposit_ugx) || 0,
+        lastBetDate: lead.last_bet_date || undefined,
+        intent: lead.intent || undefined,
+        score: lead.score || 0,
+        tags: lead.tags || [],
+        ownerUserId: lead.user_id,
+        nextAction: lead.next_action || undefined,
+        nextActionDue: lead.next_action_due || undefined,
+        campaign: lead.campaigns?.name || "No Campaign",
+        campaignId: lead.campaign_id || undefined,
+        priority: lead.priority as "high" | "medium" | "low",
+        slaMinutes: lead.sla_minutes || 0,
+      }));
+
+      setQueueLeads(formattedLeads);
+      if (formattedLeads.length > 0 && !currentLead) {
+        setCurrentLead(formattedLeads[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching leads:', error);
+      toast.error('Failed to load leads');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const nextLead = queueLeads[1] || null;
 
   const handleCallLead = (lead: Lead) => {
     setCurrentLead(lead);
@@ -75,8 +131,16 @@ function DashboardContent() {
       {/* KPIs */}
       <AgentKPIs />
 
-      {/* Main Working Area */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      {loading ? (
+        <div className="text-center py-12 text-muted-foreground">
+          Loading leads...
+        </div>
+      ) : queueLeads.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          No leads available. Import leads to get started!
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-3">
         {/* Left Column - Softphone & Queue */}
         <div className="lg:col-span-1 space-y-6">
           <Softphone currentLead={currentLead} />
@@ -281,6 +345,7 @@ function DashboardContent() {
           </Card>
         </div>
       </div>
+      )}
 
       {/* After Call Summary Modal */}
       <AfterCallSummary
