@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,10 +25,78 @@ export function Softphone({ currentLead }: SoftphoneProps) {
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
   const { createCallActivity, updateCallActivity } = useCallMetrics();
+  
+  // Audio refs
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Request microphone access and set up audio
+  const setupAudio = async () => {
+    try {
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        } 
+      });
+      
+      audioStreamRef.current = stream;
+      
+      // Create audio context for processing
+      audioContextRef.current = new AudioContext();
+      
+      // Create audio element for playback
+      if (!audioElementRef.current) {
+        audioElementRef.current = new Audio();
+        audioElementRef.current.autoplay = true;
+      }
+      
+      toast.success('Microphone access granted');
+      return true;
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      toast.error('Microphone access denied. Please allow microphone access to make calls.');
+      return false;
+    }
+  };
+  
+  // Cleanup audio resources
+  const cleanupAudio = () => {
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(track => track.stop());
+      audioStreamRef.current = null;
+    }
+    
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.srcObject = null;
+    }
+  };
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupAudio();
+    };
+  }, []);
 
   const handleCall = async () => {
     if (callStatus === "idle") {
       try {
+        // First, request audio permissions
+        const audioReady = await setupAudio();
+        if (!audioReady) {
+          return;
+        }
+        
         setCallStatus("ringing");
         toast.loading('Initiating call...');
         
@@ -49,7 +117,7 @@ export function Softphone({ currentLead }: SoftphoneProps) {
         }
 
         toast.dismiss();
-        toast.success(`Calling ${currentLead?.name || 'Unknown Lead'}...`);
+        toast.success(`Call connected - You can now speak`);
         
         setCallStartTime(new Date());
         setIsRecording(true);
@@ -68,6 +136,7 @@ export function Softphone({ currentLead }: SoftphoneProps) {
         toast.dismiss();
         toast.error(error instanceof Error ? error.message : 'Failed to start call');
         setCallStatus("idle");
+        cleanupAudio();
       }
     }
   };
@@ -78,6 +147,9 @@ export function Softphone({ currentLead }: SoftphoneProps) {
       if ((window as any).callTimer) {
         clearInterval((window as any).callTimer);
       }
+      
+      // Cleanup audio resources
+      cleanupAudio();
       
       // Record call activity with duration
       if (callStartTime) {
@@ -112,6 +184,7 @@ export function Softphone({ currentLead }: SoftphoneProps) {
       setCallDuration(0);
       setCurrentCallId(null);
       setCallStartTime(null);
+      cleanupAudio();
     }
   };
 
@@ -121,6 +194,14 @@ export function Softphone({ currentLead }: SoftphoneProps) {
 
   const toggleMute = () => {
     setIsMuted(!isMuted);
+    
+    // Mute/unmute the microphone stream
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = isMuted; // Toggle opposite of current state
+      });
+      toast.info(isMuted ? 'Microphone unmuted' : 'Microphone muted');
+    }
   };
 
   const toggleRecording = () => {
