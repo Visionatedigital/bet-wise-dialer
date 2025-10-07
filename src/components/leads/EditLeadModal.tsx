@@ -60,10 +60,15 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
         .eq('user_id', user?.id)
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching campaigns:', error);
+        throw error;
+      }
+      console.log('Fetched campaigns:', data);
       setCampaigns(data || []);
     } catch (error) {
       console.error('Error fetching campaigns:', error);
+      toast.error('Failed to load campaigns');
     }
   };
 
@@ -72,18 +77,25 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
 
     setSaving(true);
     try {
+      const updateData = {
+        campaign_id: formData.campaign_id === 'none' ? null : formData.campaign_id,
+        intent: formData.intent || null,
+        score: formData.score,
+        priority: formData.priority,
+        segment: formData.segment,
+      };
+      
+      console.log('Updating lead with data:', updateData);
+      
       const { error } = await supabase
         .from('leads')
-        .update({
-          campaign_id: formData.campaign_id === 'none' ? null : formData.campaign_id,
-          intent: formData.intent || null,
-          score: formData.score,
-          priority: formData.priority,
-          segment: formData.segment,
-        })
+        .update(updateData)
         .eq('id', lead.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
 
       toast.success('Lead updated successfully');
       onUpdateComplete();
@@ -121,9 +133,12 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
 
           <div className="space-y-2">
             <Label htmlFor="campaign">Campaign</Label>
-            <Select value={formData.campaign_id} onValueChange={(value) => setFormData({ ...formData, campaign_id: value })}>
+            <Select value={formData.campaign_id} onValueChange={(value) => {
+              console.log('Campaign selected:', value);
+              setFormData({ ...formData, campaign_id: value });
+            }}>
               <SelectTrigger id="campaign">
-                <SelectValue placeholder="Select campaign" />
+                <SelectValue placeholder={campaigns.length === 0 ? "No campaigns available - create one first" : "Select campaign"} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No Campaign</SelectItem>
@@ -134,6 +149,11 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
                 ))}
               </SelectContent>
             </Select>
+            {campaigns.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Create a campaign first from the Campaigns page
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
