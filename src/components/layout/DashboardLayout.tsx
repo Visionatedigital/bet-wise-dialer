@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
+import { supabase } from "@/integrations/supabase/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +26,77 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, signOut } = useAuth();
   const { status, updateStatus } = useAgentStatus();
   const [notifications] = useState(3); // Mock notification count
+  const [queueCount, setQueueCount] = useState(0);
+  const [todayCallsCount, setTodayCallsCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchHeaderStats = async () => {
+      try {
+        // Fetch queue count (leads count)
+        const { count: leadsCount } = await supabase
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+
+        setQueueCount(leadsCount || 0);
+
+        // Fetch today's calls count
+        const today = new Date().toISOString().split('T')[0];
+        const { count: callsCount } = await supabase
+          .from('call_activities')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('start_time', `${today}T00:00:00`)
+          .lt('start_time', `${today}T23:59:59`);
+
+        setTodayCallsCount(callsCount || 0);
+      } catch (error) {
+        console.error('Error fetching header stats:', error);
+      }
+    };
+
+    fetchHeaderStats();
+
+    // Set up real-time subscriptions
+    const leadsChannel = supabase
+      .channel('leads-count')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'leads',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          fetchHeaderStats();
+        }
+      )
+      .subscribe();
+
+    const callsChannel = supabase
+      .channel('calls-count')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'call_activities',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          fetchHeaderStats();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(leadsChannel);
+      supabase.removeChannel(callsChannel);
+    };
+  }, [user]);
 
   // Generate initials from email
   const getInitials = (email: string): string => {
@@ -69,11 +141,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div className="flex items-center gap-2">
                   <div className="h-2 w-2 bg-success rounded-full animate-pulse" />
                   <span className="text-muted-foreground">Live Queue:</span>
-                  <span className="font-medium">12</span>
+                  <span className="font-medium">{queueCount}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">Today's Calls:</span>
-                  <span className="font-medium">47</span>
+                  <span className="font-medium">{todayCallsCount}</span>
                 </div>
               </div>
 
