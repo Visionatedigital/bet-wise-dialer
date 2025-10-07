@@ -43,7 +43,10 @@ export default function Leads() {
       setLoading(true);
       const { data, error } = await supabase
         .from('leads')
-        .select('*')
+        .select(`
+          *,
+          campaigns(name)
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -62,7 +65,7 @@ export default function Leads() {
         ownerUserId: lead.user_id,
         nextAction: lead.next_action || undefined,
         nextActionDue: lead.next_action_due || undefined,
-        campaign: lead.campaign || "No Campaign",
+        campaign: lead.campaigns?.name || "No Campaign",
         campaignId: lead.campaign_id || undefined,
         priority: lead.priority as "high" | "medium" | "low",
         slaMinutes: lead.sla_minutes || 0,
