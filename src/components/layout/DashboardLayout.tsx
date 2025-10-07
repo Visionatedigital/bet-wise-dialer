@@ -2,13 +2,13 @@ import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Bell, Search, User, Settings, Moon, Sun, Coffee } from "lucide-react";
+import { Search, User, Settings, Moon, Sun, Coffee } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { supabase } from "@/integrations/supabase/client";
+import { NotificationDropdown } from "./NotificationDropdown";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +25,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { status, updateStatus } = useAgentStatus();
-  const [notifications] = useState(3); // Mock notification count
   const [queueCount, setQueueCount] = useState(0);
   const [todayCallsCount, setTodayCallsCount] = useState(0);
 
@@ -163,14 +162,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 </Button>
 
                 {/* Notifications */}
-                <Button variant="ghost" size="sm" className="relative">
-                  <Bell className="h-4 w-4" />
-                  {notifications > 0 && (
-                    <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs bg-destructive">
-                      {notifications}
-                    </Badge>
-                  )}
-                </Button>
+                <NotificationDropdown />
 
                 {/* User Menu */}
                 <DropdownMenu>
