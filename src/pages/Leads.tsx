@@ -84,7 +84,7 @@ export default function Leads() {
     return matchesSearch && matchesSegment && matchesCampaign;
   });
 
-  const uniqueCampaigns = [...new Set(leads.map(lead => lead.campaign))];
+  const uniqueCampaigns = [...new Set(leads.map(lead => lead.campaign))].filter(campaign => campaign && campaign.trim() !== '');
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {

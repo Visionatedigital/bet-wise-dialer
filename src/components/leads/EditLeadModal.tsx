@@ -126,7 +126,7 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
                 <SelectValue placeholder="Select campaign" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No Campaign</SelectItem>
+                <SelectItem value="none">No Campaign</SelectItem>
                 {campaigns.map((campaign) => (
                   <SelectItem key={campaign.id} value={campaign.id}>
                     {campaign.name}

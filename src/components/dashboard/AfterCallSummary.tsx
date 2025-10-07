@@ -213,7 +213,7 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration }:
                   <SelectValue placeholder="Select next step" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No next step</SelectItem>
+                  <SelectItem value="none">No next step</SelectItem>
                   <SelectItem value="callback">Schedule Callback</SelectItem>
                   <SelectItem value="email">Send Email</SelectItem>
                   <SelectItem value="whatsapp">WhatsApp Follow-up</SelectItem>
