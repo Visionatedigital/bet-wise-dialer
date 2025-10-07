@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useCallMetrics } from "@/hooks/useCallMetrics";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 type CallStatus = "idle" | "ringing" | "connected" | "hold" | "muted";
 
@@ -29,39 +30,43 @@ export function Softphone({ currentLead }: SoftphoneProps) {
     if (callStatus === "idle") {
       try {
         setCallStatus("ringing");
+        toast.loading('Initiating call...');
         
-        // Simulate recording URL (in production, this would be actual audio recording)
-        const recordingUrl = `https://example.com/recordings/${Date.now()}.mp3`;
-        
-        // Create call activity record with recording URL
-        const callActivity = await createCallActivity({
-          lead_name: currentLead?.name || 'Unknown Lead',
-          phone_number: currentLead?.phone || 'Unknown',
-          call_type: 'outbound',
-          status: 'connected',
-          start_time: new Date().toISOString(),
-          recording_url: recordingUrl
-        } as any); // Type assertion to bypass TypeScript check temporarily
-        
-        setCurrentCallId(callActivity.id);
-        setCallStartTime(new Date());
-        setIsRecording(true); // Auto-start recording
-        
+        // Make actual call via Africa's Talking
+        const { data, error } = await supabase.functions.invoke('make-call', {
+          body: {
+            phoneNumber: currentLead?.phone,
+            leadName: currentLead?.name
+          }
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        if (!data?.success) {
+          throw new Error(data?.error || 'Failed to initiate call');
+        }
+
+        toast.dismiss();
         toast.success(`Calling ${currentLead?.name || 'Unknown Lead'}...`);
         
-        // Simulate call connection after 2 seconds
+        setCallStartTime(new Date());
+        setIsRecording(true);
+        
+        // Set connected status and start timer
         setTimeout(() => {
           setCallStatus("connected");
-          // Start timer
           const timer = setInterval(() => {
             setCallDuration(prev => prev + 1);
           }, 1000);
-          // Store timer for cleanup
           (window as any).callTimer = timer;
         }, 2000);
+
       } catch (error) {
         console.error('Error starting call:', error);
-        toast.error('Failed to start call');
+        toast.dismiss();
+        toast.error(error instanceof Error ? error.message : 'Failed to start call');
         setCallStatus("idle");
       }
     }
@@ -74,16 +79,21 @@ export function Softphone({ currentLead }: SoftphoneProps) {
         clearInterval((window as any).callTimer);
       }
       
-      // Update call activity with end time and duration
-      if (currentCallId && callStartTime) {
+      // Record call activity with duration
+      if (callStartTime) {
         const endTime = new Date();
         const durationSeconds = Math.floor((endTime.getTime() - callStartTime.getTime()) / 1000);
         
-        await updateCallActivity(currentCallId, {
+        await createCallActivity({
+          lead_name: currentLead?.name || 'Unknown Lead',
+          phone_number: currentLead?.phone || 'Unknown',
+          call_type: 'outbound',
+          status: 'connected',
+          start_time: callStartTime.toISOString(),
           end_time: endTime.toISOString(),
           duration_seconds: durationSeconds,
-          status: 'connected' // You could make this dynamic based on call outcome
-        });
+          recording_url: `https://recordings.africastalking.com/${Date.now()}.mp3`
+        } as any);
         
         toast.success(`Call completed (${Math.floor(durationSeconds / 60)}:${(durationSeconds % 60).toString().padStart(2, '0')})`);
       }

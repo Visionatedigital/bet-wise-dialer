@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.analyze-funnel]
 verify_jwt = false
+
+[functions.make-call]
+verify_jwt = true
+
+[functions.voice-callback]
+verify_jwt = false
