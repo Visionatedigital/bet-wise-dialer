@@ -22,6 +22,11 @@ serve(async (req) => {
     const AFRICASTALKING_USERNAME = Deno.env.get('AFRICASTALKING_USERNAME');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 
+    console.log('Debug - Username exists:', !!AFRICASTALKING_USERNAME);
+    console.log('Debug - API Key exists:', !!AFRICASTALKING_API_KEY);
+    console.log('Debug - Username value:', AFRICASTALKING_USERNAME);
+    console.log('Debug - API Key prefix:', AFRICASTALKING_API_KEY?.substring(0, 8) + '...');
+
     if (!AFRICASTALKING_API_KEY || !AFRICASTALKING_USERNAME) {
       throw new Error('Africa\'s Talking credentials not configured');
     }
