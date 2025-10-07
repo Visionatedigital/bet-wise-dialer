@@ -112,7 +112,7 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Lead</DialogTitle>
           <DialogDescription>
@@ -120,7 +120,7 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label>Name</Label>
             <Input value={lead.name} disabled />
@@ -206,19 +206,19 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
               className="py-4"
             />
           </div>
+        </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
+        <div className="flex justify-end gap-2 pt-4 border-t sticky bottom-0 bg-background pb-4">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
