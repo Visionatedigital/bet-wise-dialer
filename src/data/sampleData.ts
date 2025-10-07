@@ -15,6 +15,7 @@ export interface Lead {
   nextAction?: string;
   nextActionDue?: string;
   campaign: string;
+  campaignId?: string;
   priority: "high" | "medium" | "low";
   slaMinutes: number;
 }

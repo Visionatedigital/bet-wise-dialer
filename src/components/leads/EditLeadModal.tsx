@@ -43,7 +43,7 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
   useEffect(() => {
     if (lead) {
       setFormData({
-        campaign_id: "", // Will be set when we fetch from database with proper campaign_id
+        campaign_id: (lead as any).campaignId || "none",
         intent: lead.intent || "",
         score: lead.score || 0,
         priority: lead.priority || "low",
@@ -75,7 +75,7 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
       const { error } = await supabase
         .from('leads')
         .update({
-          campaign_id: formData.campaign_id || null,
+          campaign_id: formData.campaign_id === 'none' ? null : formData.campaign_id,
           intent: formData.intent || null,
           score: formData.score,
           priority: formData.priority,

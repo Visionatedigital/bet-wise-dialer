@@ -63,6 +63,7 @@ export default function Leads() {
         nextAction: lead.next_action || undefined,
         nextActionDue: lead.next_action_due || undefined,
         campaign: lead.campaign || "No Campaign",
+        campaignId: lead.campaign_id || undefined,
         priority: lead.priority as "high" | "medium" | "low",
         slaMinutes: lead.sla_minutes || 0,
       }));
