@@ -50,7 +50,7 @@ serve(async (req) => {
     const response = await fetch('https://voice.africastalking.com/call', {
       method: 'POST',
       headers: {
-        'apiKey': AFRICASTALKING_API_KEY,
+        'ApiKey': AFRICASTALKING_API_KEY,
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
       },
