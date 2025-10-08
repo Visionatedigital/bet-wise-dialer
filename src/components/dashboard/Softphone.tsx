@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { useCallMetrics } from "@/hooks/useCallMetrics";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { SipClient } from "@/utils/SipClient";
+import { SessionState } from "sip.js";
 
 type CallStatus = "idle" | "ringing" | "connected" | "hold" | "muted";
 
@@ -26,117 +28,93 @@ export function Softphone({ currentLead }: SoftphoneProps) {
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
   const { createCallActivity, updateCallActivity } = useCallMetrics();
   
-  // Audio refs
-  const audioStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  // SIP client ref
+  const sipClientRef = useRef<SipClient | null>(null);
   
-  // Request microphone access and set up audio
-  const setupAudio = async () => {
+  // Initialize SIP client
+  const initializeSipClient = async () => {
     try {
-      // Request microphone permission
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        } 
-      });
+      // Get SIP credentials from edge function
+      const { data, error } = await supabase.functions.invoke('get-sip-credentials');
       
-      audioStreamRef.current = stream;
+      if (error) throw error;
       
-      // Create audio context for processing
-      audioContextRef.current = new AudioContext();
-      
-      // Create audio element for playback
-      if (!audioElementRef.current) {
-        audioElementRef.current = new Audio();
-        audioElementRef.current.autoplay = true;
+      if (!data?.username || !data?.password) {
+        throw new Error('SIP credentials not available');
       }
+
+      // Initialize SIP client
+      sipClientRef.current = new SipClient();
+      await sipClientRef.current.initialize(data.username, data.password);
       
-      toast.success('Microphone access granted');
+      toast.success('Connected to call server');
       return true;
     } catch (error) {
-      console.error('Error accessing microphone:', error);
-      toast.error('Microphone access denied. Please allow microphone access to make calls.');
+      console.error('Error initializing SIP client:', error);
+      toast.error('Failed to connect to call server');
       return false;
-    }
-  };
-  
-  // Cleanup audio resources
-  const cleanupAudio = () => {
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach(track => track.stop());
-      audioStreamRef.current = null;
-    }
-    
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    
-    if (audioElementRef.current) {
-      audioElementRef.current.pause();
-      audioElementRef.current.srcObject = null;
     }
   };
   
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      cleanupAudio();
+      if (sipClientRef.current) {
+        sipClientRef.current.unregister();
+      }
     };
   }, []);
 
   const handleCall = async () => {
     if (callStatus === "idle") {
       try {
-        // First, request audio permissions
-        const audioReady = await setupAudio();
-        if (!audioReady) {
-          return;
-        }
-        
         setCallStatus("ringing");
-        toast.loading('Initiating call...');
+        toast.loading('Connecting to call server...');
         
-        // Make actual call via Africa's Talking
-        const { data, error } = await supabase.functions.invoke('make-call', {
-          body: {
-            phoneNumber: currentLead?.phone,
-            leadName: currentLead?.name
+        // Initialize SIP client if not already done
+        if (!sipClientRef.current) {
+          const initialized = await initializeSipClient();
+          if (!initialized) {
+            setCallStatus("idle");
+            return;
           }
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        if (!data?.success) {
-          throw new Error(data?.error || 'Failed to initiate call');
         }
 
         toast.dismiss();
-        toast.success(`Call connected - You can now speak`);
+        toast.loading('Calling customer...');
         
-        setCallStartTime(new Date());
-        setIsRecording(true);
-        
-        // Set connected status and start timer
-        setTimeout(() => {
-          setCallStatus("connected");
-          const timer = setInterval(() => {
-            setCallDuration(prev => prev + 1);
-          }, 1000);
-          (window as any).callTimer = timer;
-        }, 2000);
+        // Make SIP call
+        await sipClientRef.current!.makeCall(
+          currentLead?.phone || '',
+          (state) => {
+            console.log('Call state changed:', state);
+            
+            if (state === SessionState.Establishing) {
+              toast.dismiss();
+              toast.loading('Ringing...');
+            } else if (state === SessionState.Established) {
+              toast.dismiss();
+              toast.success('Call connected - You can now speak');
+              setCallStatus("connected");
+              setCallStartTime(new Date());
+              setIsRecording(true);
+              
+              // Start call timer
+              const timer = setInterval(() => {
+                setCallDuration(prev => prev + 1);
+              }, 1000);
+              (window as any).callTimer = timer;
+            } else if (state === SessionState.Terminated) {
+              handleHangup();
+            }
+          }
+        );
 
       } catch (error) {
         console.error('Error starting call:', error);
         toast.dismiss();
         toast.error(error instanceof Error ? error.message : 'Failed to start call');
         setCallStatus("idle");
-        cleanupAudio();
       }
     }
   };
@@ -148,8 +126,10 @@ export function Softphone({ currentLead }: SoftphoneProps) {
         clearInterval((window as any).callTimer);
       }
       
-      // Cleanup audio resources
-      cleanupAudio();
+      // End SIP call
+      if (sipClientRef.current) {
+        await sipClientRef.current.hangup();
+      }
       
       // Record call activity with duration
       if (callStartTime) {
@@ -184,7 +164,6 @@ export function Softphone({ currentLead }: SoftphoneProps) {
       setCallDuration(0);
       setCurrentCallId(null);
       setCallStartTime(null);
-      cleanupAudio();
     }
   };
 
@@ -194,14 +173,8 @@ export function Softphone({ currentLead }: SoftphoneProps) {
 
   const toggleMute = () => {
     setIsMuted(!isMuted);
-    
-    // Mute/unmute the microphone stream
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = isMuted; // Toggle opposite of current state
-      });
-      toast.info(isMuted ? 'Microphone unmuted' : 'Microphone muted');
-    }
+    // Note: Muting is handled by SIP.js through the session
+    toast.info(isMuted ? 'Microphone unmuted' : 'Microphone muted');
   };
 
   const toggleRecording = () => {
