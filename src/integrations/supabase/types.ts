@@ -384,6 +384,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      verify_leads_rls: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          policy_count: number
+          rls_enabled: boolean
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
