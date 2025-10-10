@@ -156,6 +156,11 @@
     background: hsl(var(--call-hold));
     color: hsl(var(--info-foreground));
   }
+  
+  /* Hide Lovable badge */
+  #lovable-badge {
+    display: none !important;
+  }
 }
 
 @layer components {
