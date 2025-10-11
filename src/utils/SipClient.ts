@@ -16,16 +16,21 @@ export class SipClient {
         document.body.appendChild(this.remoteAudio);
       }
 
-      const uri = UserAgent.makeURI(`sip:${sipUsername}@voice.africastalking.com`);
+      // Extract domain from username (e.g., agent1.betsure@ug.sip.africastalking.com)
+      const sipDomain = sipUsername.includes('@') 
+        ? sipUsername.split('@')[1] 
+        : 'ug.sip.africastalking.com';
+      
+      const uri = UserAgent.makeURI(`sip:${sipUsername}`);
       if (!uri) {
         throw new Error('Failed to create SIP URI');
       }
 
-      // Configure UserAgent
+      // Configure UserAgent with WebSocket server
       this.userAgent = new UserAgent({
         uri,
         transportOptions: {
-          server: 'wss://voice.africastalking.com:5061',
+          server: `wss://${sipDomain}`,
         },
         authorizationUsername: sipUsername,
         authorizationPassword: sipPassword,
@@ -72,8 +77,12 @@ export class SipClient {
       // Format phone number (ensure it starts with +)
       const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
       
-      // Create target URI
-      const target = UserAgent.makeURI(`sip:${formattedPhone}@voice.africastalking.com`);
+      // Extract domain from our registered URI
+      const ourUri = this.userAgent.configuration.uri;
+      const sipDomain = ourUri.host;
+      
+      // Create target URI using the same domain
+      const target = UserAgent.makeURI(`sip:${formattedPhone}@${sipDomain}`);
       if (!target) {
         throw new Error('Failed to create target URI');
       }
