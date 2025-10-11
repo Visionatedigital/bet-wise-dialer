@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, Pause, Play } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, Pause, Play, Grid3x3, Delete } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useCallMetrics } from "@/hooks/useCallMetrics";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +28,8 @@ export function Softphone({ currentLead }: SoftphoneProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
+  const [dialedNumber, setDialedNumber] = useState("");
+  const [showDialPad, setShowDialPad] = useState(false);
   const { createCallActivity, updateCallActivity } = useCallMetrics();
   
   // SIP client ref
@@ -65,9 +69,16 @@ export function Softphone({ currentLead }: SoftphoneProps) {
     };
   }, []);
 
-  const handleCall = async () => {
+  const handleCall = async (phoneNumber?: string) => {
     if (callStatus === "idle") {
       try {
+        const numberToCall = phoneNumber || currentLead?.phone || '';
+        
+        if (!numberToCall) {
+          toast.error('No phone number to call');
+          return;
+        }
+        
         setCallStatus("ringing");
         toast.loading('Connecting to call server...');
         
@@ -83,9 +94,12 @@ export function Softphone({ currentLead }: SoftphoneProps) {
         toast.dismiss();
         toast.loading('Calling customer...');
         
+        // Close dial pad if open
+        setShowDialPad(false);
+        
         // Make SIP call
         await sipClientRef.current!.makeCall(
-          currentLead?.phone || '',
+          numberToCall,
           (state) => {
             console.log('Call state changed:', state);
             
@@ -205,6 +219,21 @@ export function Softphone({ currentLead }: SoftphoneProps) {
     }
   };
 
+  const handleDialPadClick = (digit: string) => {
+    setDialedNumber(prev => prev + digit);
+  };
+
+  const handleDialPadDelete = () => {
+    setDialedNumber(prev => prev.slice(0, -1));
+  };
+
+  const handleDialPadCall = () => {
+    if (dialedNumber) {
+      handleCall(dialedNumber);
+      setDialedNumber("");
+    }
+  };
+
   return (
     <Card className="w-full">
       <CardHeader className="pb-3">
@@ -245,13 +274,76 @@ export function Softphone({ currentLead }: SoftphoneProps) {
         {/* Call Controls */}
         <div className="flex items-center justify-center gap-2">
           {callStatus === "idle" ? (
-            <Button 
-              onClick={handleCall}
-              className="h-12 w-12 rounded-full bg-success hover:bg-success/90"
-              disabled={!currentLead}
-            >
-              <Phone className="h-5 w-5" />
-            </Button>
+            <>
+              <Button 
+                onClick={() => handleCall()}
+                className="h-12 w-12 rounded-full bg-success hover:bg-success/90"
+                disabled={!currentLead}
+              >
+                <Phone className="h-5 w-5" />
+              </Button>
+              
+              <Dialog open={showDialPad} onOpenChange={setShowDialPad}>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="outline"
+                    className="h-12 w-12 rounded-full"
+                  >
+                    <Grid3x3 className="h-5 w-5" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Dial Pad</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    {/* Number Display */}
+                    <div className="relative">
+                      <Input 
+                        value={dialedNumber}
+                        onChange={(e) => setDialedNumber(e.target.value)}
+                        placeholder="Enter phone number"
+                        className="text-center text-xl font-mono h-12"
+                      />
+                      {dialedNumber && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-2 top-1/2 -translate-y-1/2"
+                          onClick={handleDialPadDelete}
+                        >
+                          <Delete className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {/* Dial Pad Grid */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map((digit) => (
+                        <Button
+                          key={digit}
+                          variant="outline"
+                          className="h-14 text-2xl"
+                          onClick={() => handleDialPadClick(digit)}
+                        >
+                          {digit}
+                        </Button>
+                      ))}
+                    </div>
+                    
+                    {/* Call Button */}
+                    <Button
+                      onClick={handleDialPadCall}
+                      disabled={!dialedNumber}
+                      className="w-full h-12 bg-success hover:bg-success/90"
+                    >
+                      <Phone className="h-5 w-5 mr-2" />
+                      Call
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
           ) : (
             <>
               <Button
