@@ -55,25 +55,34 @@ serve(async (req) => {
 
     const isActive = params.isActive;
     const callerNumber = params.callerNumber;
-    const destinationNumber = params.destinationNumber || params.clientDialedNumber;
+    const destinationNumber = params.destinationNumber || params.clientDialedNumber || params.destination;
     const direction = params.direction;
     const dtmfDigits = params.dtmfDigits;
+    const sessionId = params.sessionId;
 
+    console.log('[Voice Callback] 📋 ALL PARAMETERS:', JSON.stringify(params, null, 2));
     console.log('[Voice Callback] 📋 Parsed parameters:', {
       isActive,
       callerNumber,
       destinationNumber,
       direction,
       dtmfDigits,
-      allParams: params
+      sessionId
     });
 
     // Determine which call flow to use
+    // For outbound calls from WebRTC, callerNumber contains the SIP client name
+    // and we need to dial the actual destination number
     let flowKey = 'inbound'; // default
     
-    if (direction === 'outbound' || destinationNumber) {
+    const isWebRTCClient = callerNumber && (callerNumber.includes('agent_') || callerNumber.includes('betsure.'));
+    
+    if (isWebRTCClient && destinationNumber && destinationNumber !== callerNumber) {
       flowKey = 'outbound';
-      console.log('[Voice Callback] 🎯 Using OUTBOUND flow');
+      console.log('[Voice Callback] 🎯 Using OUTBOUND flow (WebRTC client detected)');
+    } else if (direction === 'outbound' || (destinationNumber && !isWebRTCClient)) {
+      flowKey = 'outbound';
+      console.log('[Voice Callback] 🎯 Using OUTBOUND flow (explicit direction or destination)');
     } else if (dtmfDigits) {
       flowKey = 'ivr';
       console.log('[Voice Callback] 🎯 Using IVR flow');
