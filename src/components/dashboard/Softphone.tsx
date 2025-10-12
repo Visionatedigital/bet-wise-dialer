@@ -399,7 +399,7 @@ export function Softphone({ currentLead }: SoftphoneProps) {
             <Phone className="h-5 w-5" />
             Softphone
             <Badge variant={isWebRTCReady ? "default" : "secondary"} className="text-xs">
-              {isWebRTCReady ? "WebRTC Ready" : "Connecting..."}
+              {isWebRTCReady ? "Ready" : "Connecting..."}
             </Badge>
           </div>
           <Button
