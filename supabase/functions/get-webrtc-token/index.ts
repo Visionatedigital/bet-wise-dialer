@@ -59,8 +59,8 @@ Deno.serve(async (req) => {
         username: username,
         clientName: clientName,
         phoneNumber: phoneNumber,
-        incoming: true,
-        outgoing: true,
+        incoming: 'true',
+        outgoing: 'true',
         expire: '86400' // 24 hours
       }),
     });
@@ -94,8 +94,9 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('[WebRTC] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
