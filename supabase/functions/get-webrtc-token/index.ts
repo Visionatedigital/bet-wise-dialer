@@ -48,21 +48,22 @@ Deno.serve(async (req) => {
     console.log('[WebRTC] Requesting capability token for:', clientName);
 
     // Request capability token from Africa's Talking
+    const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
     const response = await fetch('https://webrtc.africastalking.com/capability-token/request', {
       method: 'POST',
       headers: {
         'apiKey': apiKey,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
       },
-      body: JSON.stringify({
+      body: new URLSearchParams({
         username: username,
         clientName: clientName,
-        phoneNumber: phoneNumber,
+        phoneNumber: formattedPhone,
         incoming: 'true',
         outgoing: 'true',
         expire: '86400' // 24 hours
-      }),
+      }).toString(),
     });
 
     const responseText = await response.text();
