@@ -373,7 +373,13 @@ const handleCallEnd = () => {
   };
 
   const handleDialPadClick = (digit: string) => {
-    setDialedNumber(prev => prev + digit);
+    setDialedNumber(prev => {
+      // Auto-add "+" if empty and digit is clicked
+      if (!prev && digit !== '+') {
+        return '+' + digit;
+      }
+      return prev + digit;
+    });
   };
 
   const handleDialPadDelete = () => {
