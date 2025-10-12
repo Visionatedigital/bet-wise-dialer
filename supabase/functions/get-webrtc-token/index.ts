@@ -53,17 +53,17 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: {
         'apiKey': apiKey,
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: new URLSearchParams({
+      body: JSON.stringify({
         username: username,
         clientName: clientName,
         phoneNumber: formattedPhone,
         incoming: 'true',
         outgoing: 'true',
         expire: '86400' // 24 hours
-      }).toString(),
+      }),
     });
 
     const responseText = await response.text();
