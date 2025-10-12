@@ -9,6 +9,8 @@ export class SipClient {
 
   async initialize(sipUsername: string, sipPassword: string) {
     try {
+      console.log('Initializing SIP with username:', sipUsername);
+      
       // Create audio element for remote audio
       if (!this.remoteAudio) {
         this.remoteAudio = document.createElement('audio');
@@ -16,12 +18,24 @@ export class SipClient {
         document.body.appendChild(this.remoteAudio);
       }
 
-      // Extract domain from username (e.g., agent1.betsure@ug.sip.africastalking.com)
-      const sipDomain = sipUsername.includes('@') 
-        ? sipUsername.split('@')[1] 
-        : 'ug.sip.africastalking.com';
+      // Parse username and domain from Africa's Talking format
+      // Username format: agent1.betsure@ug.sip.africastalking.com
+      let sipUser: string;
+      let sipDomain: string;
       
-      const uri = UserAgent.makeURI(`sip:${sipUsername}`);
+      if (sipUsername.includes('@')) {
+        const parts = sipUsername.split('@');
+        sipUser = parts[0];  // agent1.betsure
+        sipDomain = parts[1]; // ug.sip.africastalking.com
+      } else {
+        sipUser = sipUsername;
+        sipDomain = 'ug.sip.africastalking.com';
+      }
+
+      console.log('SIP User:', sipUser, 'SIP Domain:', sipDomain);
+      
+      // Create proper SIP URI
+      const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`);
       if (!uri) {
         throw new Error('Failed to create SIP URI');
       }
@@ -30,9 +44,9 @@ export class SipClient {
       this.userAgent = new UserAgent({
         uri,
         transportOptions: {
-          server: `wss://${sipDomain}`,
+          server: `wss://${sipDomain}:5060`,
         },
-        authorizationUsername: sipUsername,
+        authorizationUsername: sipUser,
         authorizationPassword: sipPassword,
         sessionDescriptionHandlerFactoryOptions: {
           constraints: {
