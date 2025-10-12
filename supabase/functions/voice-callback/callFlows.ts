@@ -77,8 +77,10 @@ export function generateXML(actions: CallFlowAction[], params: Record<string, st
   const actionXML = actions.map(action => {
     switch (action.type) {
       case 'dial':
+        // For WebRTC outbound calls, use clientDialedNumber (the number the user dialed)
+        // Otherwise use destinationNumber or the static phoneNumbers value
         const phoneNumber = action.phoneNumbers === 'destinationNumber' 
-          ? (params.destinationNumber || params.callerNumber)
+          ? (params.clientDialedNumber || params.destinationNumber || params.callerNumber)
           : action.phoneNumbers;
         return `  <Dial phoneNumbers="${phoneNumber}"/>`;
       

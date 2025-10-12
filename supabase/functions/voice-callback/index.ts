@@ -55,7 +55,8 @@ serve(async (req) => {
 
     const isActive = params.isActive;
     const callerNumber = params.callerNumber;
-    const destinationNumber = params.destinationNumber || params.clientDialedNumber || params.destination;
+    const clientDialedNumber = params.clientDialedNumber;
+    const destinationNumber = params.destinationNumber;
     const direction = params.direction;
     const dtmfDigits = params.dtmfDigits;
     const sessionId = params.sessionId;
@@ -64,6 +65,7 @@ serve(async (req) => {
     console.log('[Voice Callback] 📋 Parsed parameters:', {
       isActive,
       callerNumber,
+      clientDialedNumber,
       destinationNumber,
       direction,
       dtmfDigits,
@@ -72,14 +74,15 @@ serve(async (req) => {
 
     // Determine which call flow to use
     // For outbound calls from WebRTC, callerNumber contains the SIP client name
-    // and we need to dial the actual destination number
+    // and clientDialedNumber contains the actual number to dial
     let flowKey = 'inbound'; // default
     
     const isWebRTCClient = callerNumber && (callerNumber.includes('agent_') || callerNumber.includes('betsure.'));
     
-    if (isWebRTCClient && destinationNumber && destinationNumber !== callerNumber) {
+    if (isWebRTCClient && clientDialedNumber) {
       flowKey = 'outbound';
       console.log('[Voice Callback] 🎯 Using OUTBOUND flow (WebRTC client detected)');
+      console.log('[Voice Callback] 📱 Dialing number:', clientDialedNumber);
     } else if (direction === 'outbound' || (destinationNumber && !isWebRTCClient)) {
       flowKey = 'outbound';
       console.log('[Voice Callback] 🎯 Using OUTBOUND flow (explicit direction or destination)');
@@ -103,6 +106,7 @@ serve(async (req) => {
     // Generate XML response from call flow
     const response = generateXML(flow.actions, {
       callerNumber: (callerNumber as string) || '',
+      clientDialedNumber: (clientDialedNumber as string) || '',
       destinationNumber: (destinationNumber as string) || '',
       dtmfDigits: (dtmfDigits as string) || '',
     });
