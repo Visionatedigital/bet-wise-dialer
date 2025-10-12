@@ -46,55 +46,89 @@ export function Softphone({ currentLead }: SoftphoneProps) {
   // Initialize WebRTC client
   const initializeWebRTC = async () => {
     try {
+      console.log('========================================');
+      console.log('[WebRTC-INIT] 🚀 Starting WebRTC initialization');
       toast.info("Connecting to WebRTC...");
       
+      console.log('[WebRTC-INIT] 📡 Requesting token from Supabase...');
       const { data, error } = await supabase.functions.invoke('get-webrtc-token');
       
-      if (error) throw error;
+      if (error) {
+        console.error('[WebRTC-INIT] ❌ Token request failed:', error);
+        throw error;
+      }
       
       if (!data.token) {
+        console.error('[WebRTC-INIT] ❌ No token in response:', data);
         throw new Error('No token received');
       }
 
-      console.log('[WebRTC] Token received:', data.clientName);
+      console.log('[WebRTC-INIT] ✅ Token received successfully');
+      console.log('[WebRTC-INIT] Client name:', data.clientName);
+      console.log('[WebRTC-INIT] Token (first 30 chars):', data.token?.substring(0, 30) + '...');
+      console.log('[WebRTC-INIT] Token lifetime:', data.lifeTimeSec, 'seconds');
       setWebrtcToken(data.token);
 
       // Initialize Africastalking client
+      console.log('[WebRTC-INIT] 🔍 Looking for Africastalking SDK...');
       const AT = (window as any).Africastalking;
       if (typeof AT === 'undefined') {
+        console.error('[WebRTC-INIT] ❌ Africastalking SDK not found on window object');
+        console.log('[WebRTC-INIT] Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('afric')));
         throw new Error('Africastalking SDK not loaded');
       }
+      console.log('[WebRTC-INIT] ✅ SDK found:', typeof AT);
 
+      console.log('[WebRTC-INIT] 🔧 Creating client instance...');
       const client = new AT.Client(data.token);
       webrtcClientRef.current = client;
+      console.log('[WebRTC-INIT] ✅ Client instance created');
+      console.log('[WebRTC-INIT] Client object:', client);
 
       // Set up event listeners
+      console.log('[WebRTC-INIT] 📝 Registering event listeners...');
+      
       client.on('ready', () => {
-        console.log('[WebRTC] ✅ Client ready');
+        console.log('========================================');
+        console.log('[WebRTC-EVENT] 🟢 READY - Client is ready to make calls');
+        console.log('[WebRTC-EVENT] Timestamp:', new Date().toISOString());
+        console.log('========================================');
         setIsWebRTCReady(true);
         toast.success("WebRTC connected!");
       });
 
       client.on('notready', () => {
-        console.log('[WebRTC] ❌ Client not ready');
+        console.log('========================================');
+        console.log('[WebRTC-EVENT] 🔴 NOT READY');
+        console.log('========================================');
         setIsWebRTCReady(false);
         toast.error("WebRTC not ready");
       });
 
       client.on('calling', (callInfo: any) => {
-        console.log('[WebRTC] 📞 Calling...', callInfo);
+        console.log('========================================');
+        console.log('[WebRTC-EVENT] 📞 CALLING');
+        console.log('[WebRTC-EVENT] Call info:', callInfo);
+        console.log('[WebRTC-EVENT] Info keys:', Object.keys(callInfo || {}));
+        console.log('========================================');
         setCallStatus('ringing');
         toast.info('Dialing...');
       });
 
       client.on('incomingcall', (params: any) => {
-        console.log('[WebRTC] 📲 Incoming call from:', params);
+        console.log('========================================');
+        console.log('[WebRTC-EVENT] 📲 INCOMING CALL');
+        console.log('[WebRTC-EVENT] From:', params);
+        console.log('========================================');
         toast.info(`Incoming call from ${params.from}`);
         setCallStatus('ringing');
       });
 
       client.on('callaccepted', (acceptInfo: any) => {
-        console.log('[WebRTC] ✅ Call accepted', acceptInfo);
+        console.log('========================================');
+        console.log('[WebRTC-EVENT] ✅ CALL ACCEPTED');
+        console.log('[WebRTC-EVENT] Accept info:', acceptInfo);
+        console.log('========================================');
         setCallStatus('connected');
         setCallStartTime(new Date());
         toast.success('Call connected!');
@@ -107,30 +141,52 @@ export function Softphone({ currentLead }: SoftphoneProps) {
       });
 
       client.on('hangup', (hangupCause: any) => {
-        console.log('[WebRTC] 📴 Call ended. Cause:', hangupCause);
+        console.log('========================================');
+        console.log('[WebRTC-EVENT] 📴 CALL ENDED');
+        console.log('[WebRTC-EVENT] Cause object:', hangupCause);
+        console.log('[WebRTC-EVENT] Code:', hangupCause?.code);
+        console.log('[WebRTC-EVENT] Reason:', hangupCause?.reason);
+        console.log('========================================');
         toast.info('Call ended');
         handleCallEnd();
       });
 
       client.on('offline', () => {
-        console.log('[WebRTC] ⏸️ Token expired');
+        console.log('========================================');
+        console.log('[WebRTC-EVENT] ⏸️ OFFLINE - Token expired');
+        console.log('========================================');
         setIsWebRTCReady(false);
         toast.warning("Session expired");
       });
 
       client.on('closed', () => {
-        console.log('[WebRTC] 🔌 Connection closed');
+        console.log('========================================');
+        console.log('[WebRTC-EVENT] 🔌 CONNECTION CLOSED');
+        console.log('========================================');
         setIsWebRTCReady(false);
         toast.error("Connection lost");
       });
 
       client.on('error', (error: any) => {
-        console.error('[WebRTC] ❌ Error:', error);
+        console.log('========================================');
+        console.error('[WebRTC-EVENT] ❌❌❌ ERROR ❌❌❌');
+        console.error('[WebRTC-EVENT] Error object:', error);
+        console.error('[WebRTC-EVENT] Error message:', error?.message);
+        console.error('[WebRTC-EVENT] Error code:', error?.code);
+        console.log('========================================');
         toast.error(`Call error: ${error.message || 'Unknown error'}`);
       });
 
+      console.log('[WebRTC-INIT] ✅ All event listeners registered');
+      console.log('[WebRTC-INIT] Waiting for "ready" event...');
+      console.log('========================================');
+
     } catch (error) {
-      console.error('[WebRTC] Initialization error:', error);
+      console.log('========================================');
+      console.error('[WebRTC-INIT] ❌❌❌ INITIALIZATION FAILED ❌❌❌');
+      console.error('[WebRTC-INIT] Error:', error);
+      console.error('[WebRTC-INIT] Error stack:', error instanceof Error ? error.stack : 'No stack');
+      console.log('========================================');
       toast.error("Failed to connect WebRTC");
       setIsWebRTCReady(false);
     }
@@ -201,27 +257,58 @@ const handleCallEnd = () => {
       
       if (connectionMode === 'webrtc') {
         // Use WebRTC client
+        console.log('========================================');
+        console.log('[WebRTC-CALL] 📞 INITIATING CALL');
+        console.log('[WebRTC-CALL] Raw input number:', numberToCall);
+        
         if (!webrtcClientRef.current || !isWebRTCReady) {
+          console.error('[WebRTC-CALL] ❌ Client not ready');
+          console.log('[WebRTC-CALL] Has client:', !!webrtcClientRef.current);
+          console.log('[WebRTC-CALL] Is ready:', isWebRTCReady);
+          console.log('========================================');
           toast.error("WebRTC not ready. Please wait or reconnect.");
           return;
         }
 
         const normalizedNumber = normalizePhoneNumber(numberToCall);
-        console.log('[WebRTC] 📞 Initiating call to:', normalizedNumber);
-        console.log('[WebRTC] Client state:', {
-          isReady: isWebRTCReady,
-          hasClient: !!webrtcClientRef.current,
-          token: webrtcToken ? 'present' : 'missing'
-        });
+        console.log('[WebRTC-CALL] Normalized number:', normalizedNumber);
+        console.log('[WebRTC-CALL] Client ready:', isWebRTCReady);
+        console.log('[WebRTC-CALL] Token:', webrtcToken);
+        console.log('[WebRTC-CALL] Client object type:', typeof webrtcClientRef.current);
+        console.log('[WebRTC-CALL] Client methods:', Object.keys(webrtcClientRef.current || {}));
 
         // Close dial pad if open
         setShowDialPad(false);
         
-        const callResult = webrtcClientRef.current.call(normalizedNumber);
-        console.log('[WebRTC] Call method result:', callResult);
-        
-        setCallStatus('ringing');
-        setDialedNumber("");
+        try {
+          console.log('[WebRTC-CALL] 🔄 Calling client.call() with:', normalizedNumber);
+          console.log('[WebRTC-CALL] Call parameters:', {
+            phoneNumber: normalizedNumber,
+            timestamp: new Date().toISOString()
+          });
+          
+          const callResult = webrtcClientRef.current.call(normalizedNumber);
+          
+          console.log('[WebRTC-CALL] ✅ Call method returned');
+          console.log('[WebRTC-CALL] Result:', callResult);
+          console.log('[WebRTC-CALL] Result type:', typeof callResult);
+          if (callResult) {
+            console.log('[WebRTC-CALL] Result keys:', Object.keys(callResult));
+          }
+          console.log('========================================');
+          
+          setCallStatus('ringing');
+          setDialedNumber("");
+        } catch (error) {
+          console.error('========================================');
+          console.error('[WebRTC-CALL] ❌❌❌ CALL FAILED ❌❌❌');
+          console.error('[WebRTC-CALL] Error:', error);
+          console.error('[WebRTC-CALL] Error message:', error instanceof Error ? error.message : 'Unknown');
+          console.error('[WebRTC-CALL] Error stack:', error instanceof Error ? error.stack : 'No stack');
+          console.error('========================================');
+          toast.error('Failed to initiate call');
+          setCallStatus('idle');
+        }
         return;
       }
 

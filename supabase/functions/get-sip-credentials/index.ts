@@ -11,12 +11,21 @@ serve(async (req) => {
   }
 
   try {
+    console.log('========================================');
+    console.log('[WebRTC-Token] 📡 Token request received');
+    
     const SIP_USERNAME = Deno.env.get('AFRICASTALKING_SIP_USERNAME');
     const SIP_PASSWORD = Deno.env.get('AFRICASTALKING_SIP_PASSWORD');
 
     if (!SIP_USERNAME || !SIP_PASSWORD) {
+      console.error('[WebRTC-Token] ❌ SIP credentials not configured');
       throw new Error('SIP credentials not configured');
     }
+
+    console.log('[WebRTC-Token] ✅ Credentials found');
+    console.log('[WebRTC-Token] Username format:', SIP_USERNAME?.includes('@') ? 'Full format' : 'Short format');
+    console.log('[WebRTC-Token] Returning credentials...');
+    console.log('========================================');
 
     return new Response(
       JSON.stringify({ 
@@ -27,7 +36,10 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error fetching SIP credentials:', error);
+    console.error('========================================');
+    console.error('[WebRTC-Token] ❌❌❌ ERROR ❌❌❌');
+    console.error('[WebRTC-Token] Error:', error);
+    console.error('========================================');
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : 'Unknown error' 
