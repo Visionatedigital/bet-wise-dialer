@@ -21,15 +21,20 @@ serve(async (req) => {
     // Get credentials from environment
     const apiKey = Deno.env.get('AFRICASTALKING_API_KEY')!;
     const username = Deno.env.get('AFRICASTALKING_USERNAME')!;
+    const fromNumber = Deno.env.get('AFRICASTALKING_PHONE_NUMBER')!;
     
-    if (!apiKey || !username) {
-      throw new Error('Africa\'s Talking credentials not configured');
+    if (!apiKey || !username || !fromNumber) {
+      throw new Error('Africa\'s Talking credentials not configured. Missing: ' + 
+        (!apiKey ? 'API_KEY ' : '') + 
+        (!username ? 'USERNAME ' : '') + 
+        (!fromNumber ? 'PHONE_NUMBER' : ''));
     }
 
     const maskedKey = apiKey.length > 8 ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : '***masked***';
 
     console.log('[AT] Making call to:', phoneNumber);
     console.log('[AT] Using username:', username);
+    console.log('[AT] From number:', fromNumber);
     console.log('[AT] API key (masked):', maskedKey);
 
     // Format phone number (ensure it starts with +)
@@ -54,7 +59,7 @@ serve(async (req) => {
         body: new URLSearchParams({
           'username': username,
           'to': formattedPhone,
-          // 'from': '', // Optional: set your AT voice number if required
+          'from': fromNumber,
         }).toString(),
       });
 
