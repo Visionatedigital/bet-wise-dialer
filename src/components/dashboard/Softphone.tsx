@@ -70,32 +70,34 @@ export function Softphone({ currentLead }: SoftphoneProps) {
 
       // Set up event listeners
       client.on('ready', () => {
-        console.log('[WebRTC] Client ready');
+        console.log('[WebRTC] ✅ Client ready');
         setIsWebRTCReady(true);
         toast.success("WebRTC connected!");
       });
 
       client.on('notready', () => {
-        console.log('[WebRTC] Client not ready');
+        console.log('[WebRTC] ❌ Client not ready');
         setIsWebRTCReady(false);
         toast.error("WebRTC not ready");
       });
 
-      client.on('calling', () => {
-        console.log('[WebRTC] Calling...');
+      client.on('calling', (callInfo: any) => {
+        console.log('[WebRTC] 📞 Calling...', callInfo);
         setCallStatus('ringing');
+        toast.info('Dialing...');
       });
 
       client.on('incomingcall', (params: any) => {
-        console.log('[WebRTC] Incoming call from:', params.from);
+        console.log('[WebRTC] 📲 Incoming call from:', params);
         toast.info(`Incoming call from ${params.from}`);
         setCallStatus('ringing');
       });
 
-      client.on('callaccepted', () => {
-        console.log('[WebRTC] Call accepted');
+      client.on('callaccepted', (acceptInfo: any) => {
+        console.log('[WebRTC] ✅ Call accepted', acceptInfo);
         setCallStatus('connected');
         setCallStartTime(new Date());
+        toast.success('Call connected!');
         
         // Start call timer
         const timer = setInterval(() => {
@@ -105,20 +107,26 @@ export function Softphone({ currentLead }: SoftphoneProps) {
       });
 
       client.on('hangup', (hangupCause: any) => {
-        console.log('[WebRTC] Call ended:', hangupCause);
+        console.log('[WebRTC] 📴 Call ended. Cause:', hangupCause);
+        toast.info('Call ended');
         handleCallEnd();
       });
 
       client.on('offline', () => {
-        console.log('[WebRTC] Token expired');
+        console.log('[WebRTC] ⏸️ Token expired');
         setIsWebRTCReady(false);
         toast.warning("Session expired");
       });
 
       client.on('closed', () => {
-        console.log('[WebRTC] Connection closed');
+        console.log('[WebRTC] 🔌 Connection closed');
         setIsWebRTCReady(false);
         toast.error("Connection lost");
+      });
+
+      client.on('error', (error: any) => {
+        console.error('[WebRTC] ❌ Error:', error);
+        toast.error(`Call error: ${error.message || 'Unknown error'}`);
       });
 
     } catch (error) {
@@ -189,8 +197,16 @@ export function Softphone({ currentLead }: SoftphoneProps) {
           return;
         }
 
-        console.log('[WebRTC] Calling:', numberToCall);
-        webrtcClientRef.current.call(numberToCall);
+        console.log('[WebRTC] 📞 Initiating call to:', numberToCall);
+        console.log('[WebRTC] Client state:', {
+          isReady: isWebRTCReady,
+          hasClient: !!webrtcClientRef.current,
+          token: webrtcToken ? 'present' : 'missing'
+        });
+        
+        const callResult = webrtcClientRef.current.call(numberToCall);
+        console.log('[WebRTC] Call method result:', callResult);
+        
         setCallStatus('ringing');
         setDialedNumber("");
         return;
