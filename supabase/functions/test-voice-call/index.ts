@@ -40,79 +40,53 @@ serve(async (req) => {
     // Format phone number (ensure it starts with +)
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
 
-    const prodBase = 'https://voice.africastalking.com';
-    const sandboxBase = 'https://voice.sandbox.africastalking.com';
+    // Africa's Talking only has one voice endpoint
+    // Sandbox vs Production is determined by API key, not URL
+    const baseUrl = 'https://voice.africastalking.com';
 
-    // Use hint if provided via secret, otherwise infer from username
-    const envHint = Deno.env.get('AFRICASTALKING_ENV')?.toLowerCase();
-    let baseUrl = (username === 'sandbox' || envHint === 'sandbox') ? sandboxBase : prodBase;
+    console.log('[AT] Attempting call via:', `${baseUrl}/call`);
+    
+    const response = await fetch(`${baseUrl}/call`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'apiKey': apiKey,
+      },
+      body: new URLSearchParams({
+        'username': username,
+        'to': formattedPhone,
+        'from': fromNumber,
+      }).toString(),
+    });
 
-    async function attemptCall(base: string) {
-      console.log('[AT] Attempting call via:', `${base}/call`);
-      const response = await fetch(`${base}/call`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'apiKey': apiKey,
-        },
-        body: new URLSearchParams({
-          'username': username,
-          'to': formattedPhone,
-          'from': fromNumber,
-        }).toString(),
-      });
+    const responseText = await response.text();
+    let responseData: any;
+    try { responseData = JSON.parse(responseText); } catch { responseData = { rawResponse: responseText }; }
 
-      const responseText = await response.text();
-      let responseData: any;
-      try { responseData = JSON.parse(responseText); } catch { responseData = { rawResponse: responseText }; }
+    console.log('[AT] Response status:', response.status);
+    console.log('[AT] Response body:', responseText);
 
-      console.log('[AT] Response status:', response.status, 'base:', base);
-      console.log('[AT] Response body:', responseText);
-      return { response, responseData, base };
-    }
-
-    // First try with chosen base
-    let res = await attemptCall(baseUrl);
-
-    // If 401, try the other base automatically
-    if (res.response.status === 401) {
-      const fallbackBase = baseUrl === prodBase ? sandboxBase : prodBase;
-      console.warn('[AT] 401 Unauthorized. Retrying with:', fallbackBase);
-      const retry = await attemptCall(fallbackBase);
-      if (retry.response.ok) {
-        res = retry;
-      } else {
-        return new Response(
-          JSON.stringify({
-            error: 'Authentication failed',
-            firstAttempt: { status: res.response.status, body: res.responseData, base: res.base },
-            secondAttempt: { status: retry.response.status, body: retry.responseData, base: retry.base },
-            hint: 'Check that API key and username belong to the same environment (sandbox vs production).'
-          }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-
-    if (!res.response.ok) {
+    if (!response.ok) {
+      const errorHint = response.status === 401 
+        ? 'Authentication failed. Verify your AFRICASTALKING_API_KEY and AFRICASTALKING_USERNAME are correct and match the same environment (sandbox/production).'
+        : 'Call failed';
+        
       return new Response(
         JSON.stringify({ 
-          error: 'Call failed', 
-          details: res.responseData,
-          status: res.response.status,
-          base: res.base
+          error: errorHint,
+          details: responseData,
+          status: response.status
         }),
-        { status: res.response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        message: 'Call initiated',
-        data: res.responseData,
-        base: res.base
+        message: 'Call initiated successfully',
+        data: responseData
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
