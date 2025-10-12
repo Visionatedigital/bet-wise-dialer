@@ -303,9 +303,9 @@ export function Softphone({ currentLead }: SoftphoneProps) {
   const toggleMute = () => {
     if (connectionMode === 'webrtc' && webrtcClientRef.current) {
       if (isMuted) {
-        webrtcClientRef.current.unmute();
+        webrtcClientRef.current.unmuteAudio();
       } else {
-        webrtcClientRef.current.mute();
+        webrtcClientRef.current.muteAudio();
       }
       setIsMuted(!isMuted);
       toast.info(isMuted ? 'Microphone unmuted' : 'Microphone muted');
