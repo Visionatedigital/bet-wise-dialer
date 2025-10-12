@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callFlows, generateXML } from "./callFlows.ts";
 
 serve(async (req) => {
   try {
@@ -7,36 +8,42 @@ serve(async (req) => {
     const callerNumber = params.get('callerNumber');
     const destinationNumber = params.get('destinationNumber');
     const direction = params.get('direction');
+    const dtmfDigits = params.get('dtmfDigits'); // For IVR responses
 
     console.log('Voice callback received:', {
       isActive,
       callerNumber,
       destinationNumber,
       direction,
+      dtmfDigits,
       allParams: Object.fromEntries(params.entries())
     });
 
-    // Handle outbound calls from SIP client
-    // When calling from SIP phone, Africa's Talking will call this callback
-    // We respond with Dial action to forward the call to the dialed number
+    // Determine which call flow to use
+    let flowKey = 'inbound'; // default
+    
     if (direction === 'outbound' || destinationNumber) {
-      const targetNumber = destinationNumber || callerNumber;
-      const response = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Dial phoneNumbers="${targetNumber}"/>
-</Response>`;
-
-      return new Response(response, {
-        headers: { 'Content-Type': 'application/xml' },
-      });
+      flowKey = 'outbound';
+    } else if (dtmfDigits) {
+      // Handle IVR digit responses
+      flowKey = 'ivr'; // You can extend this to handle different digit responses
     }
 
-    // Handle inbound calls to virtual number
-    // Forward incoming calls to SIP phone
-    const response = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Dial phoneNumbers="agent1.betsure@ug.sip.africastalking.com"/>
-</Response>`;
+    // Get the call flow configuration
+    const flow = callFlows[flowKey];
+    
+    if (!flow) {
+      throw new Error(`Call flow '${flowKey}' not found`);
+    }
+
+    // Generate XML response from call flow
+    const response = generateXML(flow.actions, {
+      callerNumber: (callerNumber as string) || '',
+      destinationNumber: (destinationNumber as string) || '',
+      dtmfDigits: (dtmfDigits as string) || '',
+    });
+
+    console.log(`Using ${flowKey} call flow:`, response);
 
     return new Response(response, {
       headers: { 'Content-Type': 'application/xml' },
