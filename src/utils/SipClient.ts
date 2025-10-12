@@ -25,26 +25,42 @@ export class SipClient {
       
       if (sipUsername.includes('@')) {
         const parts = sipUsername.split('@');
-        sipUser = parts[0];  // agent1.betsure
-        sipDomain = parts[1]; // ug.sip.africastalking.com
+        const rawUser = parts[0];
+        const rawDomain = parts[1];
+        sipUser = rawUser.trim();
+        sipDomain = rawDomain.trim();
       } else {
-        sipUser = sipUsername;
+        sipUser = sipUsername.trim();
         sipDomain = 'ug.sip.africastalking.com';
       }
 
-      console.log('SIP User:', sipUser, 'SIP Domain:', sipDomain);
-      
-      // Create proper SIP URI
-      const uri = UserAgent.makeURI(`sip:${sipUser}@${sipDomain}`);
+      // Extra debugging for hidden characters
+      console.debug('[SIP] Parsed credentials', {
+        sipUser,
+        sipDomain,
+        sipUserLength: sipUser.length,
+        sipDomainLength: sipDomain.length,
+      });
+      if (sipUser !== sipUser.replace(/\s/g, '') || sipDomain !== sipDomain.replace(/\s/g, '')) {
+        console.warn('[SIP] Detected whitespace in credentials');
+      }
+
+      const sipUriString = `sip:${sipUser}@${sipDomain}`;
+      console.debug('[SIP] Attempting to create URI from:', sipUriString);
+      const uri = UserAgent.makeURI(sipUriString);
       if (!uri) {
+        console.error('[SIP] makeURI failed', { sipUriString, sipUser, sipDomain });
         throw new Error('Failed to create SIP URI');
       }
+
+      const serverUrl = `wss://${sipDomain}:5060`;
+      console.debug('[SIP] Using WebSocket server:', serverUrl);
 
       // Configure UserAgent with WebSocket server
       this.userAgent = new UserAgent({
         uri,
         transportOptions: {
-          server: `wss://${sipDomain}:5060`,
+          server: serverUrl,
         },
         authorizationUsername: sipUser,
         authorizationPassword: sipPassword,
@@ -67,10 +83,12 @@ export class SipClient {
       });
 
       // Start the user agent
+      console.debug('[SIP] Starting User Agent...');
       await this.userAgent.start();
       console.log('SIP User Agent started');
 
       // Register with the SIP server
+      console.debug('[SIP] Creating Registerer and registering...');
       this.registerer = new Registerer(this.userAgent);
       await this.registerer.register();
       console.log('Registered with SIP server');
@@ -90,14 +108,20 @@ export class SipClient {
     try {
       // Format phone number (ensure it starts with +)
       const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+      console.debug('[SIP] Placing call to:', formattedPhone);
       
       // Extract domain from our registered URI
       const ourUri = this.userAgent.configuration.uri;
-      const sipDomain = ourUri.host;
+      console.debug('[SIP] Our registered URI:', String(ourUri));
+      const sipDomain = (ourUri as any).host ?? (ourUri as any).normal?.host ?? '';
+      console.debug('[SIP] Using SIP domain for target:', sipDomain);
       
       // Create target URI using the same domain
-      const target = UserAgent.makeURI(`sip:${formattedPhone}@${sipDomain}`);
+      const targetString = `sip:${formattedPhone}@${sipDomain}`;
+      console.debug('[SIP] Target URI string:', targetString);
+      const target = UserAgent.makeURI(targetString);
       if (!target) {
+        console.error('[SIP] Failed to create target URI from string', { targetString });
         throw new Error('Failed to create target URI');
       }
 
@@ -145,7 +169,11 @@ export class SipClient {
       if (remoteStream) {
         this.remoteAudio.srcObject = remoteStream;
         console.log('Remote audio stream connected');
+      } else {
+        console.warn('[SIP] No remoteMediaStream present on SessionDescriptionHandler');
       }
+    } else {
+      console.warn('[SIP] sessionDescriptionHandler is not an instance of SessionDescriptionHandler', sessionDescriptionHandler);
     }
   }
 
