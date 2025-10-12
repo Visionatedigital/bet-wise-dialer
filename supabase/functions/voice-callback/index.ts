@@ -3,12 +3,22 @@ import { callFlows, generateXML } from "./callFlows.ts";
 
 serve(async (req) => {
   try {
-    const params = await req.formData();
-    const isActive = params.get('isActive');
-    const callerNumber = params.get('callerNumber');
-    const destinationNumber = params.get('destinationNumber');
-    const direction = params.get('direction');
-    const dtmfDigits = params.get('dtmfDigits'); // For IVR responses
+    // Handle CORS preflight
+    if (req.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        }
+      });
+    }
+
+    const params = await req.json();
+    const isActive = params.isActive;
+    const callerNumber = params.callerNumber;
+    const destinationNumber = params.destinationNumber || params.clientDialedNumber;
+    const direction = params.direction;
+    const dtmfDigits = params.dtmfDigits; // For IVR responses
 
     console.log('Voice callback received:', {
       isActive,
@@ -16,7 +26,7 @@ serve(async (req) => {
       destinationNumber,
       direction,
       dtmfDigits,
-      allParams: Object.fromEntries(params.entries())
+      allParams: params
     });
 
     // Determine which call flow to use
