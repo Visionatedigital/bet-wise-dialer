@@ -165,7 +165,16 @@ export function Softphone({ currentLead }: SoftphoneProps) {
     };
   }, []);
 
-  const handleCallEnd = () => {
+function normalizePhoneNumber(input: string) {
+  const trimmed = (input || '').trim();
+  if (!trimmed) return trimmed;
+  const clean = trimmed.replace(/[^0-9+]/g, '');
+  if (clean.startsWith('+')) return clean;
+  if (clean.startsWith('00')) return '+' + clean.slice(2);
+  return '+' + clean;
+}
+
+const handleCallEnd = () => {
     if (callIntervalRef.current) {
       clearInterval(callIntervalRef.current);
     }
@@ -197,14 +206,18 @@ export function Softphone({ currentLead }: SoftphoneProps) {
           return;
         }
 
-        console.log('[WebRTC] 📞 Initiating call to:', numberToCall);
+        const normalizedNumber = normalizePhoneNumber(numberToCall);
+        console.log('[WebRTC] 📞 Initiating call to:', normalizedNumber);
         console.log('[WebRTC] Client state:', {
           isReady: isWebRTCReady,
           hasClient: !!webrtcClientRef.current,
           token: webrtcToken ? 'present' : 'missing'
         });
+
+        // Close dial pad if open
+        setShowDialPad(false);
         
-        const callResult = webrtcClientRef.current.call(numberToCall);
+        const callResult = webrtcClientRef.current.call(normalizedNumber);
         console.log('[WebRTC] Call method result:', callResult);
         
         setCallStatus('ringing');
