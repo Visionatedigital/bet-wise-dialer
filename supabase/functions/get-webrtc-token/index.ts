@@ -60,9 +60,8 @@ Deno.serve(async (req) => {
         username: username,
         clientName: clientName,
         phoneNumber: formattedPhone,
-        incoming: 'true',
-        outgoing: 'true',
-        expire: '86400' // 24 hours
+        incoming: "true",
+        outgoing: "true"
       }),
     });
 
