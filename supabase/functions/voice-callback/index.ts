@@ -5,25 +5,37 @@ serve(async (req) => {
     const params = await req.formData();
     const isActive = params.get('isActive');
     const callerNumber = params.get('callerNumber');
+    const destinationNumber = params.get('destinationNumber');
     const direction = params.get('direction');
 
     console.log('Voice callback received:', {
       isActive,
       callerNumber,
+      destinationNumber,
       direction,
       allParams: Object.fromEntries(params.entries())
     });
 
-    // Generate TwiML-style response for Africa's Talking
+    // Handle outbound calls from SIP client
+    // When calling from SIP phone, Africa's Talking will call this callback
+    // We respond with Dial action to forward the call to the dialed number
+    if (direction === 'outbound' || destinationNumber) {
+      const targetNumber = destinationNumber || callerNumber;
+      const response = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial phoneNumbers="${targetNumber}"/>
+</Response>`;
+
+      return new Response(response, {
+        headers: { 'Content-Type': 'application/xml' },
+      });
+    }
+
+    // Handle inbound calls to virtual number
+    // Forward incoming calls to SIP phone
     const response = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="woman">
-    Thank you for contacting Betsure. Please hold while we connect you to an agent.
-  </Say>
-  <Play url="https://demo.twilio.com/docs/classic.mp3"/>
-  <Say voice="woman">
-    An agent will be with you shortly.
-  </Say>
+  <Dial phoneNumbers="agent1.betsure@ug.sip.africastalking.com"/>
 </Response>`;
 
     return new Response(response, {
