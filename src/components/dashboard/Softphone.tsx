@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, Pause, Play, Grid3x3, Delete } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, Pause, Play, Grid3x3, Delete, TestTube } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -234,6 +234,40 @@ export function Softphone({ currentLead }: SoftphoneProps) {
     }
   };
 
+  const handleTestApiCall = async () => {
+    try {
+      const testNumber = dialedNumber || currentLead?.phone || '+256702282029';
+      
+      toast.loading('Testing direct API call to Africa\'s Talking...');
+      
+      const { data, error } = await supabase.functions.invoke('test-voice-call', {
+        body: { phoneNumber: testNumber }
+      });
+      
+      toast.dismiss();
+      
+      if (error) {
+        console.error('API test error:', error);
+        toast.error(`API Error: ${error.message}`);
+        return;
+      }
+      
+      if (data.error) {
+        console.error('Call failed:', data);
+        toast.error(`Call failed: ${data.error}`);
+        toast.info('Check edge function logs for details');
+      } else {
+        console.log('Call response:', data);
+        toast.success('API call successful! Check if Africa\'s Talking called your callback URL');
+        toast.info('The call should trigger voice-callback function next');
+      }
+    } catch (error) {
+      console.error('Error testing API call:', error);
+      toast.dismiss();
+      toast.error('Failed to test API call');
+    }
+  };
+
   return (
     <Card className="w-full">
       <CardHeader className="pb-3">
@@ -339,6 +373,16 @@ export function Softphone({ currentLead }: SoftphoneProps) {
                     >
                       <Phone className="h-5 w-5 mr-2" />
                       Call
+                    </Button>
+                    
+                    {/* Test API Call Button */}
+                    <Button
+                      onClick={handleTestApiCall}
+                      variant="outline"
+                      className="w-full h-12"
+                    >
+                      <TestTube className="h-5 w-5 mr-2" />
+                      Test Direct API Call
                     </Button>
                   </div>
                 </DialogContent>
