@@ -60,11 +60,12 @@ export function Softphone({ currentLead }: SoftphoneProps) {
       setWebrtcToken(data.token);
 
       // Initialize Africastalking client
-      if (typeof window.Africastalking === 'undefined') {
+      const AT = (window as any).Africastalking;
+      if (typeof AT === 'undefined') {
         throw new Error('Africastalking SDK not loaded');
       }
 
-      const client = new window.Africastalking.WebRTCClient(data.token);
+      const client = new AT.WebRTCClient(data.token);
       webrtcClientRef.current = client;
 
       // Set up event listeners
