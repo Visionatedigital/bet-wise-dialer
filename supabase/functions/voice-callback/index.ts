@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { callFlows, generateXML } from "./callFlows.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 
 serve(async (req) => {
   try {
@@ -60,6 +61,11 @@ serve(async (req) => {
     const direction = params.direction;
     const dtmfDigits = params.dtmfDigits;
     const sessionId = params.sessionId;
+    const callSessionState = params.callSessionState;
+    const durationInSeconds = params.durationInSeconds;
+    const dialDurationInSeconds = params.dialDurationInSeconds;
+    const callStartTime = params.callStartTime;
+    const status = params.status;
 
     console.log('[Voice Callback] 📋 ALL PARAMETERS:', JSON.stringify(params, null, 2));
     console.log('[Voice Callback] 📋 Parsed parameters:', {
@@ -69,7 +75,25 @@ serve(async (req) => {
       destinationNumber,
       direction,
       dtmfDigits,
-      sessionId
+      sessionId,
+      callSessionState,
+      durationInSeconds,
+      dialDurationInSeconds,
+      status
+    });
+
+    // Log call activity to database
+    await logCallActivity({
+      sessionId,
+      callerNumber,
+      clientDialedNumber,
+      destinationNumber,
+      isActive,
+      callSessionState,
+      durationInSeconds,
+      dialDurationInSeconds,
+      callStartTime,
+      status
     });
 
     // Determine which call flow to use
@@ -141,3 +165,111 @@ serve(async (req) => {
     });
   }
 });
+
+async function logCallActivity(params: {
+  sessionId: string;
+  callerNumber: string;
+  clientDialedNumber?: string;
+  destinationNumber: string;
+  isActive: string;
+  callSessionState?: string;
+  durationInSeconds?: string;
+  dialDurationInSeconds?: string;
+  callStartTime?: string;
+  status?: string;
+}) {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Extract user_id from caller number if it's a WebRTC client
+    let userId: string | null = null;
+    if (params.callerNumber && params.callerNumber.includes('agent_')) {
+      const agentId = params.callerNumber.split('agent_')[1]?.split('.')[0];
+      if (agentId) {
+        userId = agentId;
+        console.log('[Voice Callback] 📝 Extracted user ID:', userId);
+      }
+    }
+
+    const phoneNumber = params.clientDialedNumber || params.destinationNumber;
+    const isWebRTCCall = params.callerNumber?.includes('agent_') || params.callerNumber?.includes('betsure.');
+
+    // Only log WebRTC outbound calls
+    if (!isWebRTCCall) {
+      console.log('[Voice Callback] ⏭️ Skipping non-WebRTC call logging');
+      return;
+    }
+
+    if (!userId) {
+      console.log('[Voice Callback] ⚠️ Could not extract user ID from caller number');
+      return;
+    }
+
+    // Check if this is a new call or an update
+    const { data: existingCall } = await supabase
+      .from('call_activities')
+      .select('id, status')
+      .eq('notes', `session:${params.sessionId}`)
+      .maybeSingle();
+
+    if (existingCall) {
+      // Update existing call
+      console.log('[Voice Callback] 📝 Updating existing call:', existingCall.id);
+      
+      const updateData: any = {};
+      
+      if (params.isActive === '0' && params.callSessionState === 'Completed') {
+        // Call ended
+        updateData.end_time = new Date().toISOString();
+        updateData.status = params.status === 'Success' ? 'connected' : 'failed';
+        
+        if (params.dialDurationInSeconds) {
+          updateData.duration_seconds = parseInt(params.dialDurationInSeconds);
+        }
+        
+        console.log('[Voice Callback] 📞 Call ended - Duration:', params.dialDurationInSeconds, 'seconds');
+      } else if (params.callSessionState === 'Answered') {
+        updateData.status = 'connected';
+        console.log('[Voice Callback] ✅ Call answered');
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        const { error } = await supabase
+          .from('call_activities')
+          .update(updateData)
+          .eq('id', existingCall.id);
+
+        if (error) {
+          console.error('[Voice Callback] ❌ Error updating call:', error);
+        } else {
+          console.log('[Voice Callback] ✅ Call activity updated');
+        }
+      }
+    } else if (params.isActive === '1' && params.callSessionState === 'Ringing') {
+      // New call starting
+      console.log('[Voice Callback] 📝 Creating new call activity');
+      
+      const { error } = await supabase
+        .from('call_activities')
+        .insert({
+          user_id: userId,
+          phone_number: phoneNumber,
+          call_type: 'outbound',
+          status: 'ringing',
+          start_time: params.callStartTime || new Date().toISOString(),
+          notes: `session:${params.sessionId}`,
+          duration_seconds: 0
+        });
+
+      if (error) {
+        console.error('[Voice Callback] ❌ Error creating call activity:', error);
+      } else {
+        console.log('[Voice Callback] ✅ Call activity created');
+      }
+    }
+  } catch (error) {
+    console.error('[Voice Callback] ❌ Error in logCallActivity:', error);
+  }
+}

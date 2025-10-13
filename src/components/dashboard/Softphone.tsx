@@ -235,7 +235,8 @@ const handleCallEnd = () => {
       clearInterval(callIntervalRef.current);
     }
 
-    if (callStartTime) {
+    // Only log call activity if using SIP (WebRTC calls are logged by voice-callback)
+    if (callStartTime && connectionMode === 'sip') {
       const duration = Math.floor((Date.now() - callStartTime.getTime()) / 1000);
       createCallActivity({
         phone_number: currentLead?.phone || dialedNumber,
