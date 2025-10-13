@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useCallMetrics } from "@/hooks/useCallMetrics";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { SipClient } from "@/utils/SipClient";
@@ -53,6 +54,7 @@ export function Softphone({
   const [webrtcToken, setWebrtcToken] = useState<string | null>(null);
   
   const { createCallActivity, updateCallActivity } = useCallMetrics();
+  const { user } = useAuth();
   const sipClientRef = useRef<SipClient | null>(null);
   const webrtcClientRef = useRef<any>(null);
   const callIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -64,24 +66,64 @@ export function Softphone({
       console.log('[WebRTC-INIT] 🚀 Starting WebRTC initialization');
       toast.info("Connecting to WebRTC...");
       
-      console.log('[WebRTC-INIT] 📡 Requesting token from Supabase...');
-      const { data, error } = await supabase.functions.invoke('get-webrtc-token');
+      // First, check if we have a valid token in the database
+      console.log('[WebRTC-INIT] 📂 Checking for existing token in database...');
+      const { data: existingTokenData, error: tokenError } = await supabase
+        .from('webrtc_tokens')
+        .select('*')
+        .single();
       
-      if (error) {
-        console.error('[WebRTC-INIT] ❌ Token request failed:', error);
-        throw error;
-      }
+      let tokenData;
       
-      if (!data.token) {
-        console.error('[WebRTC-INIT] ❌ No token in response:', data);
-        throw new Error('No token received');
+      if (!tokenError && existingTokenData && new Date(existingTokenData.expires_at) > new Date()) {
+        // Use existing valid token
+        console.log('[WebRTC-INIT] ✅ Found valid token in database');
+        console.log('[WebRTC-INIT] Token expires at:', existingTokenData.expires_at);
+        tokenData = {
+          token: existingTokenData.token,
+          clientName: existingTokenData.client_name,
+          lifeTimeSec: Math.floor((new Date(existingTokenData.expires_at).getTime() - Date.now()) / 1000)
+        };
+      } else {
+        // Fetch new token
+        console.log('[WebRTC-INIT] 📡 Fetching new token from Supabase...');
+        const { data, error } = await supabase.functions.invoke('get-webrtc-token');
+        
+        if (error) {
+          console.error('[WebRTC-INIT] ❌ Token request failed:', error);
+          throw error;
+        }
+        
+        if (!data.token) {
+          console.error('[WebRTC-INIT] ❌ No token in response:', data);
+          throw new Error('No token received');
+        }
+
+        console.log('[WebRTC-INIT] ✅ New token received successfully');
+        tokenData = data;
+        
+        // Store token in database
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        const { error: storeError } = await supabase
+          .from('webrtc_tokens')
+          .upsert({
+            user_id: user?.id,
+            token: tokenData.token,
+            client_name: tokenData.clientName,
+            expires_at: expiresAt.toISOString()
+          });
+        
+        if (storeError) {
+          console.error('[WebRTC-INIT] ⚠️ Failed to store token:', storeError);
+        } else {
+          console.log('[WebRTC-INIT] ✅ Token stored in database');
+        }
       }
 
-      console.log('[WebRTC-INIT] ✅ Token received successfully');
-      console.log('[WebRTC-INIT] Client name:', data.clientName);
-      console.log('[WebRTC-INIT] Token (first 30 chars):', data.token?.substring(0, 30) + '...');
-      console.log('[WebRTC-INIT] Token lifetime:', data.lifeTimeSec, 'seconds');
-      setWebrtcToken(data.token);
+      console.log('[WebRTC-INIT] Client name:', tokenData.clientName);
+      console.log('[WebRTC-INIT] Token (first 30 chars):', tokenData.token?.substring(0, 30) + '...');
+      console.log('[WebRTC-INIT] Token lifetime:', tokenData.lifeTimeSec, 'seconds');
+      setWebrtcToken(tokenData.token);
 
       // Initialize Africastalking client
       console.log('[WebRTC-INIT] 🔍 Looking for Africastalking SDK...');
@@ -94,7 +136,7 @@ export function Softphone({
       console.log('[WebRTC-INIT] ✅ SDK found:', typeof AT);
 
       console.log('[WebRTC-INIT] 🔧 Creating client instance...');
-      const client = new AT.Client(data.token);
+      const client = new AT.Client(tokenData.token);
       webrtcClientRef.current = client;
       console.log('[WebRTC-INIT] ✅ Client instance created');
       console.log('[WebRTC-INIT] Client object:', client);

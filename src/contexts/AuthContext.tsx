@@ -71,6 +71,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    // Clear WebRTC token on logout
+    await supabase.from('webrtc_tokens').delete().eq('user_id', user?.id);
     await supabase.auth.signOut();
   };
 
