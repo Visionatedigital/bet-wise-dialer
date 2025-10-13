@@ -267,6 +267,22 @@ async function logCallActivity(params: {
         console.error('[Voice Callback] ❌ Error creating call activity:', error);
       } else {
         console.log('[Voice Callback] ✅ Call activity created');
+        
+        // Update lead's last_contact_at timestamp
+        const { error: leadError } = await supabase
+          .from('leads')
+          .update({ 
+            last_contact_at: new Date().toISOString(),
+            last_activity: 'Called'
+          })
+          .eq('phone', phoneNumber)
+          .eq('user_id', userId);
+
+        if (leadError) {
+          console.error('[Voice Callback] ⚠️ Error updating lead last contact:', leadError);
+        } else {
+          console.log('[Voice Callback] ✅ Lead last contact updated');
+        }
       }
     }
   } catch (error) {

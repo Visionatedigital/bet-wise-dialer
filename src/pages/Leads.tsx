@@ -65,7 +65,9 @@ export default function Leads() {
         name: lead.name,
         phone: lead.phone,
         segment: lead.segment as "dormant" | "semi-active" | "vip",
-        lastActivity: lead.last_activity || "Never",
+        lastActivity: lead.last_contact_at 
+          ? formatKampalaTime(lead.last_contact_at)
+          : lead.last_activity || "Never",
         lastDepositUgx: Number(lead.last_deposit_ugx) || 0,
         lastBetDate: lead.last_bet_date || undefined,
         intent: lead.intent || undefined,

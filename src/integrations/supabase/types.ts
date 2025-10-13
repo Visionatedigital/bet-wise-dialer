@@ -217,6 +217,7 @@ export type Database = {
           intent: string | null
           last_activity: string | null
           last_bet_date: string | null
+          last_contact_at: string | null
           last_deposit_ugx: number | null
           name: string
           next_action: string | null
@@ -238,6 +239,7 @@ export type Database = {
           intent?: string | null
           last_activity?: string | null
           last_bet_date?: string | null
+          last_contact_at?: string | null
           last_deposit_ugx?: number | null
           name: string
           next_action?: string | null
@@ -259,6 +261,7 @@ export type Database = {
           intent?: string | null
           last_activity?: string | null
           last_bet_date?: string | null
+          last_contact_at?: string | null
           last_deposit_ugx?: number | null
           name?: string
           next_action?: string | null
