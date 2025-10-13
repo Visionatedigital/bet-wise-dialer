@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, Pause, Play, Grid3x3, Delete, TestTube, Plug } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, Pause, Play, Grid3x3, Delete, TestTube, Plug, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,9 +23,23 @@ interface SoftphoneProps {
     phone: string;
     campaign: string;
   };
+  onNextLead?: () => void;
+  onPreviousLead?: () => void;
+  hasNextLead?: boolean;
+  hasPreviousLead?: boolean;
+  currentLeadPosition?: number;
+  totalLeads?: number;
 }
 
-export function Softphone({ currentLead }: SoftphoneProps) {
+export function Softphone({ 
+  currentLead, 
+  onNextLead, 
+  onPreviousLead, 
+  hasNextLead = false,
+  hasPreviousLead = false,
+  currentLeadPosition = 1,
+  totalLeads = 0
+}: SoftphoneProps) {
   const [callStatus, setCallStatus] = useState<CallStatus>("idle");
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -543,13 +557,41 @@ const handleCallEnd = () => {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Current Lead Info */}
+        {/* Current Lead Info with Navigation */}
         {currentLead && (
-          <div className="bg-muted/50 rounded-lg p-3 text-sm">
-            <div className="font-medium">{currentLead.name}</div>
-            <div className="text-muted-foreground">{currentLead.phone}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Campaign: {currentLead.campaign}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onPreviousLead}
+                disabled={!hasPreviousLead}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="text-xs text-muted-foreground">
+                Lead {currentLeadPosition} of {totalLeads}
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onNextLead}
+                disabled={!hasNextLead}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <div className="bg-muted/50 rounded-lg p-3 text-sm">
+              <div className="font-medium">{currentLead.name}</div>
+              <div className="text-muted-foreground">{currentLead.phone}</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Campaign: {currentLead.campaign}
+              </div>
             </div>
           </div>
         )}

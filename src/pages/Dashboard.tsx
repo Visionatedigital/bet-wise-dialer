@@ -19,6 +19,7 @@ import { toast } from "sonner";
 function DashboardContent() {
   const { user } = useAuth();
   const [currentLead, setCurrentLead] = useState<Lead | null>(null);
+  const [currentLeadIndex, setCurrentLeadIndex] = useState(0);
   const [queueLeads, setQueueLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [showACS, setShowACS] = useState(false);
@@ -46,8 +47,7 @@ function DashboardContent() {
           *,
           campaigns(name)
         `)
-        .order('priority', { ascending: false })
-        .limit(5);
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
 
@@ -74,6 +74,7 @@ function DashboardContent() {
       setQueueLeads(formattedLeads);
       if (formattedLeads.length > 0 && !currentLead) {
         setCurrentLead(formattedLeads[0]);
+        setCurrentLeadIndex(0);
       }
     } catch (error) {
       console.error('Error fetching leads:', error);
@@ -83,9 +84,35 @@ function DashboardContent() {
     }
   };
 
-  const nextLead = queueLeads[1] || null;
+  const handleNextLead = () => {
+    if (currentLeadIndex < queueLeads.length - 1) {
+      const nextIndex = currentLeadIndex + 1;
+      setCurrentLeadIndex(nextIndex);
+      setCurrentLead(queueLeads[nextIndex]);
+      toast.success(`Moved to next lead: ${queueLeads[nextIndex].name}`);
+    } else {
+      toast.info("You're at the last lead");
+    }
+  };
+
+  const handlePreviousLead = () => {
+    if (currentLeadIndex > 0) {
+      const prevIndex = currentLeadIndex - 1;
+      setCurrentLeadIndex(prevIndex);
+      setCurrentLead(queueLeads[prevIndex]);
+      toast.success(`Moved to previous lead: ${queueLeads[prevIndex].name}`);
+    } else {
+      toast.info("You're at the first lead");
+    }
+  };
+
+  const nextLead = queueLeads[currentLeadIndex + 1] || null;
 
   const handleCallLead = (lead: Lead) => {
+    const index = queueLeads.findIndex(l => l.id === lead.id);
+    if (index !== -1) {
+      setCurrentLeadIndex(index);
+    }
     setCurrentLead(lead);
     setCallDuration(0);
     setCallNotes("");
@@ -143,7 +170,15 @@ function DashboardContent() {
         <div className="grid gap-6 lg:grid-cols-3">
         {/* Left Column - Softphone & Queue */}
         <div className="lg:col-span-1 space-y-6">
-          <Softphone currentLead={currentLead} />
+          <Softphone 
+            currentLead={currentLead}
+            onNextLead={handleNextLead}
+            onPreviousLead={handlePreviousLead}
+            hasNextLead={currentLeadIndex < queueLeads.length - 1}
+            hasPreviousLead={currentLeadIndex > 0}
+            currentLeadPosition={currentLeadIndex + 1}
+            totalLeads={queueLeads.length}
+          />
           
           <QueueCard 
             nextLead={nextLead}
