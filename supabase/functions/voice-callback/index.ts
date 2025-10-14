@@ -184,11 +184,14 @@ async function logCallActivity(params: {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Extract user_id from caller number if it's a WebRTC client
+    // Format: betsure.agent_{uuid} or agent_{uuid}
     let userId: string | null = null;
     if (params.callerNumber && params.callerNumber.includes('agent_')) {
-      const agentId = params.callerNumber.split('agent_')[1]?.split('.')[0];
-      if (agentId) {
-        userId = agentId;
+      const agentPart = params.callerNumber.split('agent_')[1];
+      // Remove any trailing dots or prefixes
+      const cleanUserId = agentPart?.replace(/^\.+|\.+$/g, '');
+      if (cleanUserId) {
+        userId = cleanUserId;
         console.log('[Voice Callback] 📝 Extracted user ID:', userId);
       }
     }
