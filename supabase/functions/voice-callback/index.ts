@@ -248,7 +248,7 @@ async function logCallActivity(params: {
       if (params.isActive === '0' && params.callSessionState === 'Completed') {
         // Call ended
         updateData.end_time = new Date().toISOString();
-        updateData.status = params.status === 'Success' ? 'connected' : 'failed';
+        updateData.status = params.status === 'Success' ? 'connected' : 'no_answer';
         
         if (params.dialDurationInSeconds) {
           updateData.duration_seconds = parseInt(params.dialDurationInSeconds);
@@ -282,7 +282,7 @@ async function logCallActivity(params: {
           user_id: userId,
           phone_number: phoneNumber,
           call_type: 'outbound',
-          status: 'ringing',
+          status: 'connected',
           start_time: params.callStartTime || new Date().toISOString(),
           notes: `session:${params.sessionId}`,
           duration_seconds: 0
