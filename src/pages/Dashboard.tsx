@@ -38,6 +38,13 @@ function DashboardContent() {
     }
   }, [user]);
 
+  // Persist lead index whenever it changes
+  useEffect(() => {
+    if (user?.id) {
+      localStorage.setItem(`lead_index_${user.id}`, currentLeadIndex.toString());
+    }
+  }, [currentLeadIndex, user?.id]);
+
   const fetchLeads = async () => {
     try {
       setLoading(true);
@@ -72,9 +79,21 @@ function DashboardContent() {
       }));
 
       setQueueLeads(formattedLeads);
-      if (formattedLeads.length > 0 && !currentLead) {
-        setCurrentLead(formattedLeads[0]);
-        setCurrentLeadIndex(0);
+      
+      // Restore saved lead index from localStorage
+      if (formattedLeads.length > 0 && !currentLead && user?.id) {
+        const savedIndex = localStorage.getItem(`lead_index_${user.id}`);
+        const restoredIndex = savedIndex ? parseInt(savedIndex) : 0;
+        
+        // Ensure the index is valid
+        const validIndex = Math.min(Math.max(0, restoredIndex), formattedLeads.length - 1);
+        
+        setCurrentLeadIndex(validIndex);
+        setCurrentLead(formattedLeads[validIndex]);
+        
+        if (savedIndex && restoredIndex === validIndex && restoredIndex > 0) {
+          toast.success(`Restored position: Lead ${validIndex + 1} of ${formattedLeads.length}`);
+        }
       }
     } catch (error) {
       console.error('Error fetching leads:', error);
