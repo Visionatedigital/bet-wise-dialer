@@ -4,13 +4,14 @@ import { Softphone } from "@/components/dashboard/Softphone";
 import { QueueCard } from "@/components/dashboard/QueueCard";
 import { AfterCallSummary } from "@/components/dashboard/AfterCallSummary";
 import { AgentKPIs } from "@/components/dashboard/AgentKPIs";
+import { CallHistoryModal } from "@/components/dashboard/CallHistoryModal";
 import { type Lead } from "@/data/sampleData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Lightbulb, MessageSquare, FileText, CheckSquare, Radio } from "lucide-react";
+import { Lightbulb, MessageSquare, FileText, CheckSquare, Radio, History } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +35,9 @@ function DashboardContent() {
     recordingConsent: false
   });
   const hasRestoredIndex = useRef(false);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [currentCallId, setCurrentCallId] = useState<string | null>(null);
+  const [showCallHistory, setShowCallHistory] = useState(false);
   
   // Real-time AI integration
   const { isConnected: aiConnected, isConnecting: aiConnecting, suggestions, connect: connectAI, disconnect: disconnectAI } = useRealtimeAI();
@@ -43,6 +47,25 @@ function DashboardContent() {
       fetchLeads();
     }
   }, [user]);
+
+  // Auto-save notes every 30 seconds
+  useEffect(() => {
+    if (callNotes && currentCallId) {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+
+      autoSaveTimerRef.current = setTimeout(async () => {
+        await saveCallNotes();
+      }, 30000); // 30 seconds
+
+      return () => {
+        if (autoSaveTimerRef.current) {
+          clearTimeout(autoSaveTimerRef.current);
+        }
+      };
+    }
+  }, [callNotes, currentCallId]);
 
   // Persist lead index whenever it changes
 useEffect(() => {
@@ -153,7 +176,24 @@ useEffect(() => {
 
   const nextLead = queueLeads[currentLeadIndex + 1] || null;
 
-  const handleCallLead = (lead: Lead) => {
+  const saveCallNotes = async () => {
+    if (!currentCallId || !callNotes.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('call_activities')
+        .update({ notes: callNotes })
+        .eq('id', currentCallId);
+
+      if (error) throw error;
+      
+      console.log('[Dashboard] Notes auto-saved');
+    } catch (error) {
+      console.error('[Dashboard] Error saving notes:', error);
+    }
+  };
+
+  const handleCallLead = async (lead: Lead) => {
     const index = queueLeads.findIndex(l => l.id === lead.id);
     if (index !== -1) {
       setCurrentLeadIndex(index);
@@ -161,6 +201,30 @@ useEffect(() => {
     setCurrentLead(lead);
     setCallDuration(0);
     setCallNotes("");
+    
+    // Create a new call activity record
+    try {
+      const { data, error } = await supabase
+        .from('call_activities')
+        .insert({
+          user_id: user?.id,
+          lead_name: lead.name,
+          phone_number: lead.phone,
+          campaign_id: lead.campaignId,
+          status: 'in_progress',
+          start_time: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setCurrentCallId(data.id);
+      console.log('[Dashboard] Call activity created:', data.id);
+    } catch (error) {
+      console.error('[Dashboard] Error creating call activity:', error);
+    }
+    
     // Reset compliance checklist
     setComplianceChecked({
       introduction: false,
@@ -170,9 +234,35 @@ useEffect(() => {
     });
   };
 
-  const handleCallEnd = () => {
+  const handleCallEnd = async () => {
+    // Save final notes before showing summary
+    if (currentCallId && callNotes.trim()) {
+      await saveCallNotes();
+    }
+    
+    // Update call end time and status
+    if (currentCallId) {
+      try {
+        const { error } = await supabase
+          .from('call_activities')
+          .update({
+            end_time: new Date().toISOString(),
+            status: 'completed'
+          })
+          .eq('id', currentCallId);
+
+        if (error) throw error;
+        
+        toast.success('Call notes saved');
+      } catch (error) {
+        console.error('[Dashboard] Error ending call:', error);
+        toast.error('Failed to save call notes');
+      }
+    }
+    
     setShowACS(true);
     setCallDuration(450); // Mock duration
+    setCurrentCallId(null);
   };
 
   const complianceItems = [
@@ -437,10 +527,20 @@ useEffect(() => {
           {/* Call Notes */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Call Notes
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Call Notes
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCallHistory(true)}
+                >
+                  <History className="h-4 w-4 mr-2" />
+                  View History
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Textarea
@@ -466,6 +566,12 @@ useEffect(() => {
         onOpenChange={setShowACS}
         leadName={currentLead?.name || ""}
         callDuration={callDuration}
+      />
+
+      {/* Call History Modal */}
+      <CallHistoryModal
+        open={showCallHistory}
+        onOpenChange={setShowCallHistory}
       />
     </div>
   );
