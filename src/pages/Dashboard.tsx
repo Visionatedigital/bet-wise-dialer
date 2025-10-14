@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Softphone } from "@/components/dashboard/Softphone";
 import { QueueCard } from "@/components/dashboard/QueueCard";
@@ -31,6 +31,7 @@ function DashboardContent() {
     responsibleGaming: false,
     recordingConsent: false
   });
+  const hasRestoredIndex = useRef(false);
 
   useEffect(() => {
     if (user) {
@@ -39,11 +40,11 @@ function DashboardContent() {
   }, [user]);
 
   // Persist lead index whenever it changes
-  useEffect(() => {
-    if (user?.id) {
-      localStorage.setItem(`lead_index_${user.id}`, currentLeadIndex.toString());
-    }
-  }, [currentLeadIndex, user?.id]);
+useEffect(() => {
+  if (!user?.id) return;
+  if (!hasRestoredIndex.current) return;
+  localStorage.setItem(`lead_index_${user.id}`, currentLeadIndex.toString());
+}, [currentLeadIndex, user?.id]);
 
   const fetchLeads = async () => {
     try {
@@ -90,6 +91,7 @@ function DashboardContent() {
         
         setCurrentLeadIndex(validIndex);
         setCurrentLead(formattedLeads[validIndex]);
+        hasRestoredIndex.current = true;
         
         if (savedIndex && restoredIndex === validIndex && restoredIndex > 0) {
           toast.success(`Restored position: Lead ${validIndex + 1} of ${formattedLeads.length}`);
