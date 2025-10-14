@@ -20,7 +20,7 @@ export const useRealtimeAI = () => {
   }, []);
 
   const connect = useCallback(async () => {
-    if (realtimeAIRef.current?.isActive()) {
+    if (realtimeAIRef.current?.isConnected()) {
       toast.info('AI Sidekick already connected');
       return;
     }
