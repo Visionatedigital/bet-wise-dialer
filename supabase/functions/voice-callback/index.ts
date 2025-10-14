@@ -183,16 +183,38 @@ async function logCallActivity(params: {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Extract user_id from caller number if it's a WebRTC client
-    // Format: betsure.agent_{uuid} or agent_{uuid}
+    // Resolve user_id from callerNumber via webrtc_tokens using client_name
     let userId: string | null = null;
-    if (params.callerNumber && params.callerNumber.includes('agent_')) {
-      const agentPart = params.callerNumber.split('agent_')[1];
-      // Remove any trailing dots or prefixes
-      const cleanUserId = agentPart?.replace(/^\.+|\.+$/g, '');
-      if (cleanUserId) {
-        userId = cleanUserId;
-        console.log('[Voice Callback] 📝 Extracted user ID:', userId);
+    let clientName: string | null = null;
+    if (params.callerNumber) {
+      const match = params.callerNumber.match(/agent_[^\.]+/);
+      if (match) {
+        clientName = match[0];
+        console.log('[Voice Callback] 🔎 Resolved client_name:', clientName);
+        const { data: tokenRow, error: tokenErr } = await supabase
+          .from('webrtc_tokens')
+          .select('user_id')
+          .eq('client_name', clientName)
+          .maybeSingle();
+        if (tokenErr) {
+          console.error('[Voice Callback] ⚠️ Error looking up webrtc_tokens:', tokenErr);
+        }
+        if (tokenRow?.user_id) {
+          userId = tokenRow.user_id as string;
+          console.log('[Voice Callback] 📝 Mapped client_name to user_id:', userId);
+        }
+      }
+    }
+
+    // Fallback to previous parse if not found (only if looks like UUID)
+    if (!userId && params.callerNumber && params.callerNumber.includes('agent_')) {
+      const fallback = params.callerNumber.split('agent_')[1]?.split('.')[0];
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (fallback && uuidRegex.test(fallback)) {
+        userId = fallback;
+        console.log('[Voice Callback] ✅ Fallback user_id (valid UUID):', userId);
+      } else {
+        console.log('[Voice Callback] ⚠️ Fallback value not a valid UUID:', fallback);
       }
     }
 
