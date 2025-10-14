@@ -10,11 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Lightbulb, MessageSquare, FileText, CheckSquare } from "lucide-react";
+import { Lightbulb, MessageSquare, FileText, CheckSquare, Radio } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { useRealtimeAI } from "@/hooks/useRealtimeAI";
 
 function DashboardContent() {
   const { user } = useAuth();
@@ -32,6 +34,9 @@ function DashboardContent() {
     recordingConsent: false
   });
   const hasRestoredIndex = useRef(false);
+  
+  // Real-time AI integration
+  const { isConnected: aiConnected, isConnecting: aiConnecting, suggestions, connect: connectAI, disconnect: disconnectAI } = useRealtimeAI();
 
   useEffect(() => {
     if (user) {
@@ -360,39 +365,72 @@ useEffect(() => {
           {/* AI Sidekick */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Lightbulb className="h-5 w-5 text-warning" />
-                AI Sidekick
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5 text-warning" />
+                  AI Sidekick
+                  {aiConnected && (
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      <Radio className="h-3 w-3 mr-1 text-success animate-pulse" />
+                      Live
+                    </Badge>
+                  )}
+                </CardTitle>
+                <Button
+                  size="sm"
+                  variant={aiConnected ? "destructive" : "default"}
+                  onClick={aiConnected ? disconnectAI : connectAI}
+                  disabled={aiConnecting}
+                >
+                  {aiConnecting ? "Connecting..." : aiConnected ? "Disconnect AI" : "Connect AI"}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge className="bg-success text-success-foreground text-xs">
-                    High Confidence
-                  </Badge>
-                  <span className="font-medium">Next Best Action</span>
+              {!aiConnected && !aiConnecting && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="mb-2">AI Sidekick is offline</p>
+                  <p className="text-sm">Click "Connect AI" to enable real-time assistance</p>
                 </div>
-                <p>Customer likely to ask about bonus eligibility. Prepare deposit bonus details.</p>
-              </div>
+              )}
               
-              <div className="bg-info/10 border border-info/20 rounded-lg p-3 text-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="outline" className="text-xs">Sentiment</Badge>
-                  <span className="font-medium">Positive</span>
+              {aiConnecting && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>Connecting to AI...</p>
                 </div>
-                <p>Customer tone indicates interest. Good time to present offer details.</p>
-              </div>
+              )}
 
-              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge className="bg-destructive text-destructive-foreground text-xs">
-                    Reminder
-                  </Badge>
-                  <span className="font-medium">Responsible Gaming</span>
+              {aiConnected && suggestions.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="mb-2">Listening to call...</p>
+                  <p className="text-sm">AI suggestions will appear here</p>
                 </div>
-                <p>Remember to mention our responsible gaming tools and 18+ age requirement.</p>
-              </div>
+              )}
+
+              {suggestions.map((suggestion, index) => {
+                const bgColor = 
+                  suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
+                  suggestion.type === 'sentiment' ? 'bg-info/10 border-info/20' :
+                  suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
+                  'bg-accent/10 border-accent/20';
+                
+                const badgeVariant = 
+                  suggestion.confidence === 'high' ? 'default' :
+                  suggestion.confidence === 'medium' ? 'secondary' :
+                  'outline';
+
+                return (
+                  <div key={index} className={`${bgColor} border rounded-lg p-3 text-sm`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant={badgeVariant} className="text-xs">
+                        {suggestion.confidence} confidence
+                      </Badge>
+                      <span className="font-medium">{suggestion.title}</span>
+                    </div>
+                    <p>{suggestion.message}</p>
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
 
