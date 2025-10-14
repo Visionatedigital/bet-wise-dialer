@@ -43,8 +43,26 @@ function DashboardContent() {
 useEffect(() => {
   if (!user?.id) return;
   if (!hasRestoredIndex.current) return;
+  console.log('[Leads] Saving currentLeadIndex to localStorage:', currentLeadIndex);
   localStorage.setItem(`lead_index_${user.id}`, currentLeadIndex.toString());
 }, [currentLeadIndex, user?.id]);
+
+// Robust restoration after leads load
+useEffect(() => {
+  if (!user?.id) return;
+  if (hasRestoredIndex.current) return;
+  if (queueLeads.length === 0) return;
+  const savedIndex = localStorage.getItem(`lead_index_${user.id}`);
+  const restoredIndex = savedIndex ? parseInt(savedIndex) : 0;
+  const validIndex = Math.min(Math.max(0, restoredIndex), queueLeads.length - 1);
+  console.log('[Leads] Restoring index after leads load:', { savedIndex, restoredIndex, validIndex, total: queueLeads.length });
+  setCurrentLeadIndex(validIndex);
+  setCurrentLead(queueLeads[validIndex]);
+  hasRestoredIndex.current = true;
+  if (savedIndex && restoredIndex === validIndex && restoredIndex > 0) {
+    toast.success(`Restored position: Lead ${validIndex + 1} of ${queueLeads.length}`);
+  }
+}, [queueLeads, user?.id]);
 
   const fetchLeads = async () => {
     try {
@@ -89,6 +107,7 @@ useEffect(() => {
         // Ensure the index is valid
         const validIndex = Math.min(Math.max(0, restoredIndex), formattedLeads.length - 1);
         
+        console.log('[Leads] Restoring index inside fetchLeads:', { savedIndex, restoredIndex, validIndex, total: formattedLeads.length });
         setCurrentLeadIndex(validIndex);
         setCurrentLead(formattedLeads[validIndex]);
         hasRestoredIndex.current = true;
