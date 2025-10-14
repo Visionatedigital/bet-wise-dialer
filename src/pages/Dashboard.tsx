@@ -187,9 +187,11 @@ useEffect(() => {
 
       if (error) throw error;
       
-      console.log('[Dashboard] Notes auto-saved');
+      toast.success('Notes saved successfully');
+      console.log('[Dashboard] Notes saved');
     } catch (error) {
       console.error('[Dashboard] Error saving notes:', error);
+      toast.error('Failed to save notes');
     }
   };
 
@@ -532,26 +534,38 @@ useEffect(() => {
                   <MessageSquare className="h-5 w-5" />
                   Call Notes
                 </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCallHistory(true)}
-                >
-                  <History className="h-4 w-4 mr-2" />
-                  View History
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={saveCallNotes}
+                    disabled={!currentCallId || !callNotes.trim()}
+                  >
+                    Save Now
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCallHistory(true)}
+                  >
+                    <History className="h-4 w-4 mr-2" />
+                    History
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               <Textarea
-                placeholder="Type your call notes here... (Auto-saves)"
+                placeholder="Type your call notes here... (Auto-saves every 30s)"
                 value={callNotes}
                 onChange={(e) => setCallNotes(e.target.value)}
                 rows={4}
                 className="resize-none"
               />
               <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
-                <span>Auto-saves every 30 seconds</span>
+                <span>
+                  {currentCallId ? 'Auto-saves every 30 seconds' : 'Start a call to save notes'}
+                </span>
                 <span>{callNotes.length} characters</span>
               </div>
             </CardContent>
