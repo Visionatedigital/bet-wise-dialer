@@ -108,7 +108,7 @@ export default function Leads() {
   const handleSelectAll = (checked: boolean | "indeterminate") => {
     if (checked === true) {
       setSelectedLeads(filteredLeads.map(lead => lead.id));
-    } else {
+    } else if (checked === false) {
       setSelectedLeads([]);
     }
   };
@@ -116,7 +116,7 @@ export default function Leads() {
   const handleSelectLead = (leadId: string, checked: boolean | "indeterminate") => {
     if (checked === true) {
       setSelectedLeads([...selectedLeads, leadId]);
-    } else {
+    } else if (checked === false) {
       setSelectedLeads(selectedLeads.filter(id => id !== leadId));
     }
   };
