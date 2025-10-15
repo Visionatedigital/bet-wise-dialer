@@ -105,16 +105,16 @@ export default function Leads() {
 
   const uniqueCampaigns = [...new Set(leads.map(lead => lead.campaign))].filter(campaign => campaign && campaign.trim() !== '');
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
+  const handleSelectAll = (checked: boolean | "indeterminate") => {
+    if (checked === true) {
       setSelectedLeads(filteredLeads.map(lead => lead.id));
     } else {
       setSelectedLeads([]);
     }
   };
 
-  const handleSelectLead = (leadId: string, checked: boolean) => {
-    if (checked) {
+  const handleSelectLead = (leadId: string, checked: boolean | "indeterminate") => {
+    if (checked === true) {
       setSelectedLeads([...selectedLeads, leadId]);
     } else {
       setSelectedLeads(selectedLeads.filter(id => id !== leadId));
@@ -337,7 +337,7 @@ export default function Leads() {
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={selectedLeads.includes(lead.id)}
-                        onCheckedChange={(checked) => handleSelectLead(lead.id, checked as boolean)}
+                        onCheckedChange={(checked) => handleSelectLead(lead.id, checked)}
                       />
                     </TableCell>
                     <TableCell>
