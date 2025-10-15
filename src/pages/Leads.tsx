@@ -593,7 +593,6 @@ export default function Leads() {
         open={importModalOpen}
         onOpenChange={setImportModalOpen}
         onImportComplete={fetchLeads}
-        userId={user?.id || ""}
       />
 
       <EditLeadModal

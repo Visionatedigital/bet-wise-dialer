@@ -7,15 +7,16 @@ import { Upload, FileText, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ImportLeadsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImportComplete: () => void;
-  userId: string;
 }
 
-export function ImportLeadsModal({ open, onOpenChange, onImportComplete, userId }: ImportLeadsModalProps) {
+export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: ImportLeadsModalProps) {
+  const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [preview, setPreview] = useState<{ name: string; phone: string }[]>([]);
@@ -66,6 +67,11 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete, userId 
       return;
     }
 
+    if (!user?.id) {
+      toast.error('You must be logged in to import leads');
+      return;
+    }
+
     setImporting(true);
     try {
       const reader = new FileReader();
@@ -86,7 +92,7 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete, userId 
           const name = nameIndex !== -1 ? values[nameIndex] : phone;
           
           return {
-            user_id: userId,
+            user_id: user.id,
             name: name || 'Unknown',
             phone: phone,
             segment: 'dormant',
