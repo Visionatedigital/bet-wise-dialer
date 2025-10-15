@@ -11,7 +11,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Phone, Mail, MessageSquare, Search, Filter, Download, UserMinus, Calendar, Clock, DollarSign, Target, Tag, User, Zap } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Phone, Mail, MessageSquare, Search, Filter, Download, UserMinus, Calendar, Clock, DollarSign, Target, Tag, User, Zap, Trash2 } from "lucide-react";
 import { type Lead } from "@/data/sampleData";
 import { formatUGX, formatKampalaTime } from "@/lib/formatters";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +35,8 @@ export default function Leads() {
   const [leadToEdit, setLeadToEdit] = useState<Lead | null>(null);
   const [leadCalls, setLeadCalls] = useState<any[]>([]);
   const [loadingCalls, setLoadingCalls] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -155,6 +158,27 @@ export default function Leads() {
       console.error('Error fetching lead calls:', error);
     } finally {
       setLoadingCalls(false);
+    }
+  };
+
+  const handleDeleteLead = async () => {
+    if (!leadToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .delete()
+        .eq('id', leadToDelete.id);
+
+      if (error) throw error;
+
+      toast.success('Lead deleted successfully');
+      await fetchLeads();
+      setDeleteDialogOpen(false);
+      setLeadToDelete(null);
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+      toast.error('Failed to delete lead');
     }
   };
 
@@ -346,7 +370,10 @@ export default function Leads() {
                             <Button 
                               variant="ghost" 
                               size="sm"
-                              onClick={() => setSelectedLead(lead)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedLead(lead);
+                              }}
                             >
                               View
                             </Button>
@@ -511,8 +538,16 @@ export default function Leads() {
                             </div>
                           </SheetContent>
                         </Sheet>
-                        <Button variant="ghost" size="sm">
-                          <Phone className="h-4 w-4" />
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLeadToDelete(lead);
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </TableCell>
@@ -537,6 +572,23 @@ export default function Leads() {
         lead={leadToEdit}
         onUpdateComplete={fetchLeads}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Lead</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {leadToDelete?.name}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteLead} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }
