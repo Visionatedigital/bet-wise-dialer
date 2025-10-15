@@ -55,7 +55,7 @@ Be concise and actionable. Focus on helping the agent close the sale while stayi
     });
   } catch (error) {
     console.error('[Realtime Token] Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
