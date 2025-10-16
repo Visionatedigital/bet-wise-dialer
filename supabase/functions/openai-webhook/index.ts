@@ -1,20 +1,35 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Verify OpenAI webhook signature
+async function verifySignature(body: string, signature: string, secret: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signed = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
+  const expectedSignature = Array.from(new Uint8Array(signed))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  return signature === expectedSignature;
+}
+
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     console.log('[OpenAI Webhook] Received request');
-    console.log('[OpenAI Webhook] Method:', req.method);
-    console.log('[OpenAI Webhook] Headers:', Object.fromEntries(req.headers.entries()));
 
     if (req.method !== 'POST') {
       return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -23,39 +38,67 @@ serve(async (req) => {
       });
     }
 
-    // Parse the webhook payload
-    const payload = await req.json();
-    console.log('[OpenAI Webhook] Payload:', JSON.stringify(payload, null, 2));
+    const bodyText = await req.text();
+    const signature = req.headers.get('x-openai-signature');
+    const webhookSecret = Deno.env.get('OPENAI_WEBHOOK_SECRET');
 
-    // Process the webhook event based on type
-    const eventType = payload.type || payload.event;
-    console.log('[OpenAI Webhook] Event type:', eventType);
-
-    // Here you can add logic to:
-    // - Store transcripts in Supabase
-    // - Trigger AI analysis
-    // - Update call records
-    // - Send notifications
-
-    switch (eventType) {
-      case 'transcript.chunk':
-        console.log('[OpenAI Webhook] Transcript chunk received:', payload.text);
-        break;
-      case 'call.completed':
-        console.log('[OpenAI Webhook] Call completed:', payload.call_id);
-        break;
-      case 'analysis.ready':
-        console.log('[OpenAI Webhook] Analysis ready:', payload.analysis);
-        break;
-      default:
-        console.log('[OpenAI Webhook] Unknown event type:', eventType);
+    // Verify signature if secret is configured
+    if (webhookSecret && signature) {
+      const isValid = await verifySignature(bodyText, signature, webhookSecret);
+      if (!isValid) {
+        console.error('[OpenAI Webhook] Invalid signature');
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
-    // Return success response
+    const payload = JSON.parse(bodyText);
+    console.log('[OpenAI Webhook] Event:', payload.type);
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Handle OpenAI Realtime API events
+    switch (payload.type) {
+      case 'session.created':
+        console.log('[OpenAI Webhook] Session created:', payload.session);
+        break;
+
+      case 'conversation.item.created':
+        console.log('[OpenAI Webhook] Item created:', payload.item);
+        // Store transcript in database if needed
+        if (payload.item?.content) {
+          const sessionId = payload.session_id;
+          // You can store this in call_activities or a new transcripts table
+        }
+        break;
+
+      case 'response.audio_transcript.delta':
+        console.log('[OpenAI Webhook] Transcript delta:', payload.delta);
+        break;
+
+      case 'response.audio_transcript.done':
+        console.log('[OpenAI Webhook] Transcript complete:', payload.transcript);
+        break;
+
+      case 'response.done':
+        console.log('[OpenAI Webhook] Response complete');
+        break;
+
+      case 'error':
+        console.error('[OpenAI Webhook] Error event:', payload.error);
+        break;
+
+      default:
+        console.log('[OpenAI Webhook] Unhandled event:', payload.type);
+    }
+
     return new Response(JSON.stringify({ 
       success: true,
-      message: 'Webhook received',
-      event_type: eventType 
+      received: payload.type 
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
