@@ -96,44 +96,59 @@ serve(async (req) => {
       status
     });
 
-    // Determine which call flow to use
-    // For outbound calls from WebRTC, callerNumber contains the SIP client name
-    // and clientDialedNumber contains the actual number to dial
-    let flowKey = 'inbound'; // default
-    
+    // Check if this is an incoming call that should use AI streaming
     const isWebRTCClient = callerNumber && (callerNumber.includes('agent_') || callerNumber.includes('betsure.'));
+    const shouldUseAI = !isWebRTCClient && callSessionState === 'Ringing' && isActive === '1';
     
-    if (isWebRTCClient && clientDialedNumber) {
-      flowKey = 'outbound';
-      console.log('[Voice Callback] 🎯 Using OUTBOUND flow (WebRTC client detected)');
-      console.log('[Voice Callback] 📱 Dialing number:', clientDialedNumber);
-    } else if (direction === 'outbound' || (destinationNumber && !isWebRTCClient)) {
-      flowKey = 'outbound';
-      console.log('[Voice Callback] 🎯 Using OUTBOUND flow (explicit direction or destination)');
-    } else if (dtmfDigits) {
-      flowKey = 'ivr';
-      console.log('[Voice Callback] 🎯 Using IVR flow');
+    let response: string;
+    
+    if (shouldUseAI) {
+      // Use OpenAI Realtime streaming for incoming calls
+      const streamUrl = `wss://hahkgifqajdnhvkbzwfx.supabase.co/functions/v1/realtime-stream`;
+      
+      response = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Connecting you with an AI assistant</Say>
+  <Stream url="${streamUrl}" />
+</Response>`;
+      
+      console.log('[Voice Callback] 🤖 Using AI streaming for incoming call');
     } else {
-      console.log('[Voice Callback] 🎯 Using INBOUND flow');
+      // Use traditional call flows for outbound/completed calls
+      let flowKey = 'inbound'; // default
+      
+      if (isWebRTCClient && clientDialedNumber) {
+        flowKey = 'outbound';
+        console.log('[Voice Callback] 🎯 Using OUTBOUND flow (WebRTC client detected)');
+        console.log('[Voice Callback] 📱 Dialing number:', clientDialedNumber);
+      } else if (direction === 'outbound' || (destinationNumber && !isWebRTCClient)) {
+        flowKey = 'outbound';
+        console.log('[Voice Callback] 🎯 Using OUTBOUND flow (explicit direction or destination)');
+      } else if (dtmfDigits) {
+        flowKey = 'ivr';
+        console.log('[Voice Callback] 🎯 Using IVR flow');
+      } else {
+        console.log('[Voice Callback] 🎯 Using INBOUND flow');
+      }
+
+      // Get the call flow configuration
+      const flow = callFlows[flowKey];
+      
+      if (!flow) {
+        console.error('[Voice Callback] ❌ Call flow not found:', flowKey);
+        throw new Error(`Call flow '${flowKey}' not found`);
+      }
+
+      console.log('[Voice Callback] 📝 Flow configuration:', flow);
+
+      // Generate XML response from call flow
+      response = generateXML(flow.actions, {
+        callerNumber: (callerNumber as string) || '',
+        clientDialedNumber: (clientDialedNumber as string) || '',
+        destinationNumber: (destinationNumber as string) || '',
+        dtmfDigits: (dtmfDigits as string) || '',
+      });
     }
-
-    // Get the call flow configuration
-    const flow = callFlows[flowKey];
-    
-    if (!flow) {
-      console.error('[Voice Callback] ❌ Call flow not found:', flowKey);
-      throw new Error(`Call flow '${flowKey}' not found`);
-    }
-
-    console.log('[Voice Callback] 📝 Flow configuration:', flow);
-
-    // Generate XML response from call flow
-    const response = generateXML(flow.actions, {
-      callerNumber: (callerNumber as string) || '',
-      clientDialedNumber: (clientDialedNumber as string) || '',
-      destinationNumber: (destinationNumber as string) || '',
-      dtmfDigits: (dtmfDigits as string) || '',
-    });
 
     console.log('[Voice Callback] 📤 Sending XML response:');
     console.log(response);
