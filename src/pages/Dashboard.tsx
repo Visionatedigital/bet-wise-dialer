@@ -176,6 +176,37 @@ useEffect(() => {
 
   const nextLead = queueLeads[currentLeadIndex + 1] || null;
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.key.toLowerCase()) {
+        case 'n':
+          e.preventDefault();
+          handleNextLead();
+          break;
+        case 's':
+          e.preventDefault();
+          saveCallNotes();
+          break;
+        case 'c':
+          e.preventDefault();
+          if (nextLead) {
+            handleCallLead(nextLead);
+          }
+          break;
+        // R for record will be handled by Softphone component
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [currentLeadIndex, queueLeads, nextLead, currentCallId, callNotes]);
+
   const saveCallNotes = async () => {
     if (!currentCallId || !callNotes.trim()) return;
 
