@@ -40,7 +40,31 @@ function DashboardContent() {
   const [showCallHistory, setShowCallHistory] = useState(false);
   
   // Real-time AI integration
-  const { isConnected: aiConnected, isConnecting: aiConnecting, suggestions, connect: connectAI, disconnect: disconnectAI } = useRealtimeAI();
+  const { isConnected: aiConnected, isConnecting: aiConnecting, suggestions, connect: connectAI, disconnect: disconnectAI, sendContext } = useRealtimeAI();
+
+  // Send context to AI when call starts or notes change
+  useEffect(() => {
+    if (aiConnected && currentLead && currentCallId) {
+      const context = `
+        Lead Information:
+        - Name: ${currentLead.name}
+        - Segment: ${currentLead.segment}
+        - Last Activity: ${currentLead.lastActivity || 'N/A'}
+        - Priority: ${currentLead.priority}
+        
+        Call Notes: ${callNotes || 'No notes yet'}
+        
+        Compliance Status:
+        - Introduction: ${complianceChecked.introduction ? 'Done' : 'Pending'}
+        - Data Protection: ${complianceChecked.dataProtection ? 'Done' : 'Pending'}
+        - Responsible Gaming: ${complianceChecked.responsibleGaming ? 'Done' : 'Pending'}
+        - Recording Consent: ${complianceChecked.recordingConsent ? 'Done' : 'Pending'}
+        
+        Please provide real-time suggestions for this call.
+      `;
+      sendContext(context);
+    }
+  }, [aiConnected, currentLead, currentCallId, callNotes, complianceChecked, sendContext]);
 
   useEffect(() => {
     if (user) {

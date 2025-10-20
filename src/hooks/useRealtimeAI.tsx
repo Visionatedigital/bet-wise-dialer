@@ -59,12 +59,19 @@ export const useRealtimeAI = () => {
     };
   }, []);
 
+  const sendContext = useCallback((context: string) => {
+    if (realtimeAIRef.current && realtimeAIRef.current.isConnected()) {
+      realtimeAIRef.current.sendContext(context);
+    }
+  }, []);
+
   return {
     isConnected,
     isConnecting,
     suggestions,
     connect,
     disconnect,
-    clearSuggestions
+    clearSuggestions,
+    sendContext
   };
 };
