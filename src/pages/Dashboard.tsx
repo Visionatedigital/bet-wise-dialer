@@ -5,6 +5,7 @@ import { QueueCard } from "@/components/dashboard/QueueCard";
 import { AfterCallSummary } from "@/components/dashboard/AfterCallSummary";
 import { AgentKPIs } from "@/components/dashboard/AgentKPIs";
 import { CallHistoryModal } from "@/components/dashboard/CallHistoryModal";
+import { LivePitchScript } from "@/components/dashboard/LivePitchScript";
 import { type Lead } from "@/data/sampleData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useRealtimeAI } from "@/hooks/useRealtimeAI";
+import { useSpeechTracking } from "@/hooks/useSpeechTracking";
 
 function DashboardContent() {
   const { user } = useAuth();
@@ -41,6 +43,14 @@ function DashboardContent() {
   
   // Real-time AI integration
   const { isConnected: aiConnected, isConnecting: aiConnecting, suggestions, connect: connectAI, disconnect: disconnectAI, sendContext } = useRealtimeAI();
+
+  // Speech tracking for live script highlighting
+  const { spokenWords, fullTranscript, isConnected: speechConnected } = useSpeechTracking({
+    isCallActive: currentCallId !== null,
+    onTranscriptUpdate: (transcript) => {
+      console.log('[Dashboard] Agent said:', transcript);
+    }
+  });
 
   // Fetch campaign AI scripts
   const [campaignScript, setCampaignScript] = useState<string | null>(null);
@@ -350,15 +360,6 @@ useEffect(() => {
     setCurrentCallId(null);
   };
 
-  const complianceItems = [
-    { key: "introduction", label: "Proper introduction & company name" },
-    { key: "dataProtection", label: "Data protection notice given" },
-    { key: "responsibleGaming", label: "Responsible gaming reminder" },
-    { key: "recordingConsent", label: "Call recording consent obtained" }
-  ];
-
-  const allComplianceChecked = Object.values(complianceChecked).every(Boolean);
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -449,59 +450,19 @@ useEffect(() => {
                 </TabsList>
                 
                 <TabsContent value="pitch" className="space-y-4">
-                  <div className="bg-accent/50 rounded-lg p-4 text-sm">
-                    <h4 className="font-medium mb-2">
-                      Opening Script - {currentLead?.campaign || 'Default'}
-                    </h4>
-                    <p className="mb-3">
-                      "Hello <strong>{currentLead?.name || '[Customer Name]'}</strong>, 
-                      this is Robert calling from Betsure Uganda. I hope you're having a great day! 
-                      I'm calling to share an exclusive offer that's perfect for valued customers like yourself..."
-                    </p>
-                    
-                    {currentLead?.intent && (
-                      <div className="bg-primary/10 border border-primary/20 rounded p-2 mt-2">
-                        <strong>Customer Intent:</strong> {currentLead.intent}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Compliance Checklist */}
-                  <div className="space-y-3">
-                    <Label className="text-base font-medium flex items-center gap-2">
-                      <CheckSquare className="h-4 w-4" />
-                      Compliance Checklist
-                    </Label>
-                    
-                    <div className="space-y-2">
-                      {complianceItems.map((item) => (
-                        <div key={item.key} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={item.key}
-                            checked={complianceChecked[item.key as keyof typeof complianceChecked]}
-                            onCheckedChange={(checked) => 
-                              setComplianceChecked(prev => ({
-                                ...prev,
-                                [item.key]: checked as boolean
-                              }))
-                            }
-                          />
-                          <Label 
-                            htmlFor={item.key} 
-                            className="text-sm cursor-pointer"
-                          >
-                            {item.label}
-                          </Label>
-                        </div>
-                      ))}
+                  <LivePitchScript
+                    leadName={currentLead?.name || ''}
+                    campaign={currentLead?.campaign || 'Default'}
+                    leadIntent={currentLead?.intent}
+                    spokenWords={spokenWords}
+                    isCallActive={currentCallId !== null}
+                  />
+                  {speechConnected && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Radio className="h-3 w-3 text-success animate-pulse" />
+                      <span>AI listening and tracking script progress...</span>
                     </div>
-                    
-                    {allComplianceChecked && (
-                      <Badge className="bg-success text-success-foreground">
-                        ✓ All compliance items checked
-                      </Badge>
-                    )}
-                  </div>
+                  )}
                 </TabsContent>
                 
                 <TabsContent value="faq" className="space-y-4">
