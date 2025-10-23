@@ -39,27 +39,10 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       const color = getSentimentColor();
-      const numPoints = 100;
-      const points: { x: number; y: number }[] = [];
+      const numDots = 150;
       
       // Slower animation when dormant
       const speed = isActive ? 1 : 0.3;
-      
-      // Generate waveform points
-      for (let i = 0; i < numPoints; i++) {
-        const angle = (i / numPoints) * Math.PI * 2;
-        const wave1 = Math.sin(frame * 0.02 * speed + i * 0.1) * 15;
-        const wave2 = Math.cos(frame * 0.03 * speed + i * 0.15) * 10;
-        const wave3 = Math.sin(frame * 0.025 * speed + i * 0.08) * 8;
-        const radius = baseRadius + wave1 + wave2 + wave3;
-        
-        points.push({
-          x: centerX + Math.cos(angle) * radius,
-          y: centerY + Math.sin(angle) * radius
-        });
-      }
-      
-      // Adjust opacity based on active state
       const opacity = isActive ? 1 : 0.5;
       
       // Draw outer glow
@@ -73,43 +56,59 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
       ctx.arc(centerX, centerY, baseRadius + 40, 0, Math.PI * 2);
       ctx.fill();
       
-      // Draw waveform
-      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${0.8 * opacity})`;
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${0.6 * opacity})`;
-      
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      
-      for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-      
-      // Draw inner lines
-      for (let layer = 0; layer < 3; layer++) {
-        const layerRadius = baseRadius - (layer + 1) * 15;
-        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${(0.4 - layer * 0.1) * opacity})`;
-        ctx.lineWidth = 1;
+      // Draw dots in orbital patterns
+      for (let i = 0; i < numDots; i++) {
+        const angle = (i / numDots) * Math.PI * 2;
+        
+        // Multiple wave patterns for organic movement
+        const wave1 = Math.sin(frame * 0.02 * speed + i * 0.1) * 15;
+        const wave2 = Math.cos(frame * 0.03 * speed + i * 0.15) * 10;
+        const wave3 = Math.sin(frame * 0.025 * speed + i * 0.08) * 8;
+        const radius = baseRadius + wave1 + wave2 + wave3;
+        
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius;
+        
+        // Sequential animation effect - each dot pulses based on its index and time
+        const sequenceOffset = (frame * 0.05 * speed + i * 0.02) % (Math.PI * 2);
+        const dotSize = 2 + Math.sin(sequenceOffset) * 1.5;
+        const dotOpacity = (0.6 + Math.sin(sequenceOffset) * 0.4) * opacity;
+        
+        // Draw dot with glow
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${dotOpacity})`;
+        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${dotOpacity})`;
         
         ctx.beginPath();
-        for (let i = 0; i < numPoints; i++) {
-          const angle = (i / numPoints) * Math.PI * 2;
-          const wave = Math.sin(frame * 0.03 * speed + i * 0.12 + layer) * 5;
-          const radius = layerRadius + wave;
+        ctx.arc(x, y, dotSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Draw inner orbital rings with dots
+      for (let ring = 0; ring < 3; ring++) {
+        const ringRadius = baseRadius - (ring + 1) * 20;
+        const dotsInRing = 50 - ring * 10;
+        
+        for (let i = 0; i < dotsInRing; i++) {
+          const angle = (i / dotsInRing) * Math.PI * 2;
+          const wave = Math.sin(frame * 0.03 * speed + i * 0.12 + ring) * 5;
+          const radius = ringRadius + wave;
+          
           const x = centerX + Math.cos(angle) * radius;
           const y = centerY + Math.sin(angle) * radius;
           
-          if (i === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
+          const sequenceOffset = (frame * 0.04 * speed + i * 0.03 + ring) % (Math.PI * 2);
+          const dotSize = 1.5 + Math.sin(sequenceOffset) * 0.8;
+          const dotOpacity = (0.4 + Math.sin(sequenceOffset) * 0.3 - ring * 0.1) * opacity;
+          
+          ctx.shadowBlur = 5;
+          ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${dotOpacity})`;
+          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${dotOpacity})`;
+          
+          ctx.beginPath();
+          ctx.arc(x, y, dotSize, 0, Math.PI * 2);
+          ctx.fill();
         }
-        ctx.closePath();
-        ctx.stroke();
       }
       
       frame++;

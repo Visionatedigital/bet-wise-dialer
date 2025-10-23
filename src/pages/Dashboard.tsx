@@ -6,7 +6,7 @@ import { AfterCallSummary } from "@/components/dashboard/AfterCallSummary";
 import { AgentKPIs } from "@/components/dashboard/AgentKPIs";
 import { CallHistoryModal } from "@/components/dashboard/CallHistoryModal";
 import { LivePitchScript } from "@/components/dashboard/LivePitchScript";
-import { ParticleOrb } from "@/components/dashboard/ParticleOrb";
+import { CallSentimentOrb } from "@/components/dashboard/CallSentimentOrb";
 import { type Lead } from "@/data/sampleData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -563,8 +563,8 @@ useEffect(() => {
                 
                 {/* Real-time AI Tab */}
                 <TabsContent value="realtime" className="space-y-4 mt-4">
-                  {/* 3D Particle Orb */}
-                  <ParticleOrb 
+                  {/* Sentiment Orb */}
+                  <CallSentimentOrb 
                     sentiment={callSentiment}
                     isActive={currentCallId !== null}
                   />
