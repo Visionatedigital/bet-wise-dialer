@@ -8,13 +8,17 @@ export interface AISuggestion {
   timestamp: number;
 }
 
+export type CallSentiment = 'neutral' | 'positive' | 'negative' | 'critical';
+
 export class RealtimeAI {
   private ws: WebSocket | null = null;
   private isActive = false;
+  private conversationContext = '';
 
   constructor(
     private onSuggestion: (suggestion: AISuggestion) => void,
-    private onConnectionChange: (connected: boolean) => void
+    private onConnectionChange: (connected: boolean) => void,
+    private onSentimentChange: (sentiment: CallSentiment) => void
   ) {}
 
   async init() {
@@ -136,6 +140,10 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
 
     if (!fullText || fullText.length < 10) return;
 
+    // Analyze sentiment
+    const sentiment = this.analyzeSentiment(fullText);
+    this.onSentimentChange(sentiment);
+
     // Parse the AI response and create appropriate suggestions
     const suggestion: AISuggestion = {
       type: this.inferSuggestionType(fullText),
@@ -146,6 +154,30 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
     };
 
     this.onSuggestion(suggestion);
+  }
+
+  private analyzeSentiment(text: string): CallSentiment {
+    const lowerText = text.toLowerCase();
+    
+    // Critical negative indicators
+    const criticalIndicators = ['cancel', 'unsubscribe', 'not interested', 'stop calling', 'remove me', 'annoyed', 'angry'];
+    if (criticalIndicators.some(indicator => lowerText.includes(indicator))) {
+      return 'critical';
+    }
+    
+    // Negative indicators
+    const negativeIndicators = ['concern', 'worried', 'hesitant', 'unsure', 'doubt', 'problem', 'issue'];
+    if (negativeIndicators.some(indicator => lowerText.includes(indicator))) {
+      return 'negative';
+    }
+    
+    // Positive indicators
+    const positiveIndicators = ['interested', 'yes', 'sounds good', 'tell me more', 'excited', 'great', 'perfect'];
+    if (positiveIndicators.some(indicator => lowerText.includes(indicator))) {
+      return 'positive';
+    }
+    
+    return 'neutral';
   }
 
   private inferSuggestionType(text: string): AISuggestion['type'] {
@@ -178,7 +210,10 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
 
     console.log('[RealtimeAI] Sending context:', context);
     
-    // Create a conversation item with user context
+    // Accumulate conversation context
+    this.conversationContext += '\n' + context;
+    
+    // Create a conversation item with user context and instructions to analyze sentiment
     this.ws.send(JSON.stringify({
       type: 'conversation.item.create',
       item: {
@@ -186,7 +221,7 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
         role: 'user',
         content: [{
           type: 'input_text',
-          text: context
+          text: `Analyze this conversation context and provide actionable suggestions to help close the deal:\n\n${context}\n\nProvide specific tactics based on the customer's responses and sentiment.`
         }]
       }
     }));

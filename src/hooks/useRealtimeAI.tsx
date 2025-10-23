@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { RealtimeAI, AISuggestion } from '@/utils/RealtimeAI';
+import { RealtimeAI, AISuggestion, CallSentiment } from '@/utils/RealtimeAI';
 import { toast } from 'sonner';
 
 export const useRealtimeAI = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
+  const [sentiment, setSentiment] = useState<CallSentiment>('neutral');
   const realtimeAIRef = useRef<RealtimeAI | null>(null);
 
   const handleSuggestion = useCallback((suggestion: AISuggestion) => {
@@ -19,6 +20,11 @@ export const useRealtimeAI = () => {
     setIsConnecting(false);
   }, []);
 
+  const handleSentimentChange = useCallback((newSentiment: CallSentiment) => {
+    console.log('[useRealtimeAI] Sentiment changed:', newSentiment);
+    setSentiment(newSentiment);
+  }, []);
+
   const connect = useCallback(async () => {
     if (realtimeAIRef.current?.isConnected()) {
       toast.info('AI Sidekick already connected');
@@ -28,7 +34,11 @@ export const useRealtimeAI = () => {
     setIsConnecting(true);
     
     try {
-      realtimeAIRef.current = new RealtimeAI(handleSuggestion, handleConnectionChange);
+      realtimeAIRef.current = new RealtimeAI(
+        handleSuggestion, 
+        handleConnectionChange,
+        handleSentimentChange
+      );
       await realtimeAIRef.current.init();
       toast.success('AI Sidekick connected and listening');
     } catch (error) {
@@ -37,13 +47,14 @@ export const useRealtimeAI = () => {
       setIsConnecting(false);
       setIsConnected(false);
     }
-  }, [handleSuggestion, handleConnectionChange]);
+  }, [handleSuggestion, handleConnectionChange, handleSentimentChange]);
 
   const disconnect = useCallback(() => {
     if (realtimeAIRef.current) {
       realtimeAIRef.current.disconnect();
       realtimeAIRef.current = null;
       setSuggestions([]);
+      setSentiment('neutral');
       toast.info('AI Sidekick disconnected');
     }
   }, []);
@@ -69,6 +80,7 @@ export const useRealtimeAI = () => {
     isConnected,
     isConnecting,
     suggestions,
+    sentiment,
     connect,
     disconnect,
     clearSuggestions,

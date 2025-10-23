@@ -6,6 +6,7 @@ import { AfterCallSummary } from "@/components/dashboard/AfterCallSummary";
 import { AgentKPIs } from "@/components/dashboard/AgentKPIs";
 import { CallHistoryModal } from "@/components/dashboard/CallHistoryModal";
 import { LivePitchScript } from "@/components/dashboard/LivePitchScript";
+import { CallSentimentOrb } from "@/components/dashboard/CallSentimentOrb";
 import { type Lead } from "@/data/sampleData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,7 +43,7 @@ function DashboardContent() {
   const [showCallHistory, setShowCallHistory] = useState(false);
   
   // Real-time AI integration
-  const { isConnected: aiConnected, isConnecting: aiConnecting, suggestions, connect: connectAI, disconnect: disconnectAI, sendContext } = useRealtimeAI();
+  const { isConnected: aiConnected, isConnecting: aiConnecting, suggestions, sentiment: callSentiment, connect: connectAI, disconnect: disconnectAI, sendContext } = useRealtimeAI();
 
   // Speech tracking for live script highlighting
   const { spokenWords, fullTranscript, isConnected: speechConnected } = useSpeechTracking({
@@ -78,31 +79,22 @@ function DashboardContent() {
     loadCampaignScript();
   }, [currentLead?.segment]);
 
-  // Send context to AI when call starts or notes change
+  // Send conversation context to AI when transcript updates
   useEffect(() => {
-    if (aiConnected && currentLead && currentCallId) {
+    if (fullTranscript && aiConnected && currentCallId && currentLead) {
       const context = `
-        Campaign Script: ${campaignScript || 'General support'}
-        
-        Lead Information:
-        - Name: ${currentLead.name}
-        - Segment: ${currentLead.segment}
-        - Last Activity: ${currentLead.lastActivity || 'N/A'}
-        - Priority: ${currentLead.priority}
-        
-        Call Notes: ${callNotes || 'No notes yet'}
-        
-        Compliance Status:
-        - Introduction: ${complianceChecked.introduction ? 'Done' : 'Pending'}
-        - Data Protection: ${complianceChecked.dataProtection ? 'Done' : 'Pending'}
-        - Responsible Gaming: ${complianceChecked.responsibleGaming ? 'Done' : 'Pending'}
-        - Recording Consent: ${complianceChecked.recordingConsent ? 'Done' : 'Pending'}
-        
-        Based on the campaign script and current call context, provide specific real-time suggestions to help the agent.
-      `;
+Current call with ${currentLead.name} (${currentLead.segment} segment).
+Agent said: "${fullTranscript}"
+
+Analyze the conversation sentiment and provide specific tactics to help close this deal. Focus on:
+1. Addressing customer objections
+2. Highlighting relevant benefits
+3. Creating urgency
+4. Maintaining compliance
+      `.trim();
       sendContext(context);
     }
-  }, [aiConnected, currentLead, currentCallId, callNotes, complianceChecked, sendContext, campaignScript]);
+  }, [fullTranscript, aiConnected, currentCallId, currentLead, sendContext]);
 
   useEffect(() => {
     if (user) {
@@ -582,6 +574,12 @@ useEffect(() => {
                 
                 {/* Real-time AI Tab */}
                 <TabsContent value="realtime" className="space-y-4 mt-4">
+                  {/* Sentiment Orb */}
+                  <CallSentimentOrb 
+                    sentiment={callSentiment}
+                    isActive={currentCallId !== null && aiConnected}
+                  />
+
                   {!aiConnected && !aiConnecting && (
                     <div className="text-center py-8 text-muted-foreground">
                       <p className="mb-2">AI Sidekick is offline</p>
@@ -596,36 +594,41 @@ useEffect(() => {
                   )}
 
                   {aiConnected && suggestions.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-4 text-muted-foreground">
                       <p className="mb-2">Listening to call...</p>
                       <p className="text-sm">AI suggestions will appear here</p>
                     </div>
                   )}
 
-                  {suggestions.map((suggestion, index) => {
-                    const bgColor = 
-                      suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
-                      suggestion.type === 'sentiment' ? 'bg-info/10 border-info/20' :
-                      suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
-                      'bg-accent/10 border-accent/20';
-                    
-                    const badgeVariant = 
-                      suggestion.confidence === 'high' ? 'default' :
-                      suggestion.confidence === 'medium' ? 'secondary' :
-                      'outline';
+                  {suggestions.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm">Conversion Suggestions</h4>
+                      {suggestions.map((suggestion, index) => {
+                        const bgColor = 
+                          suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
+                          suggestion.type === 'sentiment' ? 'bg-info/10 border-info/20' :
+                          suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
+                          'bg-accent/10 border-accent/20';
+                        
+                        const badgeVariant = 
+                          suggestion.confidence === 'high' ? 'default' :
+                          suggestion.confidence === 'medium' ? 'secondary' :
+                          'outline';
 
-                    return (
-                      <div key={index} className={`${bgColor} border rounded-lg p-3 text-sm`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant={badgeVariant} className="text-xs">
-                            {suggestion.confidence} confidence
-                          </Badge>
-                          <span className="font-medium">{suggestion.title}</span>
-                        </div>
-                        <p>{suggestion.message}</p>
-                      </div>
-                    );
-                  })}
+                        return (
+                          <div key={index} className={`${bgColor} border rounded-lg p-3 text-sm animate-in slide-in-from-top-2`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant={badgeVariant} className="text-xs">
+                                {suggestion.confidence} confidence
+                              </Badge>
+                              <span className="font-medium">{suggestion.title}</span>
+                            </div>
+                            <p>{suggestion.message}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
             </CardContent>
