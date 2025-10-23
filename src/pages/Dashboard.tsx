@@ -59,7 +59,8 @@ function DashboardContent() {
       
       if (data) {
         setCampaignScript(data.ai_script);
-        setCampaignSuggestions(data.suggestions || []);
+        const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        setCampaignSuggestions(suggestions);
         console.log('[Dashboard] Loaded campaign script for segment:', currentLead.segment);
       }
     };
@@ -542,7 +543,7 @@ useEffect(() => {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Lightbulb className="h-5 w-5 text-warning" />
-                  AI Sidekick
+                  AI Assistance
                   {aiConnected && (
                     <Badge variant="outline" className="ml-2 text-xs">
                       <Radio className="h-3 w-3 mr-1 text-success animate-pulse" />
@@ -560,51 +561,112 @@ useEffect(() => {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {!aiConnected && !aiConnecting && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p className="mb-2">AI Sidekick is offline</p>
-                  <p className="text-sm">Click "Connect AI" to enable real-time assistance</p>
-                </div>
-              )}
-              
-              {aiConnecting && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>Connecting to AI...</p>
-                </div>
-              )}
-
-              {aiConnected && suggestions.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p className="mb-2">Listening to call...</p>
-                  <p className="text-sm">AI suggestions will appear here</p>
-                </div>
-              )}
-
-              {suggestions.map((suggestion, index) => {
-                const bgColor = 
-                  suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
-                  suggestion.type === 'sentiment' ? 'bg-info/10 border-info/20' :
-                  suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
-                  'bg-accent/10 border-accent/20';
-                
-                const badgeVariant = 
-                  suggestion.confidence === 'high' ? 'default' :
-                  suggestion.confidence === 'medium' ? 'secondary' :
-                  'outline';
-
-                return (
-                  <div key={index} className={`${bgColor} border rounded-lg p-3 text-sm`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant={badgeVariant} className="text-xs">
-                        {suggestion.confidence} confidence
+            <CardContent>
+              <Tabs defaultValue="campaign" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="campaign">Campaign Script</TabsTrigger>
+                  <TabsTrigger value="realtime">
+                    Real-time AI
+                    {suggestions.length > 0 && (
+                      <Badge variant="secondary" className="ml-2">
+                        {suggestions.length}
                       </Badge>
-                      <span className="font-medium">{suggestion.title}</span>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+                
+                {/* Campaign Script Tab */}
+                <TabsContent value="campaign" className="space-y-4 mt-4">
+                  {campaignScript ? (
+                    <>
+                      <div className="bg-accent/10 border border-accent/20 rounded-lg p-3 mb-4">
+                        <h4 className="font-medium mb-2">Campaign Objective</h4>
+                        <p className="text-sm whitespace-pre-line">{campaignScript}</p>
+                      </div>
+                      
+                      {campaignSuggestions.length > 0 && (
+                        <div className="space-y-3">
+                          <h4 className="font-medium text-sm">Key Talking Points</h4>
+                          {campaignSuggestions.map((suggestion: any, index: number) => {
+                            const bgColor = 
+                              suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
+                              suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
+                              suggestion.type === 'info' ? 'bg-blue-50 border-blue-200' :
+                              'bg-accent/10 border-accent/20';
+                            
+                            return (
+                              <div key={index} className={`${bgColor} border rounded-lg p-3 text-sm`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline" className="text-xs">
+                                    {suggestion.type}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    Trigger: {suggestion.trigger}
+                                  </span>
+                                </div>
+                                <p className="font-medium mt-1">{suggestion.message}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="mb-2">No campaign script available</p>
+                      <p className="text-sm">Select a lead with a campaign to see scripts</p>
                     </div>
-                    <p>{suggestion.message}</p>
-                  </div>
-                );
-              })}
+                  )}
+                </TabsContent>
+                
+                {/* Real-time AI Tab */}
+                <TabsContent value="realtime" className="space-y-4 mt-4">
+                  {!aiConnected && !aiConnecting && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="mb-2">AI Sidekick is offline</p>
+                      <p className="text-sm">Click "Connect AI" to enable real-time assistance</p>
+                    </div>
+                  )}
+                  
+                  {aiConnecting && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>Connecting to AI...</p>
+                    </div>
+                  )}
+
+                  {aiConnected && suggestions.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="mb-2">Listening to call...</p>
+                      <p className="text-sm">AI suggestions will appear here</p>
+                    </div>
+                  )}
+
+                  {suggestions.map((suggestion, index) => {
+                    const bgColor = 
+                      suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
+                      suggestion.type === 'sentiment' ? 'bg-info/10 border-info/20' :
+                      suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
+                      'bg-accent/10 border-accent/20';
+                    
+                    const badgeVariant = 
+                      suggestion.confidence === 'high' ? 'default' :
+                      suggestion.confidence === 'medium' ? 'secondary' :
+                      'outline';
+
+                    return (
+                      <div key={index} className={`${bgColor} border rounded-lg p-3 text-sm`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant={badgeVariant} className="text-xs">
+                            {suggestion.confidence} confidence
+                          </Badge>
+                          <span className="font-medium">{suggestion.title}</span>
+                        </div>
+                        <p>{suggestion.message}</p>
+                      </div>
+                    );
+                  })}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
 
