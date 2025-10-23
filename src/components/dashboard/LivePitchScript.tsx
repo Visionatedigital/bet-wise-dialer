@@ -3,13 +3,14 @@ import { Label } from '@/components/ui/label';
 import { CheckSquare } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { useSpeechTracking } from '@/hooks/useSpeechTracking';
 
 interface LivePitchScriptProps {
   leadName: string;
   campaign: string;
   leadIntent?: string;
-  spokenWords?: string[]; // Words that have been spoken by the agent
   isCallActive: boolean;
+  audioContext?: AudioContext;
 }
 
 const complianceItems = [
@@ -23,8 +24,8 @@ export const LivePitchScript = ({
   leadName, 
   campaign, 
   leadIntent,
-  spokenWords = [],
-  isCallActive 
+  isCallActive,
+  audioContext
 }: LivePitchScriptProps) => {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -36,6 +37,66 @@ export const LivePitchScript = ({
     responsibleGaming: false,
     recordingConsent: false
   });
+
+  // Initialize speech tracking
+  const { fullTranscript, isConnected, sendAudioData } = useSpeechTracking({
+    isCallActive,
+    onTranscriptUpdate: (transcript) => {
+      console.log('[LivePitchScript] Transcript update:', transcript);
+    }
+  });
+
+  // Setup audio capture when call is active
+  useEffect(() => {
+    if (!isCallActive || !audioContext) return;
+
+    let mediaStream: MediaStream | null = null;
+    let audioSource: MediaStreamAudioSourceNode | null = null;
+    let processor: ScriptProcessorNode | null = null;
+
+    const setupAudioCapture = async () => {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            sampleRate: 24000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          } 
+        });
+        
+        audioSource = audioContext.createMediaStreamSource(mediaStream);
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        processor.onaudioprocess = (e) => {
+          const inputData = e.inputBuffer.getChannelData(0);
+          sendAudioData(inputData.buffer);
+        };
+
+        audioSource.connect(processor);
+        processor.connect(audioContext.destination);
+        
+        console.log('[LivePitchScript] Audio capture started');
+      } catch (error) {
+        console.error('[LivePitchScript] Error setting up audio capture:', error);
+      }
+    };
+
+    setupAudioCapture();
+
+    return () => {
+      if (processor) {
+        processor.disconnect();
+      }
+      if (audioSource) {
+        audioSource.disconnect();
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [isCallActive, audioContext, sendAudioData]);
 
   // Full script text
   const scriptText = `Hello ${leadName || '[Customer Name]'}, this is your agent calling from Betsure Uganda. I hope you're having a great day! I'm calling to share an exclusive offer that's perfect for valued customers like yourself. We have a special welcome bonus available for you today - when you make your first deposit, we'll match it 100% up to UGX 200,000. That means if you deposit UGX 100,000, you'll have UGX 200,000 to bet with! We also offer the best odds in Uganda, instant payouts via Mobile Money, and 24/7 customer support. Would you be interested in taking advantage of this exclusive offer today?`;
@@ -63,18 +124,34 @@ export const LivePitchScript = ({
 
   // Track spoken words and highlight current position
   useEffect(() => {
-    if (spokenWords.length > 0) {
-      // Find the index of the last spoken word in the script
-      const lastSpokenWord = spokenWords[spokenWords.length - 1].toLowerCase();
-      const wordIndex = scriptWords.findIndex((word, idx) => 
-        idx >= currentWordIndex && word.toLowerCase().includes(lastSpokenWord)
-      );
+    if (!fullTranscript) return;
+
+    const transcriptWords = fullTranscript.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+    let matchedIndex = 0;
+
+    // Match transcript words to script words
+    for (let i = 0; i < scriptWords.length; i++) {
+      const scriptWord = scriptWords[i].toLowerCase().replace(/[.,!?;:]/g, '');
+      const transcriptWord = transcriptWords[matchedIndex]?.replace(/[.,!?;:]/g, '');
       
-      if (wordIndex !== -1) {
-        setCurrentWordIndex(wordIndex);
+      if (scriptWord === transcriptWord || scriptWord.includes(transcriptWord)) {
+        matchedIndex++;
+        setCurrentWordIndex(i + 1); // Next word to speak
       }
+      
+      if (matchedIndex >= transcriptWords.length) break;
     }
-  }, [spokenWords, currentWordIndex, scriptWords]);
+
+    // Auto-check compliance based on keywords
+    const lowerTranscript = fullTranscript.toLowerCase();
+    setComplianceChecked(prev => ({
+      ...prev,
+      introduction: prev.introduction || lowerTranscript.includes('calling from') || lowerTranscript.includes('my name is'),
+      dataProtection: prev.dataProtection || lowerTranscript.includes('data protection') || lowerTranscript.includes('privacy'),
+      responsibleGaming: prev.responsibleGaming || lowerTranscript.includes('responsible gaming') || lowerTranscript.includes('gamble responsibly'),
+      recordingConsent: prev.recordingConsent || lowerTranscript.includes('recording') || lowerTranscript.includes('recorded')
+    }));
+  }, [fullTranscript, scriptWords]);
 
   // Render script with word-by-word highlighting
   const renderHighlightedScript = () => {
@@ -96,11 +173,11 @@ export const LivePitchScript = ({
           return (
             <span
               key={idx}
-              className={`transition-all duration-300 ${
+              className={`inline-block transition-all duration-200 ${
                 isCurrentWord 
-                  ? 'text-[#32CD32] font-bold shadow-[0_0_10px_#32CD32] bg-[#32CD32]/10 px-1 rounded' 
+                  ? 'text-[#32CD32] font-bold scale-125 shadow-[0_0_15px_#32CD32] bg-[#32CD32]/20 px-2 py-0.5 rounded mx-1 animate-pulse' 
                   : isSpoken 
-                    ? 'text-muted-foreground' 
+                    ? 'text-muted-foreground opacity-60' 
                     : 'text-foreground'
               }`}
             >
@@ -117,9 +194,16 @@ export const LivePitchScript = ({
   return (
     <div className="space-y-4">
       <div className="bg-accent/50 rounded-lg p-4">
-        <h4 className="font-medium mb-3 text-base">
-          Opening Script - {campaign || 'Default'}
-        </h4>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-base">
+            Opening Script - {campaign || 'Default'}
+          </h4>
+          {isConnected && (
+            <Badge variant="outline" className="text-xs">
+              🎤 Listening
+            </Badge>
+          )}
+        </div>
         <div ref={scriptRef} className="mb-3">
           {renderHighlightedScript()}
         </div>

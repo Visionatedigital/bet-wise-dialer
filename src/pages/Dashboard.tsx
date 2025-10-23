@@ -47,6 +47,17 @@ function DashboardContent() {
   const [callSentiment, setCallSentiment] = useState<CallSentiment>('neutral');
   const suggestionTimerRef = useRef<NodeJS.Timeout | null>(null);
   const sentimentTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+
+  // Initialize AudioContext
+  useEffect(() => {
+    const ctx = new AudioContext({ sampleRate: 24000 });
+    setAudioContext(ctx);
+
+    return () => {
+      ctx.close();
+    };
+  }, []);
 
   // Fetch campaign AI scripts
   const [campaignScript, setCampaignScript] = useState<string | null>(null);
@@ -485,8 +496,8 @@ useEffect(() => {
                     leadName={currentLead?.name || ''}
                     campaign={currentLead?.campaign || 'Default'}
                     leadIntent={currentLead?.intent}
-                    spokenWords={[]}
                     isCallActive={currentCallId !== null}
+                    audioContext={audioContext || undefined}
                   />
                 </TabsContent>
                 
