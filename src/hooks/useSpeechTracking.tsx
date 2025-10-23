@@ -121,7 +121,7 @@ export const useSpeechTracking = ({ isCallActive, onTranscriptUpdate }: UseSpeec
         wsRef.current = null;
       }
     };
-  }, [isCallActive, onTranscriptUpdate]);
+  }, [isCallActive]); // Removed onTranscriptUpdate to prevent infinite loop
 
   const sendAudioData = (audioData: ArrayBuffer) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
