@@ -602,47 +602,12 @@ useEffect(() => {
                 
                 {/* Real-time AI Tab */}
                 <TabsContent value="realtime" className="space-y-4 mt-4">
-                  {/* Sentiment Orb */}
+                  {/* Sentiment Orb with Suggestions */}
                   <CallSentimentOrb 
                     sentiment={callSentiment}
                     isActive={currentCallId !== null}
+                    suggestions={suggestions}
                   />
-
-                  {suggestions.length === 0 && (
-                    <div className="text-center py-4 text-muted-foreground">
-                      <p className="text-sm">Suggestions will appear during calls</p>
-                    </div>
-                  )}
-
-                  {suggestions.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-sm">Conversion Suggestions</h4>
-                      {suggestions.map((suggestion, index) => {
-                        const bgColor = 
-                          suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
-                          suggestion.type === 'sentiment' ? 'bg-info/10 border-info/20' :
-                          suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
-                          'bg-accent/10 border-accent/20';
-                        
-                        const badgeVariant = 
-                          suggestion.confidence === 'high' ? 'default' :
-                          suggestion.confidence === 'medium' ? 'secondary' :
-                          'outline';
-
-                        return (
-                          <div key={index} className={`${bgColor} border rounded-lg p-3 text-sm animate-in slide-in-from-top-2`}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Badge variant={badgeVariant} className="text-xs">
-                                {suggestion.confidence} confidence
-                              </Badge>
-                              <span className="font-medium">{suggestion.title}</span>
-                            </div>
-                            <p>{suggestion.message}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </TabsContent>
               </Tabs>
             </CardContent>

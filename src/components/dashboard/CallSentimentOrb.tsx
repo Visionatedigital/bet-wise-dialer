@@ -1,13 +1,24 @@
 import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+
+interface TimedSuggestion {
+  type: 'action' | 'compliance' | 'info';
+  confidence: 'high' | 'medium' | 'low';
+  title: string;
+  message: string;
+  timestamp?: number;
+}
 
 interface CallSentimentOrbProps {
   sentiment: 'neutral' | 'positive' | 'negative' | 'critical';
   isActive: boolean;
+  suggestions?: TimedSuggestion[];
 }
 
-export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps) => {
+export const CallSentimentOrb = ({ sentiment, isActive, suggestions = [] }: CallSentimentOrbProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const colorTransitionRef = useRef({ r: 59, g: 130, b: 246 }); // Start with blue
   
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -22,7 +33,7 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
     let frame = 0;
     let animationId: number;
     
-    const getSentimentColor = () => {
+    const getTargetSentimentColor = () => {
       switch (sentiment) {
         case 'positive':
           return { r: 34, g: 197, b: 94 }; // green
@@ -35,10 +46,23 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
       }
     };
     
+    // Smooth color interpolation
+    const lerpColor = (current: { r: number; g: number; b: number }, target: { r: number; g: number; b: number }, speed: number) => {
+      return {
+        r: current.r + (target.r - current.r) * speed,
+        g: current.g + (target.g - current.g) * speed,
+        b: current.b + (target.b - current.b) * speed
+      };
+    };
+    
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      const color = getSentimentColor();
+      // Smoothly transition to target color
+      const targetColor = getTargetSentimentColor();
+      colorTransitionRef.current = lerpColor(colorTransitionRef.current, targetColor, 0.05);
+      const color = colorTransitionRef.current;
+      
       const numDots = 150;
       
       // Slower animation when dormant
@@ -149,37 +173,85 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
   };
   
   return (
-    <div className="flex flex-col items-center justify-center py-8">
-      <div className={cn(
-        "relative transition-all duration-700",
-        !isActive && "animate-breathing"
-      )}>
-        <canvas 
-          ref={canvasRef} 
-          width={300} 
-          height={300}
-          className="transition-opacity duration-500"
-        />
-        {!isActive && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-muted-foreground text-sm font-medium">Waiting for call...</p>
+    <div className="flex flex-col items-center w-full">
+      {/* Orb Section */}
+      <div className="flex flex-col items-center justify-center py-8">
+        <div className={cn(
+          "relative transition-all duration-700",
+          !isActive && "animate-breathing"
+        )}>
+          <canvas 
+            ref={canvasRef} 
+            width={300} 
+            height={300}
+            className="transition-opacity duration-500"
+          />
+          {!isActive && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <p className="text-muted-foreground text-sm font-medium">Waiting for call...</p>
+            </div>
+          )}
+        </div>
+        <div className="mt-4 text-center">
+          {isActive ? (
+            <>
+              <p className={cn("font-medium text-lg transition-colors duration-700", getSentimentColor())}>
+                {getSentimentLabel()}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Real-time sentiment analysis
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              AI will analyze call sentiment when active
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Suggestions Section */}
+      <div className="w-full mt-4">
+        {suggestions.length === 0 && isActive && (
+          <div className="text-center py-4 text-muted-foreground">
+            <p className="text-sm">Listening for conversation cues...</p>
           </div>
         )}
-      </div>
-      <div className="mt-4 text-center">
-        {isActive ? (
-          <>
-            <p className={cn("font-medium text-lg", getSentimentColor())}>
-              {getSentimentLabel()}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Real-time sentiment analysis
-            </p>
-          </>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            AI will analyze call sentiment when active
-          </p>
+
+        {suggestions.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="font-medium text-sm px-2">AI Suggestions</h4>
+            {suggestions.map((suggestion, index) => {
+              const bgColor = 
+                suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
+                suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
+                'bg-info/10 border-info/20';
+              
+              const badgeVariant = 
+                suggestion.confidence === 'high' ? 'default' :
+                suggestion.confidence === 'medium' ? 'secondary' :
+                'outline';
+
+              return (
+                <div 
+                  key={`${suggestion.timestamp}-${index}`} 
+                  className={cn(
+                    bgColor,
+                    "border rounded-lg p-3 text-sm",
+                    "animate-in slide-in-from-top-2 fade-in duration-300"
+                  )}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant={badgeVariant} className="text-xs">
+                      {suggestion.confidence} confidence
+                    </Badge>
+                    <span className="font-medium">{suggestion.title}</span>
+                  </div>
+                  <p className="text-foreground/90">{suggestion.message}</p>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
