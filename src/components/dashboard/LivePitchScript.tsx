@@ -98,10 +98,13 @@ export const LivePitchScript = ({
     };
   }, [isCallActive, audioContext, sendAudioData]);
 
-  // Full script text
+  // Full script text split into sentences for better highlighting
   const scriptText = `Hello ${leadName || '[Customer Name]'}, this is your agent calling from Betsure Uganda. I hope you're having a great day! I'm calling to share an exclusive offer that's perfect for valued customers like yourself. We have a special welcome bonus available for you today - when you make your first deposit, we'll match it 100% up to UGX 200,000. That means if you deposit UGX 100,000, you'll have UGX 200,000 to bet with! We also offer the best odds in Uganda, instant payouts via Mobile Money, and 24/7 customer support. Would you be interested in taking advantage of this exclusive offer today?`;
 
+  const scriptSentences = scriptText.match(/[^.!?]+[.!?]+/g) || [scriptText];
   const scriptWords = scriptText.split(' ');
+  
+  const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
 
   // Typewriter effect on initial load
   useEffect(() => {
@@ -126,34 +129,63 @@ export const LivePitchScript = ({
   useEffect(() => {
     if (!fullTranscript) return;
 
-    const transcriptWords = fullTranscript.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-    let matchedIndex = 0;
+    console.log('[LivePitchScript] 📝 Processing transcript:', fullTranscript);
 
-    // Match transcript words to script words
-    for (let i = 0; i < scriptWords.length; i++) {
-      const scriptWord = scriptWords[i].toLowerCase().replace(/[.,!?;:]/g, '');
-      const transcriptWord = transcriptWords[matchedIndex]?.replace(/[.,!?;:]/g, '');
-      
-      if (scriptWord === transcriptWord || scriptWord.includes(transcriptWord)) {
-        matchedIndex++;
-        setCurrentWordIndex(i + 1); // Next word to speak
+    // Normalize text for comparison
+    const normalizeText = (text: string) => 
+      text.toLowerCase().replace(/[.,!?;:]/g, '').trim();
+
+    const transcriptNormalized = normalizeText(fullTranscript);
+    const scriptNormalized = normalizeText(scriptText);
+
+    // Find how much of the script has been spoken
+    let longestMatch = 0;
+    let matchedWordCount = 0;
+    
+    const transcriptWords = transcriptNormalized.split(/\s+/).filter(w => w.length > 0);
+    const scriptWordsNormalized = scriptNormalized.split(/\s+/).filter(w => w.length > 0);
+    
+    // Find the longest matching sequence
+    for (let i = 0; i < scriptWordsNormalized.length; i++) {
+      let matches = 0;
+      for (let j = 0; j < transcriptWords.length && (i + j) < scriptWordsNormalized.length; j++) {
+        if (scriptWordsNormalized[i + j] === transcriptWords[j]) {
+          matches++;
+        }
       }
-      
-      if (matchedIndex >= transcriptWords.length) break;
+      if (matches > longestMatch) {
+        longestMatch = matches;
+        matchedWordCount = i + matches;
+      }
+    }
+
+    setCurrentWordIndex(matchedWordCount);
+    console.log('[LivePitchScript] 📍 Current word index:', matchedWordCount, '/', scriptWords.length);
+
+    // Determine current sentence based on word index
+    let wordCount = 0;
+    for (let i = 0; i < scriptSentences.length; i++) {
+      const sentenceWords = scriptSentences[i].split(' ').filter(w => w.length > 0);
+      wordCount += sentenceWords.length;
+      if (matchedWordCount < wordCount) {
+        setCurrentSentenceIndex(i);
+        console.log('[LivePitchScript] 📄 Current sentence:', i, scriptSentences[i]);
+        break;
+      }
     }
 
     // Auto-check compliance based on keywords
     const lowerTranscript = fullTranscript.toLowerCase();
     setComplianceChecked(prev => ({
       ...prev,
-      introduction: prev.introduction || lowerTranscript.includes('calling from') || lowerTranscript.includes('my name is'),
+      introduction: prev.introduction || lowerTranscript.includes('calling from') || lowerTranscript.includes('my name is') || lowerTranscript.includes('this is'),
       dataProtection: prev.dataProtection || lowerTranscript.includes('data protection') || lowerTranscript.includes('privacy'),
       responsibleGaming: prev.responsibleGaming || lowerTranscript.includes('responsible gaming') || lowerTranscript.includes('gamble responsibly'),
-      recordingConsent: prev.recordingConsent || lowerTranscript.includes('recording') || lowerTranscript.includes('recorded')
+      recordingConsent: prev.recordingConsent || lowerTranscript.includes('recording') || lowerTranscript.includes('recorded') || lowerTranscript.includes('call may be')
     }));
-  }, [fullTranscript, scriptWords]);
+  }, [fullTranscript, scriptText, scriptWords, scriptSentences]);
 
-  // Render script with word-by-word highlighting
+  // Render script with sentence-level highlighting
   const renderHighlightedScript = () => {
     if (isTyping) {
       return (
@@ -164,31 +196,58 @@ export const LivePitchScript = ({
       );
     }
 
+    let wordIndex = 0;
     return (
-      <p className="text-sm leading-relaxed flex flex-wrap gap-1">
-        {scriptWords.map((word, idx) => {
-          const isCurrentWord = idx === currentWordIndex;
-          const isSpoken = idx < currentWordIndex;
+      <div className="text-sm leading-relaxed space-y-3">
+        {scriptSentences.map((sentence, sentenceIdx) => {
+          const sentenceWords = sentence.split(' ').filter(w => w.length > 0);
+          const isCurrentSentence = sentenceIdx === currentSentenceIndex;
+          const isPastSentence = sentenceIdx < currentSentenceIndex;
+          const startWordIndex = wordIndex;
+          wordIndex += sentenceWords.length;
           
           return (
-            <span
-              key={idx}
-              className={`inline-block transition-all duration-300 ease-out ${
-                isCurrentWord 
-                  ? 'text-[#32CD32] font-semibold scale-[1.4] backdrop-blur-sm bg-gradient-to-br from-[#32CD32]/10 via-transparent to-[#32CD32]/5 px-2 py-1 rounded-lg border border-[#32CD32]/30 shadow-[0_0_20px_rgba(50,205,50,0.3),inset_0_0_10px_rgba(50,205,50,0.1)] origin-center' 
-                  : isSpoken 
-                    ? 'text-muted-foreground/70' 
-                    : 'text-foreground'
+            <div
+              key={sentenceIdx}
+              className={`transition-all duration-500 ease-out ${
+                isCurrentSentence
+                  ? 'scale-105 origin-left'
+                  : 'scale-100'
               }`}
-              style={{
-                transformOrigin: 'center',
-              }}
             >
-              {word}
-            </span>
+              <p className="flex flex-wrap gap-1">
+                {sentenceWords.map((word, wordIdx) => {
+                  const globalWordIdx = startWordIndex + wordIdx;
+                  const isCurrentWord = globalWordIdx === currentWordIndex;
+                  const isSpoken = globalWordIdx < currentWordIndex;
+                  
+                  return (
+                    <span
+                      key={wordIdx}
+                      className={`inline-block transition-all duration-300 ease-out ${
+                        isCurrentWord 
+                          ? 'text-[#32CD32] font-semibold scale-[1.3] backdrop-blur-sm bg-gradient-to-br from-[#32CD32]/10 via-transparent to-[#32CD32]/5 px-2 py-1 rounded-lg border border-[#32CD32]/30 shadow-[0_0_20px_rgba(50,205,50,0.3),inset_0_0_10px_rgba(50,205,50,0.1)] origin-center' 
+                          : isSpoken 
+                            ? 'text-muted-foreground/60' 
+                            : isCurrentSentence
+                              ? 'text-foreground font-medium'
+                              : isPastSentence
+                                ? 'text-muted-foreground/40'
+                                : 'text-foreground/80'
+                      }`}
+                      style={{
+                        transformOrigin: 'center',
+                      }}
+                    >
+                      {word}
+                    </span>
+                  );
+                })}
+              </p>
+            </div>
           );
         })}
-      </p>
+      </div>
     );
   };
 
