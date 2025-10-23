@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { getCategoryFromSegment, SCRIPT_SNIPPETS } from "@/data/aiScriptsMock";
+import { getCategoryFromSegment, getSequenceForCategory } from "@/data/aiScriptsMock";
 import type { CallSentiment } from "@/utils/RealtimeAI";
 
 function DashboardContent() {
@@ -74,35 +74,63 @@ function DashboardContent() {
     loadCampaignScript();
   }, [currentLead?.segment]);
 
-  // Mock sentiment and suggestions (no realtime pipeline)
+  // Mock sentiment and suggestions with natural call flow
   useEffect(() => {
     // Clear timers when no call
     if (!currentCallId) {
       if (suggestionTimerRef.current) clearInterval(suggestionTimerRef.current);
       if (sentimentTimerRef.current) clearInterval(sentimentTimerRef.current);
       setCallSentiment('neutral');
+      setSuggestions([]);
       return;
     }
 
-    // Sentiment oscillation while on a call
-    sentimentTimerRef.current = setInterval(() => {
-      const states: CallSentiment[] = ['neutral', 'positive', 'neutral', 'negative', 'critical', 'neutral'];
-      setCallSentiment(states[Math.floor(Math.random() * states.length)]);
-    }, 2000);
+    // Get the script sequence for this customer segment
+    const category = getCategoryFromSegment(currentLead?.segment || null);
+    const scriptSequence = getSequenceForCategory(category);
+    const callStartTime = Date.now();
+    const activeTimers: NodeJS.Timeout[] = [];
 
-    // Suggestions pulled from uploaded script based on segment
-    suggestionTimerRef.current = setInterval(() => {
-      const category = getCategoryFromSegment(currentLead?.segment || null);
-      const pool = SCRIPT_SNIPPETS[category];
-      const msg = pool[Math.floor(Math.random() * pool.length)];
-      setSuggestions(prev => [
-        { type: 'action', confidence: 'high', title: 'Coach Tip', message: msg, timestamp: Date.now() },
-        ...prev
-      ].slice(0, 10));
-    }, 3500);
+    // Schedule each suggestion at its designated time
+    scriptSequence.forEach((suggestion) => {
+      const timer = setTimeout(() => {
+        setSuggestions(prev => [
+          {
+            type: suggestion.type,
+            confidence: suggestion.confidence,
+            title: suggestion.title,
+            message: suggestion.message,
+            timestamp: Date.now()
+          },
+          ...prev
+        ].slice(0, 5)); // Keep last 5 suggestions visible
+      }, suggestion.delay * 1000);
+      
+      activeTimers.push(timer);
+    });
+
+    // Sentiment cycles naturally through call phases
+    let sentimentPhase = 0;
+    const sentimentPhases: CallSentiment[] = ['neutral', 'neutral', 'positive', 'neutral', 'positive'];
+    
+    sentimentTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - callStartTime) / 1000;
+      
+      // Change sentiment based on call progress
+      if (elapsed < 15) {
+        setCallSentiment('neutral'); // Greeting phase
+      } else if (elapsed < 35) {
+        setCallSentiment(sentimentPhases[sentimentPhase % sentimentPhases.length]);
+        sentimentPhase++;
+      } else if (elapsed < 50) {
+        setCallSentiment(Math.random() > 0.5 ? 'positive' : 'neutral'); // Active engagement
+      } else {
+        setCallSentiment('positive'); // Closing phase
+      }
+    }, 3000);
 
     return () => {
-      if (suggestionTimerRef.current) clearInterval(suggestionTimerRef.current);
+      activeTimers.forEach(timer => clearTimeout(timer));
       if (sentimentTimerRef.current) clearInterval(sentimentTimerRef.current);
     };
   }, [currentCallId, currentLead?.segment]);
