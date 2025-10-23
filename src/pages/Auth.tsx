@@ -11,11 +11,13 @@ import { useEffect } from "react";
 import { z } from "zod";
 import loginBackground from "@/assets/login-background.png";
 import betsureLogo from "@/assets/betsure-logo.png";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const authSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   fullName: z.string().min(2, "Full name must be at least 2 characters").optional(),
+  role: z.enum(["agent", "management", "admin"]).optional(),
 });
 
 const Auth = () => {
@@ -33,7 +35,8 @@ const Auth = () => {
   const [signUpData, setSignUpData] = useState({
     email: "",
     password: "",
-    fullName: ""
+    fullName: "",
+    role: "agent" as "agent" | "management" | "admin"
   });
 
   useEffect(() => {
@@ -77,7 +80,7 @@ const Auth = () => {
 
     try {
       const validation = authSchema.parse(signUpData);
-      const result = await signUp(validation.email, validation.password, validation.fullName);
+      const result = await signUp(validation.email, validation.password, validation.fullName, validation.role);
       
       if (result.error) {
         if (result.error.message.includes("User already registered")) {
@@ -182,6 +185,24 @@ const Auth = () => {
                         placeholder="Enter your full name"
                         required
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-role" className="text-white">Role</Label>
+                      <Select
+                        value={signUpData.role}
+                        onValueChange={(value: "agent" | "management" | "admin") => 
+                          setSignUpData(prev => ({ ...prev, role: value }))
+                        }
+                      >
+                        <SelectTrigger className="bg-transparent border-gray-500 text-white focus:border-green-500 focus:ring-green-500">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="agent">Agent</SelectItem>
+                          <SelectItem value="management">Manager</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="signup-email" className="text-white">Email</Label>
