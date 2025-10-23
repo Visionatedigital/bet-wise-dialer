@@ -19,8 +19,8 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { useRealtimeAI } from "@/hooks/useRealtimeAI";
-import { useSpeechTracking } from "@/hooks/useSpeechTracking";
+import { getCategoryFromSegment, SCRIPT_SNIPPETS } from "@/data/aiScriptsMock";
+import type { CallSentiment } from "@/utils/RealtimeAI";
 
 function DashboardContent() {
   const { user } = useAuth();
@@ -42,16 +42,11 @@ function DashboardContent() {
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [showCallHistory, setShowCallHistory] = useState(false);
   
-  // Real-time AI integration
-  const { isConnected: aiConnected, isConnecting: aiConnecting, suggestions, sentiment: callSentiment, connect: connectAI, disconnect: disconnectAI, sendContext } = useRealtimeAI();
-
-  // Speech tracking for live script highlighting
-  const { spokenWords, fullTranscript, isConnected: speechConnected } = useSpeechTracking({
-    isCallActive: currentCallId !== null,
-    onTranscriptUpdate: (transcript) => {
-      console.log('[Dashboard] Agent said:', transcript);
-    }
-  });
+  // Mock AI state (no realtime pipeline)
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [callSentiment, setCallSentiment] = useState<CallSentiment>('neutral');
+  const suggestionTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const sentimentTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch campaign AI scripts
   const [campaignScript, setCampaignScript] = useState<string | null>(null);
@@ -79,22 +74,38 @@ function DashboardContent() {
     loadCampaignScript();
   }, [currentLead?.segment]);
 
-  // Send conversation context to AI when transcript updates
+  // Mock sentiment and suggestions (no realtime pipeline)
   useEffect(() => {
-    if (fullTranscript && aiConnected && currentCallId && currentLead) {
-      const context = `
-Current call with ${currentLead.name} (${currentLead.segment} segment).
-Agent said: "${fullTranscript}"
-
-Analyze the conversation sentiment and provide specific tactics to help close this deal. Focus on:
-1. Addressing customer objections
-2. Highlighting relevant benefits
-3. Creating urgency
-4. Maintaining compliance
-      `.trim();
-      sendContext(context);
+    // Clear timers when no call
+    if (!currentCallId) {
+      if (suggestionTimerRef.current) clearInterval(suggestionTimerRef.current);
+      if (sentimentTimerRef.current) clearInterval(sentimentTimerRef.current);
+      setCallSentiment('neutral');
+      return;
     }
-  }, [fullTranscript, aiConnected, currentCallId, currentLead, sendContext]);
+
+    // Sentiment oscillation while on a call
+    sentimentTimerRef.current = setInterval(() => {
+      const states: CallSentiment[] = ['neutral', 'positive', 'neutral', 'negative', 'critical', 'neutral'];
+      setCallSentiment(states[Math.floor(Math.random() * states.length)]);
+    }, 2000);
+
+    // Suggestions pulled from uploaded script based on segment
+    suggestionTimerRef.current = setInterval(() => {
+      const category = getCategoryFromSegment(currentLead?.segment || null);
+      const pool = SCRIPT_SNIPPETS[category];
+      const msg = pool[Math.floor(Math.random() * pool.length)];
+      setSuggestions(prev => [
+        { type: 'action', confidence: 'high', title: 'Coach Tip', message: msg, timestamp: Date.now() },
+        ...prev
+      ].slice(0, 10));
+    }, 3500);
+
+    return () => {
+      if (suggestionTimerRef.current) clearInterval(suggestionTimerRef.current);
+      if (sentimentTimerRef.current) clearInterval(sentimentTimerRef.current);
+    };
+  }, [currentCallId, currentLead?.segment]);
 
   useEffect(() => {
     if (user) {
