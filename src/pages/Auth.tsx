@@ -77,16 +77,16 @@ const Auth = () => {
 
     try {
       const validation = authSchema.parse(signUpData);
-      const { error } = await signUp(validation.email, validation.password, validation.fullName);
+      const result = await signUp(validation.email, validation.password, validation.fullName);
       
-      if (error) {
-        if (error.message.includes("User already registered")) {
+      if (result.error) {
+        if (result.error.message.includes("User already registered")) {
           setError("An account with this email already exists");
         } else {
-          setError(error.message);
+          setError(result.error.message);
         }
       } else {
-        setSuccess("Account created successfully! Please check your email to verify your account.");
+        setSuccess(result.message || "Account created successfully! Please check your email to verify your account.");
       }
     } catch (err) {
       if (err instanceof z.ZodError) {

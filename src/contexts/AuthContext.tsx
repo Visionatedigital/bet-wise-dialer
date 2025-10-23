@@ -7,7 +7,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any; message?: string }>;
   signOut: () => Promise<void>;
 }
 
@@ -67,6 +67,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     });
+    
+    // Return specific message for pending approval
+    if (!error) {
+      return { 
+        error: null,
+        message: 'Account created successfully! Your account is pending approval. An administrator will review and approve your access.'
+      };
+    }
+    
     return { error };
   };
 

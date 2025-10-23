@@ -219,6 +219,8 @@ export type Database = {
       }
       leads: {
         Row: {
+          assigned_at: string | null
+          assigned_by: string | null
           campaign: string | null
           campaign_id: string | null
           created_at: string
@@ -241,6 +243,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
           campaign?: string | null
           campaign_id?: string | null
           created_at?: string
@@ -263,6 +267,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
           campaign?: string | null
           campaign_id?: string | null
           created_at?: string
@@ -329,6 +335,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          approved: boolean
           avatar_url: string | null
           created_at: string
           current_call_start: string | null
@@ -340,6 +347,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          approved?: boolean
           avatar_url?: string | null
           created_at?: string
           current_call_start?: string | null
@@ -351,6 +359,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          approved?: boolean
           avatar_url?: string | null
           created_at?: string
           current_call_start?: string | null
