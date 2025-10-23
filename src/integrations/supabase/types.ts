@@ -114,6 +114,7 @@ export type Database = {
       }
       campaigns: {
         Row: {
+          ai_script: string | null
           created_at: string
           description: string | null
           end_date: string | null
@@ -121,8 +122,10 @@ export type Database = {
           name: string
           start_date: string | null
           status: string
+          suggestions: Json | null
           target_calls: number | null
           target_conversions: number | null
+          target_segment: string | null
           total_calls: number | null
           total_conversions: number | null
           total_deposits: number | null
@@ -131,6 +134,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_script?: string | null
           created_at?: string
           description?: string | null
           end_date?: string | null
@@ -138,8 +142,10 @@ export type Database = {
           name: string
           start_date?: string | null
           status?: string
+          suggestions?: Json | null
           target_calls?: number | null
           target_conversions?: number | null
+          target_segment?: string | null
           total_calls?: number | null
           total_conversions?: number | null
           total_deposits?: number | null
@@ -148,6 +154,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_script?: string | null
           created_at?: string
           description?: string | null
           end_date?: string | null
@@ -155,8 +162,10 @@ export type Database = {
           name?: string
           start_date?: string | null
           status?: string
+          suggestions?: Json | null
           target_calls?: number | null
           target_conversions?: number | null
+          target_segment?: string | null
           total_calls?: number | null
           total_conversions?: number | null
           total_deposits?: number | null
@@ -410,10 +419,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      cleanup_expired_webrtc_tokens: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      cleanup_expired_webrtc_tokens: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -422,7 +428,7 @@ export type Database = {
         Returns: boolean
       }
       verify_leads_rls: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           policy_count: number
           rls_enabled: boolean

@@ -42,10 +42,37 @@ function DashboardContent() {
   // Real-time AI integration
   const { isConnected: aiConnected, isConnecting: aiConnecting, suggestions, connect: connectAI, disconnect: disconnectAI, sendContext } = useRealtimeAI();
 
+  // Fetch campaign AI scripts
+  const [campaignScript, setCampaignScript] = useState<string | null>(null);
+  const [campaignSuggestions, setCampaignSuggestions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadCampaignScript = async () => {
+      if (!currentLead?.segment) return;
+      
+      const { data, error } = await supabase
+        .from('campaigns')
+        .select('ai_script, suggestions')
+        .eq('target_segment', currentLead.segment)
+        .eq('status', 'active')
+        .single();
+      
+      if (data) {
+        setCampaignScript(data.ai_script);
+        setCampaignSuggestions(data.suggestions || []);
+        console.log('[Dashboard] Loaded campaign script for segment:', currentLead.segment);
+      }
+    };
+
+    loadCampaignScript();
+  }, [currentLead?.segment]);
+
   // Send context to AI when call starts or notes change
   useEffect(() => {
     if (aiConnected && currentLead && currentCallId) {
       const context = `
+        Campaign Script: ${campaignScript || 'General support'}
+        
         Lead Information:
         - Name: ${currentLead.name}
         - Segment: ${currentLead.segment}
@@ -60,11 +87,11 @@ function DashboardContent() {
         - Responsible Gaming: ${complianceChecked.responsibleGaming ? 'Done' : 'Pending'}
         - Recording Consent: ${complianceChecked.recordingConsent ? 'Done' : 'Pending'}
         
-        Please provide real-time suggestions for this call.
+        Based on the campaign script and current call context, provide specific real-time suggestions to help the agent.
       `;
       sendContext(context);
     }
-  }, [aiConnected, currentLead, currentCallId, callNotes, complianceChecked, sendContext]);
+  }, [aiConnected, currentLead, currentCallId, callNotes, complianceChecked, sendContext, campaignScript]);
 
   useEffect(() => {
     if (user) {
