@@ -71,13 +71,33 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
       this.ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          console.log('[RealtimeAI] Received:', message.type);
+          console.log('[RealtimeAI] Received event:', message.type, message);
           
-          if (message.type === 'response.text.delta') {
-            // Accumulate text deltas and create suggestions
+          // Handle different response event types
+          if (message.type === 'response.output_item.added') {
+            console.log('[RealtimeAI] Output item added');
+          } else if (message.type === 'response.content_part.added') {
+            console.log('[RealtimeAI] Content part added');
+          } else if (message.type === 'response.text.delta') {
             this.handleTextDelta(message.delta);
-          } else if (message.type === 'response.text.done') {
-            this.handleTextComplete(message.text);
+          } else if (message.type === 'response.output_item.done') {
+            // Extract the complete text from the output item
+            const text = message.item?.content?.[0]?.text || '';
+            if (text) {
+              console.log('[RealtimeAI] Complete response:', text);
+              this.handleTextComplete(text);
+            }
+          } else if (message.type === 'response.done') {
+            // Fallback: extract text from the response
+            const outputs = message.response?.output || [];
+            outputs.forEach((output: any) => {
+              output.content?.forEach((content: any) => {
+                if (content.type === 'text' && content.text) {
+                  console.log('[RealtimeAI] Response text:', content.text);
+                  this.handleTextComplete(content.text);
+                }
+              });
+            });
           } else if (message.type === 'error') {
             console.error('[RealtimeAI] Error from OpenAI:', message.error);
           }
