@@ -165,7 +165,7 @@ export const LivePitchScript = ({
     }
 
     return (
-      <p className="text-sm leading-relaxed">
+      <p className="text-sm leading-relaxed flex flex-wrap gap-1">
         {scriptWords.map((word, idx) => {
           const isCurrentWord = idx === currentWordIndex;
           const isSpoken = idx < currentWordIndex;
@@ -173,15 +173,18 @@ export const LivePitchScript = ({
           return (
             <span
               key={idx}
-              className={`inline-block transition-all duration-200 ${
+              className={`inline-block transition-all duration-300 ease-out ${
                 isCurrentWord 
-                  ? 'text-[#32CD32] font-bold scale-125 shadow-[0_0_15px_#32CD32] bg-[#32CD32]/20 px-2 py-0.5 rounded mx-1 animate-pulse' 
+                  ? 'text-[#32CD32] font-semibold scale-[1.4] backdrop-blur-sm bg-gradient-to-br from-[#32CD32]/10 via-transparent to-[#32CD32]/5 px-2 py-1 rounded-lg border border-[#32CD32]/30 shadow-[0_0_20px_rgba(50,205,50,0.3),inset_0_0_10px_rgba(50,205,50,0.1)] origin-center' 
                   : isSpoken 
-                    ? 'text-muted-foreground opacity-60' 
+                    ? 'text-muted-foreground/70' 
                     : 'text-foreground'
               }`}
+              style={{
+                transformOrigin: 'center',
+              }}
             >
-              {word}{' '}
+              {word}
             </span>
           );
         })}
