@@ -10,7 +10,7 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   useEffect(() => {
-    if (!canvasRef.current || !isActive) return;
+    if (!canvasRef.current) return;
     
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -20,6 +20,7 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
     const centerY = canvas.height / 2;
     const baseRadius = 80;
     let frame = 0;
+    let animationId: number;
     
     const getSentimentColor = () => {
       switch (sentiment) {
@@ -41,12 +42,15 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
       const numPoints = 100;
       const points: { x: number; y: number }[] = [];
       
+      // Slower animation when dormant
+      const speed = isActive ? 1 : 0.3;
+      
       // Generate waveform points
       for (let i = 0; i < numPoints; i++) {
         const angle = (i / numPoints) * Math.PI * 2;
-        const wave1 = Math.sin(frame * 0.02 + i * 0.1) * 15;
-        const wave2 = Math.cos(frame * 0.03 + i * 0.15) * 10;
-        const wave3 = Math.sin(frame * 0.025 + i * 0.08) * 8;
+        const wave1 = Math.sin(frame * 0.02 * speed + i * 0.1) * 15;
+        const wave2 = Math.cos(frame * 0.03 * speed + i * 0.15) * 10;
+        const wave3 = Math.sin(frame * 0.025 * speed + i * 0.08) * 8;
         const radius = baseRadius + wave1 + wave2 + wave3;
         
         points.push({
@@ -55,10 +59,13 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
         });
       }
       
+      // Adjust opacity based on active state
+      const opacity = isActive ? 1 : 0.5;
+      
       // Draw outer glow
       const gradient = ctx.createRadialGradient(centerX, centerY, baseRadius - 20, centerX, centerY, baseRadius + 40);
-      gradient.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, 0.3)`);
-      gradient.addColorStop(0.5, `rgba(${color.r}, ${color.g}, ${color.b}, 0.1)`);
+      gradient.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, ${0.3 * opacity})`);
+      gradient.addColorStop(0.5, `rgba(${color.r}, ${color.g}, ${color.b}, ${0.1 * opacity})`);
       gradient.addColorStop(1, `rgba(${color.r}, ${color.g}, ${color.b}, 0)`);
       
       ctx.fillStyle = gradient;
@@ -67,10 +74,10 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
       ctx.fill();
       
       // Draw waveform
-      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`;
+      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${0.8 * opacity})`;
       ctx.lineWidth = 2;
       ctx.shadowBlur = 15;
-      ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, 0.6)`;
+      ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${0.6 * opacity})`;
       
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
@@ -84,13 +91,13 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
       // Draw inner lines
       for (let layer = 0; layer < 3; layer++) {
         const layerRadius = baseRadius - (layer + 1) * 15;
-        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${0.4 - layer * 0.1})`;
+        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${(0.4 - layer * 0.1) * opacity})`;
         ctx.lineWidth = 1;
         
         ctx.beginPath();
         for (let i = 0; i < numPoints; i++) {
           const angle = (i / numPoints) * Math.PI * 2;
-          const wave = Math.sin(frame * 0.03 + i * 0.12 + layer) * 5;
+          const wave = Math.sin(frame * 0.03 * speed + i * 0.12 + layer) * 5;
           const radius = layerRadius + wave;
           const x = centerX + Math.cos(angle) * radius;
           const y = centerY + Math.sin(angle) * radius;
@@ -106,10 +113,14 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
       }
       
       frame++;
-      requestAnimationFrame(animate);
+      animationId = requestAnimationFrame(animate);
     };
     
     animate();
+    
+    return () => {
+      cancelAnimationFrame(animationId);
+    };
   }, [sentiment, isActive]);
   
   const getSentimentLabel = () => {
@@ -140,32 +151,38 @@ export const CallSentimentOrb = ({ sentiment, isActive }: CallSentimentOrbProps)
   
   return (
     <div className="flex flex-col items-center justify-center py-8">
-      <div className="relative">
+      <div className={cn(
+        "relative transition-all duration-700",
+        !isActive && "animate-breathing"
+      )}>
         <canvas 
           ref={canvasRef} 
           width={300} 
           height={300}
-          className={cn(
-            "transition-opacity duration-500",
-            isActive ? "opacity-100" : "opacity-30"
-          )}
+          className="transition-opacity duration-500"
         />
         {!isActive && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <p className="text-muted-foreground text-sm">Start a call to activate</p>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <p className="text-muted-foreground text-sm font-medium">Waiting for call...</p>
           </div>
         )}
       </div>
-      {isActive && (
-        <div className="mt-4 text-center">
-          <p className={cn("font-medium text-lg", getSentimentColor())}>
-            {getSentimentLabel()}
+      <div className="mt-4 text-center">
+        {isActive ? (
+          <>
+            <p className={cn("font-medium text-lg", getSentimentColor())}>
+              {getSentimentLabel()}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Real-time sentiment analysis
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            AI will analyze call sentiment when active
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Real-time sentiment analysis
-          </p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

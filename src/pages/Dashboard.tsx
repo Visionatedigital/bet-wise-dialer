@@ -577,7 +577,7 @@ useEffect(() => {
                   {/* Sentiment Orb */}
                   <CallSentimentOrb 
                     sentiment={callSentiment}
-                    isActive={currentCallId !== null && aiConnected}
+                    isActive={currentCallId !== null}
                   />
 
                   {!aiConnected && !aiConnecting && (
