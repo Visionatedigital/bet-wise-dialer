@@ -457,15 +457,9 @@ useEffect(() => {
                     leadName={currentLead?.name || ''}
                     campaign={currentLead?.campaign || 'Default'}
                     leadIntent={currentLead?.intent}
-                    spokenWords={spokenWords}
+                    spokenWords={[]}
                     isCallActive={currentCallId !== null}
                   />
-                  {speechConnected && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Radio className="h-3 w-3 text-success animate-pulse" />
-                      <span>AI listening and tracking script progress...</span>
-                    </div>
-                  )}
                 </TabsContent>
                 
                 <TabsContent value="faq" className="space-y-4">
@@ -504,26 +498,10 @@ useEffect(() => {
           {/* AI Sidekick */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Lightbulb className="h-5 w-5 text-warning" />
-                  AI Assistance
-                  {aiConnected && (
-                    <Badge variant="outline" className="ml-2 text-xs">
-                      <Radio className="h-3 w-3 mr-1 text-success animate-pulse" />
-                      Live
-                    </Badge>
-                  )}
-                </CardTitle>
-                <Button
-                  size="sm"
-                  variant={aiConnected ? "destructive" : "default"}
-                  onClick={aiConnected ? disconnectAI : connectAI}
-                  disabled={aiConnecting}
-                >
-                  {aiConnecting ? "Connecting..." : aiConnected ? "Disconnect AI" : "Connect AI"}
-                </Button>
-              </div>
+              <CardTitle className="flex items-center gap-2">
+                <Lightbulb className="h-5 w-5 text-warning" />
+                AI Coach
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="campaign" className="w-full">
@@ -591,23 +569,9 @@ useEffect(() => {
                     isActive={currentCallId !== null}
                   />
 
-                  {!aiConnected && !aiConnecting && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p className="mb-2">AI Sidekick is offline</p>
-                      <p className="text-sm">Click "Connect AI" to enable real-time assistance</p>
-                    </div>
-                  )}
-                  
-                  {aiConnecting && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p>Connecting to AI...</p>
-                    </div>
-                  )}
-
-                  {aiConnected && suggestions.length === 0 && (
+                  {suggestions.length === 0 && (
                     <div className="text-center py-4 text-muted-foreground">
-                      <p className="mb-2">Listening to call...</p>
-                      <p className="text-sm">AI suggestions will appear here</p>
+                      <p className="text-sm">Suggestions will appear during calls</p>
                     </div>
                   )}
 
