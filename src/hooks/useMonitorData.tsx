@@ -22,44 +22,11 @@ export function useMonitorData() {
 
   const fetchAgents = async () => {
     try {
-      // Fetch all profiles with their call data
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, status, current_call_start, last_status_change, approved')
-        .eq('approved', true) as any;
+      // Call the secure function to fetch only agent data
+      const { data, error } = await supabase.rpc('get_agent_monitor_data');
 
-      if (profilesError) throw profilesError;
+      if (error) throw error;
 
-      // Fetch today's call activities for each agent
-      const today = new Date().toISOString().split('T')[0];
-      const { data: callData, error: callError } = await supabase
-        .from('call_activities')
-        .select('user_id, campaign_id, duration_seconds, start_time, end_time')
-        .gte('start_time', `${today}T00:00:00`)
-        .lt('start_time', `${today}T23:59:59`);
-
-      if (callError) throw callError;
-
-      // Fetch campaigns for names
-      const { data: campaigns } = await supabase
-        .from('campaigns')
-        .select('id, name');
-
-      const campaignMap = new Map(campaigns?.map(c => [c.id, c.name]) || []);
-
-      // Fetch assigned leads count for each agent
-      const { data: leadsData } = await supabase
-        .from('leads')
-        .select('user_id')
-        .not('user_id', 'is', null);
-
-      const leadsCountMap = new Map<string, number>();
-      leadsData?.forEach(lead => {
-        const count = leadsCountMap.get(lead.user_id!) || 0;
-        leadsCountMap.set(lead.user_id!, count + 1);
-      });
-
-      // Process agent data
       const now = new Date();
       const formatHMS = (secs: number) => {
         const h = Math.floor(secs / 3600);
@@ -70,60 +37,41 @@ export function useMonitorData() {
           .padStart(2, '0')}`;
       };
 
-      const agentsData: AgentData[] = (profiles || [])
-        .map((profile: any) => {
-          const agentCalls = (callData || []).filter((c: any) => c.user_id === profile.id);
-          const lastCall = agentCalls.reduce((acc: any, c: any) => {
-            if (!acc) return c;
-            return new Date(c.start_time) > new Date(acc.start_time) ? c : acc;
-          }, null as any);
+      const agentsData: AgentData[] = (data || []).map((agent: any) => {
+        // Derive status: use on-call if current_call_start is set
+        let derivedStatus: string = agent.status || 'offline';
+        if (agent.current_call_start) {
+          derivedStatus = 'on-call';
+        }
 
-          // Derive a more accurate status
-          let derivedStatus: string = profile.status || 'offline';
-          if (profile.current_call_start) {
-            derivedStatus = 'on-call';
-          } else if (lastCall) {
-            const start = new Date(lastCall.start_time);
-            const ended = lastCall.end_time ? new Date(lastCall.end_time) : null;
-            if (!ended && (now.getTime() - start.getTime()) < 10 * 60 * 1000) {
-              derivedStatus = 'on-call';
-            }
-          }
+        // Duration since current state began
+        let duration = '00:00:00';
+        if (derivedStatus === 'on-call' && agent.current_call_start) {
+          duration = formatHMS(Math.floor((now.getTime() - new Date(agent.current_call_start).getTime()) / 1000));
+        } else if (agent.last_status_change) {
+          duration = formatHMS(Math.floor((now.getTime() - new Date(agent.last_status_change).getTime()) / 1000));
+        }
 
-          // Duration since current state began
-          let duration = '00:00:00';
-          if (derivedStatus === 'on-call' && profile.current_call_start) {
-            duration = formatHMS(Math.floor((now.getTime() - new Date(profile.current_call_start).getTime()) / 1000));
-          } else if (profile.last_status_change) {
-            duration = formatHMS(Math.floor((now.getTime() - new Date(profile.last_status_change).getTime()) / 1000));
-          }
+        // Avatar initials
+        const name = agent.full_name || agent.email || 'Unknown';
+        const words = name.split(' ');
+        const avatar = words.length > 1
+          ? `${words[0][0]}${words[1][0]}`.toUpperCase()
+          : name.substring(0, 2).toUpperCase();
 
-          // Avatar initials
-          const name = profile.full_name || profile.email || 'Unknown';
-          const words = name.split(' ');
-          const avatar = words.length > 1
-            ? `${words[0][0]}${words[1][0]}`.toUpperCase()
-            : name.substring(0, 2).toUpperCase();
-
-          // Current campaign (from most recent call today)
-          const currentCampaignId = lastCall?.campaign_id;
-          const currentCampaign = currentCampaignId ? campaignMap.get(currentCampaignId) : 'No Campaign';
-
-          return {
-            id: profile.id,
-            name,
-            email: profile.email || '',
-            status: derivedStatus,
-            duration,
-            campaign: currentCampaign || 'No Campaign',
-            avatar,
-            score: 0,
-            calls: agentCalls.length,
-            assignedLeads: leadsCountMap.get(profile.id) || 0,
-          } as AgentData;
-        })
-        // Keep only agent-like accounts
-        .filter((a: AgentData) => a.assignedLeads > 0 || a.calls > 0 || a.status === 'on-call');
+        return {
+          id: agent.id,
+          name,
+          email: agent.email || '',
+          status: derivedStatus,
+          duration,
+          campaign: agent.last_campaign_name || 'No Campaign',
+          avatar,
+          score: 0,
+          calls: agent.calls_today || 0,
+          assignedLeads: agent.assigned_leads || 0,
+        } as AgentData;
+      });
 
       setAgents(agentsData);
     } catch (error) {
