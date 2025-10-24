@@ -22,9 +22,11 @@ import { toast } from "sonner";
 import { getCategoryFromSegment, getSequenceForCategory } from "@/data/aiScriptsMock";
 import type { CallSentiment } from "@/utils/RealtimeAI";
 import { safeDisplayName } from "@/lib/formatters";
+import { useAgentStatus } from "@/hooks/useAgentStatus";
 
 function DashboardContent() {
   const { user } = useAuth();
+  const { updateStatus } = useAgentStatus();
   const [currentLead, setCurrentLead] = useState<Lead | null>(null);
   const [currentLeadIndex, setCurrentLeadIndex] = useState(0);
   const [queueLeads, setQueueLeads] = useState<Lead[]>([]);
@@ -50,15 +52,22 @@ function DashboardContent() {
   const sentimentTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
 
-  // Initialize AudioContext
+  // Initialize AudioContext and set agent status to online
   useEffect(() => {
     const ctx = new AudioContext({ sampleRate: 24000 });
     setAudioContext(ctx);
 
+    // Set agent status to online when dashboard loads
+    updateStatus('online');
+    console.log('[Dashboard] Agent status set to online');
+
     return () => {
       ctx.close();
+      // Set agent status to offline when dashboard unmounts
+      updateStatus('offline');
+      console.log('[Dashboard] Agent status set to offline');
     };
-  }, []);
+  }, [updateStatus]);
 
   // Fetch campaign AI scripts
   const [campaignScript, setCampaignScript] = useState<string | null>(null);
@@ -342,6 +351,9 @@ useEffect(() => {
     setCallDuration(0);
     setCallNotes("");
     
+    // Update agent status to on-call
+    await updateStatus('on-call');
+    
     // Create a new call activity record
     try {
       const { data, error } = await supabase
@@ -399,6 +411,9 @@ useEffect(() => {
         toast.error('Failed to save call notes');
       }
     }
+    
+    // Set agent status back to online after call ends
+    await updateStatus('online');
     
     setShowACS(true);
     setCallDuration(450); // Mock duration
