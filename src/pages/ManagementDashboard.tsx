@@ -1,30 +1,37 @@
 import { useState, useEffect } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { ManagementLayout } from "@/components/layout/ManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { BarChart3, TrendingUp, Phone, DollarSign, Download } from "lucide-react";
+import { BarChart3, TrendingUp, Phone, DollarSign, Download, CheckCircle, Lightbulb } from "lucide-react";
 import { ExportReportModal } from "@/components/dashboard/ExportReportModal";
+import { useFunnelAnalysis } from '@/hooks/useFunnelAnalysis';
+import { useAgentAnalysis } from '@/hooks/useAgentAnalysis';
+import { formatUGX } from '@/lib/formatters';
 
 interface AgentStats {
-  id: string;
-  full_name: string;
+  agentId: string;
+  agentName: string;
   email: string;
-  totalCalls: number;
+  calls: number;
   connects: number;
   conversions: number;
-  totalDeposits: number;
+  deposits: number;
 }
 
 const ManagementDashboard = () => {
-  const [agents, setAgents] = useState<AgentStats[]>([]);
+  const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState("7");
+  const [dateRange, setDateRange] = useState("week");
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [showExportModal, setShowExportModal] = useState(false);
+
+  const { funnelData, insights, message: funnelMessage, loading: funnelLoading } = useFunnelAnalysis(dateRange, '');
+  const { agents: topAgents, insights: agentInsights, loading: agentsLoading, message: agentsMessage } = useAgentAnalysis(dateRange);
 
   useEffect(() => {
     fetchAgentStats();
@@ -70,18 +77,18 @@ const ManagementDashboard = () => {
           const totalDeposits = calls?.reduce((sum, c) => sum + (Number(c.deposit_amount) || 0), 0) || 0;
 
           return {
-            id: profile.id,
-            full_name: profile.full_name || 'Unknown',
+            agentId: profile.id,
+            agentName: profile.full_name || 'Unknown',
             email: profile.email || '',
-            totalCalls,
+            calls: totalCalls,
             connects,
             conversions,
-            totalDeposits
+            deposits: totalDeposits
           };
         })
       );
 
-      setAgents(agentStats);
+      setAgentStats(agentStats);
     } catch (error) {
       console.error('Error fetching agent stats:', error);
       toast.error('Failed to load performance data');
@@ -91,31 +98,29 @@ const ManagementDashboard = () => {
   };
 
   const filteredAgents = selectedAgent === "all" 
-    ? agents 
-    : agents.filter(a => a.id === selectedAgent);
+    ? agentStats 
+    : agentStats.filter(a => a.agentId === selectedAgent);
 
   const totals = filteredAgents.reduce(
     (acc, agent) => ({
-      calls: acc.calls + agent.totalCalls,
+      calls: acc.calls + agent.calls,
       connects: acc.connects + agent.connects,
       conversions: acc.conversions + agent.conversions,
-      deposits: acc.deposits + agent.totalDeposits
+      deposits: acc.deposits + agent.deposits
     }),
     { calls: 0, connects: 0, conversions: 0, deposits: 0 }
   );
 
   return (
-    <DashboardLayout>
+    <ManagementLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Management Dashboard</h1>
-            <p className="text-muted-foreground">
-              Monitor team performance and analytics
-            </p>
+            <p className="text-muted-foreground">Performance analytics and agent insights</p>
           </div>
           <Button onClick={() => setShowExportModal(true)}>
-            <Download className="mr-2 h-4 w-4" />
+            <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
         </div>
@@ -123,26 +128,26 @@ const ManagementDashboard = () => {
         {/* Filters */}
         <div className="flex gap-4">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1">Last 24 hours</SelectItem>
-              <SelectItem value="7">Last 7 days</SelectItem>
-              <SelectItem value="30">Last 30 days</SelectItem>
-              <SelectItem value="90">Last 90 days</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="week">This Week</SelectItem>
+              <SelectItem value="month">This Month</SelectItem>
+              <SelectItem value="quarter">This Quarter</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-            <SelectTrigger className="w-64">
+            <SelectTrigger className="w-48">
               <SelectValue placeholder="All Agents" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Agents</SelectItem>
-              {agents.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id}>
-                  {agent.full_name}
+              {agentStats.map((agent) => (
+                <SelectItem key={agent.agentId} value={agent.agentId}>
+                  {agent.agentName}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -157,19 +162,22 @@ const ManagementDashboard = () => {
               <Phone className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totals.calls}</div>
+              <div className="text-2xl font-bold">{totals.calls.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">
+                {funnelData ? `${funnelData.connectRate}% connect rate` : 'Loading...'}
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Connects</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <CheckCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totals.connects}</div>
+              <div className="text-2xl font-bold">{totals.connects.toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">
-                {totals.calls > 0 ? ((totals.connects / totals.calls) * 100).toFixed(1) : 0}% rate
+                {funnelData ? `${funnelData.qualificationRate}% qualified` : 'Loading...'}
               </p>
             </CardContent>
           </Card>
@@ -177,12 +185,12 @@ const ManagementDashboard = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Conversions</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totals.conversions}</div>
+              <div className="text-2xl font-bold">{totals.conversions.toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">
-                {totals.connects > 0 ? ((totals.conversions / totals.connects) * 100).toFixed(1) : 0}% rate
+                {funnelData ? `${funnelData.conversionRate}% conversion rate` : 'Loading...'}
               </p>
             </CardContent>
           </Card>
@@ -194,68 +202,97 @@ const ManagementDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                UGX {totals.deposits.toLocaleString()}
+                {formatUGX(totals.deposits)}
               </div>
+              <p className="text-xs text-muted-foreground">
+                Avg: {formatUGX(totals.conversions > 0 ? totals.deposits / totals.conversions : 0)}
+              </p>
             </CardContent>
           </Card>
         </div>
+
+        {/* AI Insights */}
+        {(insights && insights.length > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lightbulb className="h-5 w-5 text-yellow-500" />
+                AI Funnel Analysis
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {insights.map((insight, idx) => (
+                  <div key={idx} className="border-l-4 border-primary pl-4 py-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant={
+                        insight.type === 'opportunity' ? 'default' : 
+                        insight.type === 'warning' ? 'destructive' : 
+                        'secondary'
+                      }>
+                        {insight.impact}
+                      </Badge>
+                      <span className="font-medium">{insight.title}</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{insight.description}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Agent Performance Table */}
         <Card>
           <CardHeader>
             <CardTitle>Agent Performance</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {agentsMessage || 'Individual agent metrics and rankings'}
+            </p>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Agent</TableHead>
-                  <TableHead className="text-right">Calls</TableHead>
-                  <TableHead className="text-right">Connects</TableHead>
-                  <TableHead className="text-right">Connect %</TableHead>
-                  <TableHead className="text-right">Conversions</TableHead>
-                  <TableHead className="text-right">Conv %</TableHead>
-                  <TableHead className="text-right">Deposits (UGX)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAgents.map((agent) => (
-                  <TableRow key={agent.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{agent.full_name}</div>
-                        <div className="text-sm text-muted-foreground">{agent.email}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">{agent.totalCalls}</TableCell>
-                    <TableCell className="text-right">{agent.connects}</TableCell>
-                    <TableCell className="text-right">
-                      {agent.totalCalls > 0 
-                        ? ((agent.connects / agent.totalCalls) * 100).toFixed(1) 
-                        : 0}%
-                    </TableCell>
-                    <TableCell className="text-right">{agent.conversions}</TableCell>
-                    <TableCell className="text-right">
-                      {agent.connects > 0 
-                        ? ((agent.conversions / agent.connects) * 100).toFixed(1) 
-                        : 0}%
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {agent.totalDeposits.toLocaleString()}
-                    </TableCell>
+            {loading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Agent</TableHead>
+                    <TableHead className="text-right">Calls</TableHead>
+                    <TableHead className="text-right">Connects</TableHead>
+                    <TableHead className="text-right">Conversions</TableHead>
+                    <TableHead className="text-right">Conv. Rate</TableHead>
+                    <TableHead className="text-right">Total Deposits</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredAgents.map((agent) => (
+                    <TableRow key={agent.agentId}>
+                      <TableCell className="font-medium">{agent.agentName}</TableCell>
+                      <TableCell className="text-right">{agent.calls}</TableCell>
+                      <TableCell className="text-right">{agent.connects}</TableCell>
+                      <TableCell className="text-right">{agent.conversions}</TableCell>
+                      <TableCell className="text-right">
+                        {agent.calls > 0 
+                          ? `${((agent.conversions / agent.calls) * 100).toFixed(1)}%`
+                          : '0%'
+                        }
+                      </TableCell>
+                      <TableCell className="text-right">{formatUGX(agent.deposits)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <ExportReportModal
+      <ExportReportModal 
         open={showExportModal}
         onOpenChange={setShowExportModal}
       />
-    </DashboardLayout>
+    </ManagementLayout>
   );
 };
 

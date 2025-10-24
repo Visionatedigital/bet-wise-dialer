@@ -140,7 +140,12 @@ export default function Leads() {
   };
 
   const maskPhone = (phone: string) => {
-    return phone.replace(/(\+256 \d{3}) \d{3}(\d{3})/, '$1 ***$2');
+    // Format: +256 XXX XXX XX (mask middle digits)
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.startsWith('256')) {
+      return `+256 ${cleaned.substring(3, 6)} XXX ${cleaned.substring(9, 11)}`;
+    }
+    return phone.replace(/(\d{3})\d{3}(\d{2})/, '$1 XXX $2');
   };
 
   const fetchLeadCalls = async (leadId: string) => {

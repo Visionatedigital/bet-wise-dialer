@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { AdminLayout } from '@/components/layout/AdminLayout';
 
 interface UserProfile {
   id: string;
@@ -113,13 +113,15 @@ const UserManagement = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
+    <AdminLayout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+          <p className="text-muted-foreground">Approve users and manage roles</p>
+        </div>
+        
         <Card>
-          <CardHeader>
-            <CardTitle>User Management</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             {loading ? (
               <div className="text-center py-8">Loading users...</div>
             ) : (
@@ -184,7 +186,7 @@ const UserManagement = () => {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+    </AdminLayout>
   );
 };
 

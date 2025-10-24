@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { AdminLayout } from "@/components/layout/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Users, UserPlus } from "lucide-react";
+import { Users, Target } from "lucide-react";
 import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
 
 interface Agent {
@@ -31,6 +33,7 @@ const AdminDashboard = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [unassignedLeads, setUnassignedLeads] = useState<Lead[]>([]);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+  const [selectedSegment, setSelectedSegment] = useState<string>('all');
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -135,23 +138,21 @@ const AdminDashboard = () => {
   };
 
   return (
-    <DashboardLayout>
+    <AdminLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-            <p className="text-muted-foreground">
-              Manage agents and lead assignments
-            </p>
+            <p className="text-muted-foreground">Manage users, agents and lead assignments</p>
           </div>
           <Button onClick={() => setShowImportModal(true)}>
-            <UserPlus className="mr-2 h-4 w-4" />
+            <Target className="h-4 w-4 mr-2" />
             Import Leads
           </Button>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          {/* Agents Overview */}
+          {/* Active Agents */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -160,104 +161,146 @@ const AdminDashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Leads</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agents.map((agent) => (
-                    <TableRow key={agent.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{agent.full_name}</div>
-                          <div className="text-sm text-muted-foreground">{agent.email}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={agent.status === 'available' ? 'default' : 'secondary'}>
-                          {agent.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{agent.assignedLeads}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              {loading ? (
+                <div className="text-center py-4 text-muted-foreground">Loading...</div>
+              ) : (
+                <div className="space-y-2">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Agent</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Assigned Leads</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {agents.map((agent) => (
+                        <TableRow key={agent.id}>
+                          <TableCell className="font-medium">{agent.full_name}</TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={agent.status === 'online' ? 'default' : 'secondary'}
+                              className={agent.status === 'online' ? 'bg-green-500' : ''}
+                            >
+                              {agent.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">{agent.assignedLeads}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Lead Assignment */}
+          {/* Bulk Lead Assignment */}
           <Card>
             <CardHeader>
-              <CardTitle>Assign Leads</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5" />
+                Bulk Assign Leads
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Select Agent</label>
-                <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose an agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {agents.map((agent) => (
-                      <SelectItem key={agent.id} value={agent.id}>
-                        {agent.full_name} ({agent.assignedLeads} leads)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Select Agent</Label>
+                  <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose an agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {agents.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.full_name} ({agent.assignedLeads} leads)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Unassigned Leads ({unassignedLeads.length})
-                </label>
-                <div className="border rounded-lg max-h-64 overflow-y-auto">
-                  {unassignedLeads.map((lead) => (
-                    <div
-                      key={lead.id}
-                      className="flex items-center gap-2 p-2 hover:bg-muted cursor-pointer"
-                      onClick={() => toggleLeadSelection(lead.id)}
-                    >
-                      <input
-                        type="checkbox"
+                <div className="space-y-2">
+                  <Label>Select Segment</Label>
+                  <Select 
+                    value={selectedSegment} 
+                    onValueChange={(value) => {
+                      setSelectedSegment(value);
+                      // Auto-select all leads in this segment
+                      const segmentLeads = unassignedLeads
+                        .filter(lead => lead.segment === value)
+                        .map(lead => lead.id);
+                      setSelectedLeads(segmentLeads);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose segment" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Segments</SelectItem>
+                      <SelectItem value="vip">VIP</SelectItem>
+                      <SelectItem value="semi-active">Semi-Active</SelectItem>
+                      <SelectItem value="dormant">Dormant</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="border rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-sm">Unassigned Leads</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {selectedLeads.length} selected
+                    </span>
+                  </div>
+                  {unassignedLeads
+                    .filter(lead => selectedSegment === 'all' || lead.segment === selectedSegment)
+                    .map((lead) => (
+                    <div key={lead.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={lead.id}
                         checked={selectedLeads.includes(lead.id)}
-                        onChange={() => {}}
-                        className="rounded"
+                        onCheckedChange={(checked) => toggleLeadSelection(lead.id)}
                       />
-                      <div className="flex-1">
-                        <div className="font-medium">{lead.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {lead.phone} • {lead.segment}
-                        </div>
-                      </div>
+                      <label
+                        htmlFor={lead.id}
+                        className="text-sm cursor-pointer flex-1 flex items-center justify-between"
+                      >
+                        <span>{lead.name}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {lead.segment}
+                        </Badge>
+                      </label>
                     </div>
                   ))}
+                  {unassignedLeads.filter(lead => 
+                    selectedSegment === 'all' || lead.segment === selectedSegment
+                  ).length === 0 && (
+                    <div className="text-center py-4 text-sm text-muted-foreground">
+                      No unassigned leads in this segment
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              <Button 
-                onClick={handleAssignLeads}
-                disabled={!selectedAgent || selectedLeads.length === 0}
-                className="w-full"
-              >
-                Assign {selectedLeads.length} Lead(s)
-              </Button>
+                <Button 
+                  onClick={handleAssignLeads}
+                  disabled={!selectedAgent || selectedLeads.length === 0 || loading}
+                  className="w-full"
+                >
+                  Assign {selectedLeads.length} Lead{selectedLeads.length !== 1 ? 's' : ''}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      <ImportLeadsModal
+      <ImportLeadsModal 
         open={showImportModal}
         onOpenChange={setShowImportModal}
         onImportComplete={fetchData}
       />
-    </DashboardLayout>
+    </AdminLayout>
   );
 };
 
