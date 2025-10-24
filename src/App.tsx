@@ -8,15 +8,15 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { RoleBasedDashboard } from "@/components/RoleBasedDashboard";
+import { RoleBasedReports } from "@/components/RoleBasedReports";
+import { RoleBasedSettings } from "@/components/RoleBasedSettings";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import Campaigns from "./pages/Campaigns";
 import Monitor from "./pages/Monitor";
-import Reports from "./pages/Reports";
 import Integrations from "./pages/Integrations";
-import Settings from "./pages/Settings";
 import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
 
@@ -54,7 +54,7 @@ const App = () => (
               } />
               <Route path="/reports" element={
                 <ProtectedRoute>
-                  <Reports />
+                  <RoleBasedReports />
                 </ProtectedRoute>
               } />
               <Route path="/campaigns" element={
@@ -69,7 +69,12 @@ const App = () => (
               } />
               <Route path="/settings" element={
                 <ProtectedRoute>
-                  <Settings />
+                  <RoleBasedSettings />
+                </ProtectedRoute>
+              } />
+              <Route path="/user-management" element={
+                <ProtectedRoute>
+                  <UserManagement />
                 </ProtectedRoute>
               } />
               <Route path="/users" element={
