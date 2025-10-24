@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { getCategoryFromSegment, getSequenceForCategory } from "@/data/aiScriptsMock";
 import type { CallSentiment } from "@/utils/RealtimeAI";
+import { safeDisplayName } from "@/lib/formatters";
 
 function DashboardContent() {
   const { user } = useAuth();
@@ -211,7 +212,7 @@ useEffect(() => {
 
       const formattedLeads: Lead[] = (data || []).map(lead => ({
         id: lead.id,
-        name: lead.name,
+        name: safeDisplayName(lead.name),
         phone: lead.phone,
         segment: lead.segment as "dormant" | "semi-active" | "vip",
         lastActivity: lead.last_activity || "Never",

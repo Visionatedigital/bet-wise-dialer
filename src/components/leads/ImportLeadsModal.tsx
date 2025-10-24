@@ -148,13 +148,13 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
 
             const leads = jsonData.map((row: any) => {
               const phone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || row.username || '').trim();
-              const name = String(row.name || row.Name || row.customer || row.Customer || phone).trim();
+              const name = String(row.name || row.Name || row.customer || row.Customer || '').trim();
               const segment = detectSegment(row);
               const priority = segment === 'vip' ? 'high' : segment === 'dormant' ? 'low' : 'medium';
               
               return {
                 user_id: null, // Will be auto-distributed
-                name: name || 'Unknown',
+                name: name || 'Customer',
                 phone: phone,
                 segment: segment,
                 priority: priority,
@@ -207,11 +207,11 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
           const leads = lines.slice(1).map(line => {
             const values = line.split(',').map(v => v.trim());
             const phone = values[actualPhoneIndex] || '';
-            const name = nameIndex !== -1 ? values[nameIndex] : phone;
+            const name = nameIndex !== -1 ? values[nameIndex] : '';
             
             return {
               user_id: null, // Admin imports as unassigned
-              name: name || 'Unknown',
+              name: name || 'Customer',
               phone: phone,
               segment: 'dormant',
               priority: 'low',

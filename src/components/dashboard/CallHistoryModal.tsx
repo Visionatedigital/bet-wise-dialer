@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { formatDistanceToNow } from "date-fns";
 import { Search, Phone, Clock, User } from "lucide-react";
 import { toast } from "sonner";
+import { maskPhone } from "@/lib/formatters";
 
 interface CallActivity {
   id: string;
@@ -114,7 +115,7 @@ export function CallHistoryModal({ open, onOpenChange }: CallHistoryModalProps) 
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Phone className="h-3 w-3" />
-                          <span>{call.phone_number}</span>
+                          <span>{maskPhone(call.phone_number)}</span>
                         </div>
                       </div>
                       

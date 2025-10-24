@@ -45,3 +45,14 @@ export const maskPhone = (phone: string): string => {
   // Generic mask: keep first 3 and last 2
   return phone.replace(/(\+?\d{3})\d+(\d{2})/, '$1 XXX $2');
 };
+
+// Safe display name so agents never see phone numbers as names
+export const safeDisplayName = (name?: string): string => {
+  const n = (name || '').trim();
+  if (!n) return 'Customer';
+  // If it's mostly digits or matches a phone-like pattern, hide it
+  const digits = n.replace(/\D/g, '');
+  const looksLikePhone = /^\+?\d[\d\s\-()]+$/.test(n) || digits.length >= 7;
+  if (looksLikePhone) return 'Customer';
+  return n;
+};
