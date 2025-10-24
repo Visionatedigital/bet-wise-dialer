@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMonitorData } from "@/hooks/useMonitorData";
+import { supabase } from "@/integrations/supabase/client";
 import { PhoneCall, Pause, UserCheck, XCircle } from "lucide-react";
 
 export default function ManagementMonitor() {
@@ -21,16 +22,61 @@ export default function ManagementMonitor() {
     }
   };
 
-  const getFilteredLeads = (agent: any, period: string) => {
-    // For now return the assignedLeads value - will be properly calculated from backend
-    return agent.assignedLeads || 0;
+  const periodStart = (period: 'daily' | 'weekly' | 'monthly' | 'all') => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    if (period === 'weekly') {
+      const day = d.getDay();
+      const diff = (day + 6) % 7; // Monday as start of week
+      d.setDate(d.getDate() - diff);
+    } else if (period === 'monthly') {
+      d.setDate(1);
+    }
+    return d;
   };
 
-  const getFilteredCalls = (agent: any, period: string) => {
-    // For now return the calls value - will be properly calculated from backend
-    return agent.calls || 0;
+  const [periodLeads, setPeriodLeads] = React.useState<Record<string, number>>({});
+  const [periodCalls, setPeriodCalls] = React.useState<Record<string, number>>({});
+
+  const getFilteredLeads = (agent: any, _period: string) => {
+    return periodLeads[agent.id] ?? 0;
   };
 
+  const getFilteredCalls = (agent: any, _period: string) => {
+    return periodCalls[agent.id] ?? 0;
+  };
+
+  React.useEffect(() => {
+    const fetchMetrics = async () => {
+      const start = periodStart(timePeriod);
+      try {
+        const leadsQ = supabase
+          .from('leads')
+          .select('user_id, count:id')
+          .not('user_id', 'is', null);
+        const callsQ = supabase
+          .from('call_activities')
+          .select('user_id, count:id');
+
+        const leadsQuery = timePeriod === 'all' ? leadsQ : leadsQ.gte('assigned_at', start.toISOString());
+        const callsQuery = timePeriod === 'all' ? callsQ : callsQ.gte('start_time', start.toISOString());
+
+        const [leadsRes, callsRes] = await Promise.all([leadsQuery, callsQuery]);
+
+        const lMap: Record<string, number> = {};
+        (leadsRes.data || []).forEach((r: any) => { if (r.user_id) lMap[r.user_id] = Number(r.count) || 0; });
+        setPeriodLeads(lMap);
+
+        const cMap: Record<string, number> = {};
+        (callsRes.data || []).forEach((r: any) => { if (r.user_id) cMap[r.user_id] = Number(r.count) || 0; });
+        setPeriodCalls(cMap);
+      } catch (e) {
+        console.error('[Monitor] Failed to load period metrics', e);
+      }
+    };
+
+    if (agents.length > 0) fetchMetrics();
+  }, [timePeriod, agents]);
   return (
     <ManagementLayout>
       <div className="space-y-6">

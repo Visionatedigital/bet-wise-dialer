@@ -206,6 +206,7 @@ useEffect(() => {
           *,
           campaigns(name)
         `)
+        .eq('user_id', user?.id as string)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
