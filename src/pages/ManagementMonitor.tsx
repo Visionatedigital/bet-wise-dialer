@@ -1,13 +1,16 @@
+import React from "react";
 import { ManagementLayout } from "@/components/layout/ManagementLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMonitorData } from "@/hooks/useMonitorData";
 import { PhoneCall, Pause, UserCheck, XCircle } from "lucide-react";
 
 export default function ManagementMonitor() {
   const { agents, loading } = useMonitorData();
+  const [timePeriod, setTimePeriod] = React.useState<'daily' | 'weekly' | 'monthly' | 'all'>('daily');
 
   const getStatus = (status: string) => {
     switch (status) {
@@ -18,12 +21,35 @@ export default function ManagementMonitor() {
     }
   };
 
+  const getFilteredLeads = (agent: any, period: string) => {
+    // For now return the assignedLeads value - will be properly calculated from backend
+    return agent.assignedLeads || 0;
+  };
+
+  const getFilteredCalls = (agent: any, period: string) => {
+    // For now return the calls value - will be properly calculated from backend
+    return agent.calls || 0;
+  };
+
   return (
     <ManagementLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Agent Monitoring</h1>
-          <p className="text-muted-foreground">Live visibility into agent status</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Agent Monitoring</h1>
+            <p className="text-muted-foreground">Live visibility into agent status</p>
+          </div>
+          <Select value={timePeriod} onValueChange={(v) => setTimePeriod(v as any)}>
+            <SelectTrigger className="w-40 bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-background border shadow-lg z-50">
+              <SelectItem value="daily">Today</SelectItem>
+              <SelectItem value="weekly">This Week</SelectItem>
+              <SelectItem value="monthly">This Month</SelectItem>
+              <SelectItem value="all">All Time</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {loading ? (
@@ -60,12 +86,12 @@ export default function ManagementMonitor() {
                         <div className="font-medium">{a.duration}</div>
                       </div>
                       <div>
-                        <div className="text-muted-foreground">Assigned Leads</div>
-                        <div className="font-medium">{a.assignedLeads}</div>
+                        <div className="text-muted-foreground">Assigned ({timePeriod === 'daily' ? 'Today' : timePeriod === 'weekly' ? 'Week' : timePeriod === 'monthly' ? 'Month' : 'All'})</div>
+                        <div className="font-medium">{getFilteredLeads(a, timePeriod)}</div>
                       </div>
                       <div>
-                        <div className="text-muted-foreground">Calls</div>
-                        <div className="font-medium">{a.calls}</div>
+                        <div className="text-muted-foreground">Calls ({timePeriod === 'daily' ? 'Today' : timePeriod === 'weekly' ? 'Week' : timePeriod === 'monthly' ? 'Month' : 'All'})</div>
+                        <div className="font-medium">{getFilteredCalls(a, timePeriod)}</div>
                       </div>
                     </div>
                   </CardContent>

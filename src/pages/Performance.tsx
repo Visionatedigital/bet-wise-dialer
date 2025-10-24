@@ -37,10 +37,10 @@ export default function Performance() {
 
         <div className="flex gap-4">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-40 bg-background">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-background border shadow-lg z-50">
               <SelectItem value="today">Today</SelectItem>
               <SelectItem value="7d">Last 7 days</SelectItem>
               <SelectItem value="30d">Last 30 days</SelectItem>
@@ -49,10 +49,10 @@ export default function Performance() {
           </Select>
 
           <Select value={campaignId || "all"} onValueChange={(v) => setCampaignId(v === "all" ? undefined : v)}>
-            <SelectTrigger className="w-56">
+            <SelectTrigger className="w-56 bg-background">
               <SelectValue placeholder="All Campaigns" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-background border shadow-lg z-50">
               <SelectItem value="all">All Campaigns</SelectItem>
               {campaigns.map((c) => (
                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>

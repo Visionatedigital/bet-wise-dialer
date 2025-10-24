@@ -228,6 +228,7 @@ useEffect(() => {
         campaignId: lead.campaign_id || undefined,
         priority: lead.priority as "high" | "medium" | "low",
         slaMinutes: lead.sla_minutes || 0,
+        assignedAt: lead.assigned_at,
       }));
 
       setQueueLeads(formattedLeads);
@@ -441,7 +442,12 @@ useEffect(() => {
             hasNextLead={currentLeadIndex < queueLeads.length - 1}
             hasPreviousLead={currentLeadIndex > 0}
             currentLeadPosition={currentLeadIndex + 1}
-            totalLeads={queueLeads.length}
+            totalLeads={queueLeads.filter(lead => {
+              const assignedDate = lead.assignedAt ? new Date(lead.assignedAt) : null;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              return assignedDate && assignedDate >= today;
+            }).length}
           />
           
           <QueueCard 

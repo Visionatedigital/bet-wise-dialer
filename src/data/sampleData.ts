@@ -18,6 +18,7 @@ export interface Lead {
   campaignId?: string;
   priority: "high" | "medium" | "low";
   slaMinutes: number;
+  assignedAt?: string;
 }
 
 export interface Call {

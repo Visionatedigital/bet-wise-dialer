@@ -126,10 +126,10 @@ const ManagementReports = () => {
         </div>
 
         <Select value={dateRange} onValueChange={setDateRange}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-48 bg-background">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="bg-background border shadow-lg z-50">
             <SelectItem value="today">Today</SelectItem>
             <SelectItem value="week">This Week</SelectItem>
             <SelectItem value="month">This Month</SelectItem>
