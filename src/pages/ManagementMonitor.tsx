@@ -48,27 +48,35 @@ export default function ManagementMonitor() {
 
   React.useEffect(() => {
     const fetchMetrics = async () => {
-      const start = periodStart(timePeriod);
+      const start = periodStart(timePeriod).toISOString();
       try {
-        const leadsQ = supabase
+        // Leads assigned per agent for the selected period
+        const leadsQuery = supabase
           .from('leads')
-          .select('user_id, count:id')
+          .select('user_id, assigned_at')
           .not('user_id', 'is', null);
-        const callsQ = supabase
-          .from('call_activities')
-          .select('user_id, count:id');
-
-        const leadsQuery = timePeriod === 'all' ? leadsQ : leadsQ.gte('assigned_at', start.toISOString());
-        const callsQuery = timePeriod === 'all' ? callsQ : callsQ.gte('start_time', start.toISOString());
-
-        const [leadsRes, callsRes] = await Promise.all([leadsQuery, callsQuery]);
+        const { data: leadsData } = await (timePeriod === 'all'
+          ? leadsQuery
+          : leadsQuery.gte('assigned_at', start));
 
         const lMap: Record<string, number> = {};
-        (leadsRes.data || []).forEach((r: any) => { if (r.user_id) lMap[r.user_id] = Number(r.count) || 0; });
+        (leadsData || []).forEach((r: any) => {
+          if (r.user_id) lMap[r.user_id] = (lMap[r.user_id] || 0) + 1;
+        });
         setPeriodLeads(lMap);
 
+        // Calls per agent for the selected period
+        const callsQuery = supabase
+          .from('call_activities')
+          .select('user_id, start_time');
+        const { data: callsData } = await (timePeriod === 'all'
+          ? callsQuery
+          : callsQuery.gte('start_time', start));
+
         const cMap: Record<string, number> = {};
-        (callsRes.data || []).forEach((r: any) => { if (r.user_id) cMap[r.user_id] = Number(r.count) || 0; });
+        (callsData || []).forEach((r: any) => {
+          if (r.user_id) cMap[r.user_id] = (cMap[r.user_id] || 0) + 1;
+        });
         setPeriodCalls(cMap);
       } catch (e) {
         console.error('[Monitor] Failed to load period metrics', e);
