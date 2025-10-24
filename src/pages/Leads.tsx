@@ -20,9 +20,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
 import { EditLeadModal } from "@/components/leads/EditLeadModal";
+import { useUserRole } from "@/hooks/useUserRole";
 
 export default function Leads() {
   const { user } = useAuth();
+  const { isAdmin, isManagement } = useUserRole();
   const [searchTerm, setSearchTerm] = useState("");
   const [segmentFilter, setSegmentFilter] = useState<string>("all");
   const [campaignFilter, setCampaignFilter] = useState<string>("all");
@@ -217,16 +219,18 @@ export default function Leads() {
             <h1 className="text-2xl font-bold text-foreground">Leads</h1>
             <p className="text-muted-foreground">Manage contacts & prospects</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
-            </Button>
-            <Button size="sm" onClick={() => setImportModalOpen(true)}>
-              <Target className="h-4 w-4 mr-2" />
-              Import Leads
-            </Button>
-          </div>
+          {(isAdmin || isManagement) && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+              <Button size="sm" onClick={() => setImportModalOpen(true)}>
+                <Target className="h-4 w-4 mr-2" />
+                Import Leads
+              </Button>
+            </div>
+          )}
         </div>
 
         <Card>

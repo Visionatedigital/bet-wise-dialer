@@ -12,6 +12,7 @@ interface AgentData {
   score: number;
   calls: number;
   email: string;
+  assignedLeads: number;
 }
 
 export function useMonitorData() {
@@ -44,6 +45,18 @@ export function useMonitorData() {
         .select('id, name');
 
       const campaignMap = new Map(campaigns?.map(c => [c.id, c.name]) || []);
+
+      // Fetch assigned leads count for each agent
+      const { data: leadsData } = await supabase
+        .from('leads')
+        .select('user_id')
+        .not('user_id', 'is', null);
+
+      const leadsCountMap = new Map<string, number>();
+      leadsData?.forEach(lead => {
+        const count = leadsCountMap.get(lead.user_id!) || 0;
+        leadsCountMap.set(lead.user_id!, count + 1);
+      });
 
       // Process agent data
       const agentsData: AgentData[] = profiles?.map((profile: any) => {
@@ -87,8 +100,9 @@ export function useMonitorData() {
           duration,
           campaign: currentCampaign || 'No Campaign',
           avatar,
-          score: Math.round(score * 10) / 10,
+          score: parseFloat(score.toFixed(1)),
           calls: agentCalls.length,
+          assignedLeads: leadsCountMap.get(profile.id) || 0,
         };
       }) || [];
 

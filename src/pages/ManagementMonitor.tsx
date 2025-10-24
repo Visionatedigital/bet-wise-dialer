@@ -60,12 +60,12 @@ export default function ManagementMonitor() {
                         <div className="font-medium">{a.duration}</div>
                       </div>
                       <div>
-                        <div className="text-muted-foreground">Calls</div>
-                        <div className="font-medium">{a.calls}</div>
+                        <div className="text-muted-foreground">Assigned Leads</div>
+                        <div className="font-medium">{a.assignedLeads}</div>
                       </div>
                       <div>
-                        <div className="text-muted-foreground">Score</div>
-                        <div className="font-medium">{a.score}</div>
+                        <div className="text-muted-foreground">Calls</div>
+                        <div className="font-medium">{a.calls}</div>
                       </div>
                     </div>
                   </CardContent>

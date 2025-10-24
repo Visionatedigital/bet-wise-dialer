@@ -240,7 +240,7 @@ export type Database = {
           sla_minutes: number | null
           tags: string[] | null
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           assigned_at?: string | null
@@ -264,7 +264,7 @@ export type Database = {
           sla_minutes?: number | null
           tags?: string[] | null
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           assigned_at?: string | null
@@ -288,7 +288,7 @@ export type Database = {
           sla_minutes?: number | null
           tags?: string[] | null
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {

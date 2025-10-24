@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { CreateCampaignModal } from "@/components/campaigns/CreateCampaignModal";
+import { useUserRole } from "@/hooks/useUserRole";
 
 interface Campaign {
   id: string;
@@ -33,20 +34,16 @@ interface Campaign {
 
 export default function Campaigns() {
   const { user } = useAuth();
+  const { isAdmin, isManagement } = useUserRole();
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-const [updating, setUpdating] = useState(false);
-  const [isManager, setIsManager] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
 useEffect(() => {
     if (user) {
       fetchCampaigns();
-      // Check role
-      supabase.from('user_roles').select('role').eq('user_id', user.id).single().then(({ data }) => {
-        setIsManager(data?.role === 'management' || data?.role === 'admin');
-      });
     }
   }, [user]);
 
@@ -143,7 +140,7 @@ useEffect(() => {
     }
   };
 
-const Layout = isManager ? ManagementLayout : DashboardLayout;
+const Layout = (isAdmin || isManagement) ? ManagementLayout : DashboardLayout;
   return (
     <Layout>
       <div className="p-6 space-y-6">
@@ -152,10 +149,12 @@ const Layout = isManager ? ManagementLayout : DashboardLayout;
             <h1 className="text-2xl font-bold text-foreground">Campaigns</h1>
             <p className="text-muted-foreground">Campaign performance & management</p>
           </div>
-          <Button onClick={() => setCreateModalOpen(true)}>
-            <Target className="h-4 w-4 mr-2" />
-            New Campaign
-          </Button>
+          {(isAdmin || isManagement) && (
+            <Button onClick={() => setCreateModalOpen(true)}>
+              <Target className="h-4 w-4 mr-2" />
+              New Campaign
+            </Button>
+          )}
         </div>
 
         <CreateCampaignModal

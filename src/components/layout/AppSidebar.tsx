@@ -12,6 +12,7 @@ import {
   LogOut
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 
 import {
   Sidebar,
@@ -76,8 +77,18 @@ export function AppSidebar() {
   const location = useLocation();
   const currentPath = location.pathname;
   const { signOut, user } = useAuth();
+  const { isAdmin, isManagement } = useUserRole();
   
   const isCollapsed = state === "collapsed";
+
+  // Filter navigation items based on role
+  const filteredNavItems = navigationItems.filter(item => {
+    // Hide Monitor and Integrations from agents
+    if (item.url === '/monitor' || item.url === '/integrations') {
+      return isAdmin || isManagement;
+    }
+    return true;
+  });
 
   const isActive = (path: string) => currentPath === path;
   const getNavClasses = ({ isActive }: { isActive: boolean }) =>
@@ -111,7 +122,7 @@ export function AppSidebar() {
           
           <SidebarGroupContent>
             <SidebarMenu>
-              {navigationItems.map((item) => (
+              {filteredNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink 
