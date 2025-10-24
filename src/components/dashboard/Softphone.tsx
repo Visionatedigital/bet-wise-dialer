@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { SipClient } from "@/utils/SipClient";
 import { SessionState } from "sip.js";
+import { maskPhone } from "@/lib/formatters";
 
 // @ts-ignore - AfricasTalking WebRTC SDK
 declare const Africastalking: any;
