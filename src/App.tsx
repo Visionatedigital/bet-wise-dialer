@@ -18,6 +18,7 @@ import Campaigns from "./pages/Campaigns";
 import Monitor from "./pages/Monitor";
 import Performance from "./pages/Performance";
 import ManagementMonitor from "./pages/ManagementMonitor";
+import ManagementCampaigns from "./pages/ManagementCampaigns";
 import Integrations from "./pages/Integrations";
 import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
@@ -72,6 +73,11 @@ const App = () => (
               <Route path="/campaigns" element={
                 <ProtectedRoute>
                   <Campaigns />
+                </ProtectedRoute>
+              } />
+              <Route path="/management-campaigns" element={
+                <ProtectedRoute>
+                  <ManagementCampaigns />
                 </ProtectedRoute>
               } />
               <Route path="/integrations" element={
