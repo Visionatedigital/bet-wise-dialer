@@ -35,15 +35,15 @@ export const formatDuration = (seconds: number): string => {
 export const maskPhone = (phone: string): string => {
   if (!phone) return '';
   const digits = phone.replace(/\D/g, '');
-  // Uganda +256 format: show country code + first 3 digits, mask middle 3, show last 2
+  // Uganda +256 format: show country code + first 3 digits, mask middle 3, show last 3
   if (digits.startsWith('256') && digits.length >= 9) {
     const p = digits.slice(3); // remove 256
     const first = p.slice(0, 3);
-    const last = p.slice(-2);
+    const last = p.slice(-3);
     return `+256 ${first} XXX ${last}`;
   }
-  // Generic mask: keep first 3 and last 2
-  return phone.replace(/(\+?\d{3})\d+(\d{2})/, '$1 XXX $2');
+  // Generic mask: keep first 3 and last 3
+  return phone.replace(/(\+?\d{3})\d+(\d{3})/, '$1 XXX $2');
 };
 
 // Safe display name so agents never see phone numbers as names
