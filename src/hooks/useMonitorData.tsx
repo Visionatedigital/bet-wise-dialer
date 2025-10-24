@@ -108,7 +108,7 @@ export function useMonitorData() {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'call_activities',
         },

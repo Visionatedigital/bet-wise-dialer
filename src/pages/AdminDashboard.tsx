@@ -46,34 +46,17 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       
-      // Fetch agents with agent role
-      const { data: agentRoles } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role', 'agent');
+      // Fetch agent monitor data from secure function
+      const { data: monitorData, error: monitorError } = await supabase.rpc('get_agent_monitor_data');
+      if (monitorError) throw monitorError;
 
-      const agentIds = agentRoles?.map(r => r.user_id) || [];
-
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, status')
-        .in('id', agentIds)
-        .eq('approved', true);
-
-      // Count assigned leads for each agent
-      const agentsWithLeads = await Promise.all(
-        (profiles || []).map(async (profile) => {
-          const { count } = await supabase
-            .from('leads')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', profile.id);
-
-          return {
-            ...profile,
-            assignedLeads: count || 0
-          };
-        })
-      );
+      const agentsWithLeads = (monitorData || []).map((a: any) => ({
+        id: a.id,
+        full_name: a.full_name || a.email || 'Unknown',
+        email: a.email || '',
+        status: a.current_call_start ? 'on-call' : (a.status || 'offline'),
+        assignedLeads: a.assigned_leads || 0,
+      }));
 
       setAgents(agentsWithLeads);
 
