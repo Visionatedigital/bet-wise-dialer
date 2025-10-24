@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Workflow Documentation - BetSure Call Center</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            color: #333;
+        }
+        h1 {
+            color: #2563eb;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #1e40af;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-left: 4px solid #2563eb;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #1e3a8a;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .section {
+            background: #f8fafc;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .workflow-step {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #10b981;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .important {
+            background: #fef3c7;
+            padding: 15px;
+            border-left: 4px solid #f59e0b;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .feature-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #e2e8f0;
+        }
+        th {
+            background: #2563eb;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            text-align: center;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Administrator Workflow Documentation</h1>
+    <p><strong>BetSure Call Center Management System</strong></p>
+    <p><em>Version 1.0 | Last Updated: October 2025</em></p>
+
+    <div class="section">
+        <h2>1. Overview</h2>
+        <p>As an Administrator, you have complete system access and control over all aspects of the BetSure Call Center platform. Your role is critical in maintaining system integrity, managing users, and ensuring smooth operations across all departments.</p>
+    </div>
+
+    <div class="section">
+        <h2>2. Core Responsibilities</h2>
+        <ul>
+            <li><strong>User Management:</strong> Create, approve, and manage all user accounts (Admins, Managers, Agents)</li>
+            <li><strong>System Configuration:</strong> Configure system-wide settings and integrations</li>
+            <li><strong>Campaign Oversight:</strong> Monitor and manage all active campaigns</li>
+            <li><strong>Lead Distribution:</strong> Oversee lead assignment and distribution processes</li>
+            <li><strong>Reporting:</strong> Generate and analyze comprehensive system reports</li>
+            <li><strong>Security:</strong> Maintain system security and access controls</li>
+            <li><strong>Performance Monitoring:</strong> Track overall system performance and user activity</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>3. Daily Workflow</h2>
+        
+        <div class="workflow-step">
+            <h3>Step 1: System Login</h3>
+            <ol>
+                <li>Navigate to the BetSure Call Center portal</li>
+                <li>Enter admin credentials</li>
+                <li>Verify successful authentication</li>
+                <li>Review system dashboard for alerts</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 2: Review Pending Approvals</h3>
+            <ol>
+                <li>Navigate to <strong>User Management</strong> section</li>
+                <li>Review pending user registrations</li>
+                <li>Verify user information and role assignments</li>
+                <li>Approve or reject user accounts</li>
+                <li>Assign appropriate roles (Admin/Management/Agent)</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 3: Monitor Active Agents</h3>
+            <ol>
+                <li>Access the <strong>Dashboard</strong></li>
+                <li>View real-time agent status (Online, On-call, Offline)</li>
+                <li>Track active call durations</li>
+                <li>Monitor agent performance metrics</li>
+                <li>Identify any agents requiring support</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 4: Lead Management</h3>
+            <ol>
+                <li>Import new lead lists via CSV upload</li>
+                <li>Review lead distribution across agents</li>
+                <li>Monitor lead assignment balance</li>
+                <li>Reassign leads if necessary</li>
+                <li>Verify campaign associations</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 5: Campaign Management</h3>
+            <ol>
+                <li>Review active campaigns</li>
+                <li>Create new campaigns with:
+                    <ul>
+                        <li>Campaign name and description</li>
+                        <li>Target segments and goals</li>
+                        <li>AI-generated scripts</li>
+                        <li>Start and end dates</li>
+                    </ul>
+                </li>
+                <li>Monitor campaign performance metrics</li>
+                <li>Adjust campaign parameters as needed</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 6: Generate Reports</h3>
+            <ol>
+                <li>Navigate to <strong>Reports</strong> section</li>
+                <li>Select report type and date range</li>
+                <li>Choose data inclusions (Metrics, Agents, Queues, Call Notes)</li>
+                <li>Generate AI-powered analytical reports</li>
+                <li>Review insights and recommendations</li>
+                <li>Export reports for stakeholders</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 7: System Configuration</h3>
+            <ol>
+                <li>Access <strong>Settings</strong> panel</li>
+                <li>Configure:
+                    <ul>
+                        <li>Call routing rules</li>
+                        <li>Lead distribution algorithms</li>
+                        <li>Performance thresholds</li>
+                        <li>Notification preferences</li>
+                        <li>Integration settings</li>
+                    </ul>
+                </li>
+                <li>Save and apply changes</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>4. User Management Procedures</h2>
+        
+        <h3>4.1 Creating New Users</h3>
+        <ol>
+            <li>Navigate to User Management > Add User</li>
+            <li>Enter user details:
+                <ul>
+                    <li>Full name</li>
+                    <li>Email address</li>
+                    <li>Role (Admin/Management/Agent)</li>
+                </ul>
+            </li>
+            <li>Assign initial password</li>
+            <li>Set approval status</li>
+            <li>Save user profile</li>
+        </ol>
+
+        <h3>4.2 Managing User Roles</h3>
+        <table>
+            <tr>
+                <th>Role</th>
+                <th>Permissions</th>
+                <th>Access Level</th>
+            </tr>
+            <tr>
+                <td><strong>Admin</strong></td>
+                <td>Full system access, user management, all reports</td>
+                <td>Unrestricted</td>
+            </tr>
+            <tr>
+                <td><strong>Management</strong></td>
+                <td>Monitor agents, view all reports, manage campaigns</td>
+                <td>Supervisory</td>
+            </tr>
+            <tr>
+                <td><strong>Agent</strong></td>
+                <td>View assigned leads, make calls, update records</td>
+                <td>Limited</td>
+            </tr>
+        </table>
+
+        <div class="important">
+            <strong>Important:</strong> Always verify user identity before approving accounts. Incorrect role assignments can compromise system security.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>5. Lead Distribution Management</h2>
+        
+        <h3>5.1 Importing Leads</h3>
+        <ol>
+            <li>Prepare CSV file with required fields:
+                <ul>
+                    <li>Name, Phone, Segment, Priority, Campaign</li>
+                </ul>
+            </li>
+            <li>Navigate to Leads > Import</li>
+            <li>Upload CSV file</li>
+            <li>Map columns to system fields</li>
+            <li>Preview import data</li>
+            <li>Confirm import</li>
+            <li>System automatically distributes leads to available agents</li>
+        </ol>
+
+        <h3>5.2 Manual Lead Assignment</h3>
+        <ol>
+            <li>Access Leads list</li>
+            <li>Select unassigned leads</li>
+            <li>Choose target agent(s)</li>
+            <li>Assign leads</li>
+            <li>Verify assignment in agent dashboard</li>
+        </ol>
+
+        <h3>5.3 Lead Distribution Rules</h3>
+        <ul>
+            <li>Leads distributed equally among approved agents</li>
+            <li>Campaign-specific assignments honored</li>
+            <li>Priority leads assigned first</li>
+            <li>SLA deadlines considered in assignment</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>6. Campaign Management</h2>
+        
+        <h3>6.1 Creating Campaigns</h3>
+        <div class="workflow-step">
+            <ol>
+                <li>Navigate to Campaigns > Create New</li>
+                <li>Enter campaign details:
+                    <ul>
+                        <li>Campaign name</li>
+                        <li>Description</li>
+                        <li>Target segment</li>
+                        <li>Start and end dates</li>
+                        <li>Target metrics (calls, conversions)</li>
+                    </ul>
+                </li>
+                <li>Generate AI script (optional)</li>
+                <li>Review and edit script</li>
+                <li>Activate campaign</li>
+                <li>Assign leads to campaign</li>
+            </ol>
+        </div>
+
+        <h3>6.2 Monitoring Campaign Performance</h3>
+        <ul>
+            <li>Track total calls vs. target</li>
+            <li>Monitor conversion rates</li>
+            <li>Review deposit amounts</li>
+            <li>Analyze agent performance per campaign</li>
+            <li>Identify trends and patterns</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>7. Reporting and Analytics</h2>
+        
+        <h3>7.1 Available Reports</h3>
+        <div class="feature-list">
+            <div class="feature-card">
+                <strong>Performance Reports</strong>
+                <p>Agent performance metrics, call statistics, conversion rates</p>
+            </div>
+            <div class="feature-card">
+                <strong>Campaign Reports</strong>
+                <p>Campaign-specific analytics and ROI metrics</p>
+            </div>
+            <div class="feature-card">
+                <strong>Agent Activity Reports</strong>
+                <p>Individual agent performance, call logs, notes summary</p>
+            </div>
+            <div class="feature-card">
+                <strong>System Health Reports</strong>
+                <p>System uptime, error logs, integration status</p>
+            </div>
+        </div>
+
+        <h3>7.2 Generating AI-Powered Reports</h3>
+        <ol>
+            <li>Select report date range</li>
+            <li>Choose data to include:
+                <ul>
+                    <li>✓ Include Metrics (call stats, conversions)</li>
+                    <li>✓ Include Agents (individual performance)</li>
+                    <li>✓ Include Queues (campaign data)</li>
+                    <li>✓ Include Call Notes (AI-summarized insights)</li>
+                </ul>
+            </li>
+            <li>Generate report</li>
+            <li>AI analyzes data and provides:
+                <ul>
+                    <li>Performance insights</li>
+                    <li>Trend analysis</li>
+                    <li>Recommendations</li>
+                    <li>Call notes summary</li>
+                </ul>
+            </li>
+            <li>Export as HTML or PDF</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h2>8. System Settings and Configuration</h2>
+        
+        <h3>8.1 Integration Settings</h3>
+        <ul>
+            <li><strong>Africa's Talking SIP:</strong> Configure VoIP credentials</li>
+            <li><strong>OpenAI API:</strong> Manage AI script generation settings</li>
+            <li><strong>Supabase:</strong> Database and authentication configuration</li>
+        </ul>
+
+        <h3>8.2 Notification Settings</h3>
+        <ul>
+            <li>Configure system alerts</li>
+            <li>Set notification thresholds</li>
+            <li>Manage email notifications</li>
+            <li>Define escalation rules</li>
+        </ul>
+
+        <h3>8.3 Security Settings</h3>
+        <ul>
+            <li>Manage user roles and permissions</li>
+            <li>Configure password policies</li>
+            <li>Review access logs</li>
+            <li>Enable two-factor authentication</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>9. Monitoring and Troubleshooting</h2>
+        
+        <h3>9.1 Real-Time Monitoring</h3>
+        <ul>
+            <li>Agent status dashboard (Online/On-call/Offline)</li>
+            <li>Active call monitoring</li>
+            <li>Call duration tracking</li>
+            <li>Queue metrics</li>
+            <li>System performance indicators</li>
+        </ul>
+
+        <h3>9.2 Common Issues and Solutions</h3>
+        <table>
+            <tr>
+                <th>Issue</th>
+                <th>Solution</th>
+            </tr>
+            <tr>
+                <td>Agent can't access system</td>
+                <td>Check approval status in User Management</td>
+            </tr>
+            <tr>
+                <td>Leads not distributing</td>
+                <td>Verify approved agents are available</td>
+            </tr>
+            <tr>
+                <td>Call quality issues</td>
+                <td>Check SIP credentials and network connectivity</td>
+            </tr>
+            <tr>
+                <td>Reports not generating</td>
+                <td>Verify date range and data availability</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>10. Best Practices</h2>
+        <ul>
+            <li>✓ Review pending approvals daily</li>
+            <li>✓ Monitor system health continuously</li>
+            <li>✓ Generate weekly performance reports</li>
+            <li>✓ Maintain balanced lead distribution</li>
+            <li>✓ Regularly review campaign performance</li>
+            <li>✓ Keep user roles and permissions up to date</li>
+            <li>✓ Document system changes and configurations</li>
+            <li>✓ Provide timely support to managers and agents</li>
+            <li>✓ Backup critical data regularly</li>
+            <li>✓ Stay informed about system updates</li>
+        </ul>
+    </div>
+
+    <div class="important">
+        <h3>Critical Reminders</h3>
+        <ul>
+            <li>⚠️ Only approve users after verifying their identity</li>
+            <li>⚠️ Review and test campaign scripts before activation</li>
+            <li>⚠️ Monitor lead distribution for fairness</li>
+            <li>⚠️ Backup system configuration before making changes</li>
+            <li>⚠️ Keep API credentials secure and rotate regularly</li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        <p>BetSure Call Center Management System | Administrator Documentation</p>
+        <p>For technical support, contact: support@betsure.com</p>
+    </div>
+</body>
+</html>

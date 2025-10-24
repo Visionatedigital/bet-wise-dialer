@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Workflow Documentation - BetSure Call Center</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            color: #333;
+        }
+        h1 {
+            color: #10b981;
+            border-bottom: 3px solid #10b981;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #059669;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-left: 4px solid #10b981;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #047857;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .section {
+            background: #f0fdf4;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #bbf7d0;
+        }
+        .workflow-step {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #10b981;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tip {
+            background: #dbeafe;
+            padding: 15px;
+            border-left: 4px solid #3b82f6;
+            margin: 15px 0;
+        }
+        .important {
+            background: #fef3c7;
+            padding: 15px;
+            border-left: 4px solid #f59e0b;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .feature-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #bbf7d0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #bbf7d0;
+        }
+        th {
+            background: #10b981;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background: #f0fdf4;
+        }
+        .script-example {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #bbf7d0;
+            text-align: center;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Agent Workflow Documentation</h1>
+    <p><strong>BetSure Call Center Management System</strong></p>
+    <p><em>Version 1.0 | Last Updated: October 2025</em></p>
+
+    <div class="section">
+        <h2>1. Welcome Message</h2>
+        <p>Welcome to the BetSure Call Center team! As an Agent, you are the frontline of our customer engagement strategy. Your role is to connect with leads, provide exceptional service, and convert prospects into satisfied customers.</p>
+        <p>This documentation will guide you through your daily workflow, best practices, and tips for success.</p>
+    </div>
+
+    <div class="section">
+        <h2>2. Core Responsibilities</h2>
+        <ul>
+            <li><strong>Making Outbound Calls:</strong> Contact assigned leads using the integrated softphone</li>
+            <li><strong>Following Scripts:</strong> Use AI-generated pitch scripts to guide conversations</li>
+            <li><strong>Recording Notes:</strong> Document all call interactions and outcomes</li>
+            <li><strong>Meeting Targets:</strong> Achieve daily call and conversion goals</li>
+            <li><strong>Compliance:</strong> Adhere to all regulatory and company guidelines</li>
+            <li><strong>Quality Assurance:</strong> Maintain high call quality and customer satisfaction</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>3. Daily Workflow</h2>
+        
+        <div class="workflow-step">
+            <h3>Step 1: Login and System Check</h3>
+            <ol>
+                <li>Navigate to the BetSure Call Center portal</li>
+                <li>Enter your email and password</li>
+                <li>Verify successful login</li>
+                <li>Your status automatically changes to <strong>"Online"</strong></li>
+                <li>Review today's assigned leads and targets</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 2: Review Dashboard</h3>
+            <ol>
+                <li>Check your daily KPIs:
+                    <ul>
+                        <li>Calls Made Today</li>
+                        <li>Connects (successful connections)</li>
+                        <li>Conversions</li>
+                        <li>Total Deposits</li>
+                        <li>Average Handle Time</li>
+                    </ul>
+                </li>
+                <li>Review pending callbacks</li>
+                <li>Check notifications for priority leads</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 3: Select a Lead</h3>
+            <ol>
+                <li>Navigate to the Leads queue on your dashboard</li>
+                <li>Leads are sorted by priority and SLA deadline</li>
+                <li>Click on a lead card to view details:
+                    <ul>
+                        <li>Name and phone number</li>
+                        <li>Customer segment (Hot, Warm, Cold)</li>
+                        <li>Campaign association</li>
+                        <li>Last activity and contact history</li>
+                        <li>Customer intent (if available)</li>
+                    </ul>
+                </li>
+                <li>Click <strong>"Call"</strong> button to initiate</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 4: Making the Call</h3>
+            <ol>
+                <li>Softphone interface appears with:
+                    <ul>
+                        <li>Lead information</li>
+                        <li>AI-generated pitch script</li>
+                        <li>Compliance checklist</li>
+                        <li>Call timer</li>
+                    </ul>
+                </li>
+                <li>Your status changes to <strong>"On-call"</strong></li>
+                <li>Call connects automatically</li>
+                <li>Follow the pitch script displayed on screen</li>
+                <li>Script highlights in real-time as you speak (AI tracks your speech)</li>
+                <li>Check off compliance items as you cover them</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 5: During the Call</h3>
+            <ul>
+                <li><strong>Follow the Script:</strong> The AI-generated script guides you through:
+                    <ul>
+                        <li>Introduction</li>
+                        <li>Rapport building</li>
+                        <li>Value proposition</li>
+                        <li>Objection handling</li>
+                        <li>Closing</li>
+                    </ul>
+                </li>
+                <li><strong>Real-Time Highlighting:</strong> Spoken words highlight automatically</li>
+                <li><strong>Compliance Tracking:</strong> System checks when compliance points are mentioned</li>
+                <li><strong>Customer Intent Detection:</strong> AI detects customer interest level</li>
+            </ul>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 6: After the Call</h3>
+            <ol>
+                <li>After Call Summary (ACS) screen appears showing:
+                    <ul>
+                        <li>Call duration</li>
+                        <li>Customer sentiment (AI-detected)</li>
+                        <li>Compliance score</li>
+                    </ul>
+                </li>
+                <li>Fill in required fields:
+                    <ul>
+                        <li><strong>Call Outcome:</strong> Connected, No Answer, Callback, etc.</li>
+                        <li><strong>Lead Status:</strong> Interested, Not Interested, Converted</li>
+                        <li><strong>Deposit Amount:</strong> (if conversion occurred)</li>
+                        <li><strong>Call Notes:</strong> Document key conversation points, objections, promises made, follow-up needed</li>
+                        <li><strong>Next Action:</strong> Schedule callback if needed</li>
+                    </ul>
+                </li>
+                <li>Click <strong>"Save"</strong> to record call details</li>
+                <li>Your status returns to <strong>"Online"</strong></li>
+                <li>System automatically logs call duration and updates metrics</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 7: Continue Calling</h3>
+            <ol>
+                <li>Return to leads queue</li>
+                <li>Select next priority lead</li>
+                <li>Repeat steps 3-6</li>
+                <li>Monitor your progress toward daily targets</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 8: End of Shift</h3>
+            <ol>
+                <li>Complete all pending callbacks</li>
+                <li>Finish documenting any outstanding notes</li>
+                <li>Review your daily performance metrics</li>
+                <li>Logout (status changes to <strong>"Offline"</strong>)</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>4. Understanding the Pitch Script</h2>
+        
+        <h3>4.1 AI-Generated Scripts</h3>
+        <p>Each campaign has a customized AI-generated script designed to maximize conversions. The script includes:</p>
+        
+        <div class="script-example">
+<strong>Introduction:</strong><br>
+"Good [morning/afternoon], am I speaking with [Lead Name]? Great! My name is [Your Name] from BetSure. How are you doing today?"<br><br>
+
+<strong>Rapport Building:</strong><br>
+"I'm reaching out because you're one of our valued customers, and we have an exclusive offer that I think you'll love..."<br><br>
+
+<strong>Value Proposition:</strong><br>
+"We're offering a special deposit bonus today - deposit UGX 10,000 and receive an additional UGX 5,000 in betting credits. That's 50% extra to boost your chances of winning!"<br><br>
+
+<strong>Objection Handling:</strong><br>
+If customer says: "I don't have money right now"<br>
+Response: "I completely understand. Would it be better if I called you back at the end of the week when you've had a chance to set some funds aside?"<br><br>
+
+<strong>Closing:</strong><br>
+"So can I help you make that deposit right now and get your bonus credited immediately?"
+        </div>
+
+        <h3>4.2 Real-Time Script Tracking</h3>
+        <ul>
+            <li>AI listens to your speech in real-time</li>
+            <li>Words you've spoken are highlighted in <span style="background: yellow;">yellow</span></li>
+            <li>Current sentence is highlighted in <span style="background: lightgreen;">green</span></li>
+            <li>Upcoming content remains in standard text</li>
+            <li>Helps you stay on track and maintain pace</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>5. Compliance Checklist</h2>
+        
+        <p>Every call must cover these compliance points. The AI automatically checks them off as you mention them:</p>
+        
+        <table>
+            <tr>
+                <th>Compliance Item</th>
+                <th>What to Say</th>
+            </tr>
+            <tr>
+                <td>✓ Introduced yourself and company</td>
+                <td>"My name is [Name] from BetSure"</td>
+            </tr>
+            <tr>
+                <td>✓ Confirmed speaking with correct person</td>
+                <td>"Am I speaking with [Lead Name]?"</td>
+            </tr>
+            <tr>
+                <td>✓ Mentioned data usage consent</td>
+                <td>"We're using your information per our privacy policy"</td>
+            </tr>
+            <tr>
+                <td>✓ Explained offer terms clearly</td>
+                <td>Detail deposit amounts, bonuses, and any conditions</td>
+            </tr>
+            <tr>
+                <td>✓ Disclosed responsible gambling message</td>
+                <td>"Please gamble responsibly. If you need support, visit..."</td>
+            </tr>
+        </table>
+
+        <div class="important">
+            <strong>Important:</strong> You must complete ALL compliance items before ending the call. The system tracks this and it affects your performance rating.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>6. Writing Effective Call Notes</h2>
+        
+        <h3>6.1 Why Notes Matter</h3>
+        <p>Call notes are crucial for:</p>
+        <ul>
+            <li>Continuity in future follow-ups</li>
+            <li>Manager review and coaching</li>
+            <li>AI-powered insights and reporting</li>
+            <li>Compliance and quality assurance</li>
+        </ul>
+
+        <h3>6.2 What to Include</h3>
+        <ul>
+            <li><strong>Customer Response:</strong> How did they react to your pitch?</li>
+            <li><strong>Objections Raised:</strong> What concerns did they express?</li>
+            <li><strong>Interests Mentioned:</strong> What sparked their interest?</li>
+            <li><strong>Commitments Made:</strong> Did you promise a callback? When?</li>
+            <li><strong>Deposit Details:</strong> If converted, document amount and method</li>
+            <li><strong>Next Steps:</strong> What should happen next?</li>
+        </ul>
+
+        <h3>6.3 Examples of Good vs. Bad Notes</h3>
+        
+        <div class="tip">
+            <strong>✓ GOOD EXAMPLE:</strong><br>
+            "Customer interested in 50% deposit bonus but wants to wait until Friday (payday). Mentioned he usually bets on football. Promised to call back Friday 2 PM. Set reminder for callback."
+        </div>
+
+        <div class="important">
+            <strong>✗ BAD EXAMPLE:</strong><br>
+            "Will call back later."
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>7. Understanding Your Performance Metrics</h2>
+        
+        <div class="feature-list">
+            <div class="feature-card">
+                <strong>Calls Made</strong>
+                <p>Total outbound calls attempted today</p>
+                <p><em>Target: 80-100 per day</em></p>
+            </div>
+            <div class="feature-card">
+                <strong>Connects</strong>
+                <p>Calls where you spoke to the lead</p>
+                <p><em>Target: 50% connect rate</em></p>
+            </div>
+            <div class="feature-card">
+                <strong>Conversions</strong>
+                <p>Successful deposits/sales</p>
+                <p><em>Target: 10-15 per day</em></p>
+            </div>
+            <div class="feature-card">
+                <strong>Avg Handle Time</strong>
+                <p>Average call duration</p>
+                <p><em>Target: 5-7 minutes</em></p>
+            </div>
+            <div class="feature-card">
+                <strong>Conversion Rate</strong>
+                <p>Conversions ÷ Connects × 100</p>
+                <p><em>Target: 20%+</em></p>
+            </div>
+            <div class="feature-card">
+                <strong>Total Deposits</strong>
+                <p>Total revenue generated</p>
+                <p><em>Target: UGX 500k+ per day</em></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>8. Tips for Success</h2>
+        
+        <h3>8.1 Call Quality</h3>
+        <ul>
+            <li>✓ Speak clearly and maintain a friendly tone</li>
+            <li>✓ Listen actively to customer needs</li>
+            <li>✓ Personalize the script - don't sound robotic</li>
+            <li>✓ Handle objections with empathy</li>
+            <li>✓ Know when to close vs. schedule callback</li>
+        </ul>
+
+        <h3>8.2 Time Management</h3>
+        <ul>
+            <li>✓ Start calling within 15 minutes of login</li>
+            <li>✓ Aim for consistent call pace throughout the day</li>
+            <li>✓ Take short breaks between calls to maintain energy</li>
+            <li>✓ Prioritize high-value and SLA-critical leads first</li>
+        </ul>
+
+        <h3>8.3 System Usage</h3>
+        <ul>
+            <li>✓ Keep your status accurate (Online when available)</li>
+            <li>✓ Write detailed call notes immediately after each call</li>
+            <li>✓ Set callbacks properly with correct dates/times</li>
+            <li>✓ Report any technical issues immediately</li>
+        </ul>
+
+        <h3>8.4 Compliance</h3>
+        <ul>
+            <li>✓ Always complete the compliance checklist</li>
+            <li>✓ Never skip required disclosures</li>
+            <li>✓ Be honest about terms and conditions</li>
+            <li>✓ Respect customer requests to be removed from calling list</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>9. Handling Common Scenarios</h2>
+        
+        <h3>9.1 No Answer / Voicemail</h3>
+        <ol>
+            <li>Let it ring for at least 30 seconds</li>
+            <li>If voicemail, do NOT leave a message</li>
+            <li>Mark as "No Answer" in call outcome</li>
+            <li>Schedule automatic retry for later in the day</li>
+        </ol>
+
+        <h3>9.2 Wrong Number</h3>
+        <ol>
+            <li>Politely apologize</li>
+            <li>End the call</li>
+            <li>Mark lead as "Invalid Number"</li>
+            <li>Add note explaining the issue</li>
+        </ol>
+
+        <h3>9.3 Customer Requests Callback</h3>
+        <ol>
+            <li>Agree politely</li>
+            <li>Ask for preferred date/time</li>
+            <li>Schedule callback in the system</li>
+            <li>Confirm details in call notes</li>
+        </ol>
+
+        <h3>9.4 Customer is Angry/Upset</h3>
+        <ol>
+            <li>Stay calm and professional</li>
+            <li>Listen without interrupting</li>
+            <li>Apologize for any inconvenience</li>
+            <li>Offer to escalate to manager if needed</li>
+            <li>Document the situation in detail</li>
+        </ol>
+
+        <h3>9.5 Customer Makes Deposit</h3>
+        <ol>
+            <li>Congratulate them on their decision</li>
+            <li>Guide through deposit process if needed</li>
+            <li>Confirm deposit amount</li>
+            <li>Explain bonus credit timing</li>
+            <li>Thank them for their business</li>
+            <li>Mark as "Converted" with deposit amount</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h2>10. Troubleshooting</h2>
+        
+        <table>
+            <tr>
+                <th>Issue</th>
+                <th>Solution</th>
+            </tr>
+            <tr>
+                <td>Can't make calls</td>
+                <td>Check internet connection; verify your account is approved; contact supervisor</td>
+            </tr>
+            <tr>
+                <td>No leads showing</td>
+                <td>Wait for lead distribution; refresh page; check with manager</td>
+            </tr>
+            <tr>
+                <td>Call drops frequently</td>
+                <td>Check internet stability; report to IT support</td>
+            </tr>
+            <tr>
+                <td>Script not highlighting</td>
+                <td>Check microphone permissions; refresh page; use manual tracking</td>
+            </tr>
+            <tr>
+                <td>Can't save call notes</td>
+                <td>Check all required fields are filled; try again; escalate if persists</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="tip">
+        <h3>Quick Reference: Your Daily Checklist</h3>
+        <ul>
+            <li>□ Login and verify system access</li>
+            <li>□ Review daily targets and assigned leads</li>
+            <li>□ Start making calls within 15 minutes</li>
+            <li>□ Follow scripts and complete compliance checks</li>
+            <li>□ Write detailed call notes after each call</li>
+            <li>□ Track your progress toward targets</li>
+            <li>□ Complete all scheduled callbacks</li>
+            <li>□ Review daily performance before logout</li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        <p>BetSure Call Center Management System | Agent Documentation</p>
+        <p>For support, contact your supervisor or email: support@betsure.com</p>
+        <p><strong>Remember:</strong> Your detailed call notes help managers provide better coaching and improve overall team performance!</p>
+    </div>
+</body>
+</html>

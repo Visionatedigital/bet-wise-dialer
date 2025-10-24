@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manager Workflow Documentation - BetSure Call Center</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            color: #333;
+        }
+        h1 {
+            color: #7c3aed;
+            border-bottom: 3px solid #7c3aed;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #6d28d9;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-left: 4px solid #7c3aed;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #5b21b6;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .section {
+            background: #f5f3ff;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #ddd6fe;
+        }
+        .workflow-step {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #7c3aed;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tip {
+            background: #dbeafe;
+            padding: 15px;
+            border-left: 4px solid #3b82f6;
+            margin: 15px 0;
+        }
+        .important {
+            background: #fef3c7;
+            padding: 15px;
+            border-left: 4px solid #f59e0b;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .feature-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ddd6fe;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #ddd6fe;
+        }
+        th {
+            background: #7c3aed;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background: #f5f3ff;
+        }
+        .metric-box {
+            background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #ddd6fe;
+            text-align: center;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Manager Workflow Documentation</h1>
+    <p><strong>BetSure Call Center Management System</strong></p>
+    <p><em>Version 1.0 | Last Updated: October 2025</em></p>
+
+    <div class="section">
+        <h2>1. Overview</h2>
+        <p>As a Manager, you are responsible for overseeing agent performance, monitoring call quality, managing campaigns, and ensuring team targets are met. You have comprehensive access to all agent activities, real-time monitoring capabilities, and advanced reporting tools.</p>
+        <p>Your role bridges the operational execution of agents with the strategic oversight of administrators.</p>
+    </div>
+
+    <div class="section">
+        <h2>2. Core Responsibilities</h2>
+        <ul>
+            <li><strong>Agent Monitoring:</strong> Track real-time agent status, call activity, and performance metrics</li>
+            <li><strong>Performance Management:</strong> Review agent KPIs and provide coaching based on AI-analyzed insights</li>
+            <li><strong>Campaign Management:</strong> Create, monitor, and optimize campaigns</li>
+            <li><strong>Quality Assurance:</strong> Review call notes and ensure compliance standards</li>
+            <li><strong>Reporting:</strong> Generate and analyze AI-powered reports with call note summaries</li>
+            <li><strong>Team Development:</strong> Identify training needs and improvement opportunities</li>
+            <li><strong>Target Setting:</strong> Monitor team progress toward daily/weekly/monthly goals</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>3. Daily Workflow</h2>
+        
+        <div class="workflow-step">
+            <h3>Step 1: System Login and Dashboard Review</h3>
+            <ol>
+                <li>Navigate to BetSure Call Center portal</li>
+                <li>Login with management credentials</li>
+                <li>Review Management Dashboard showing:
+                    <ul>
+                        <li>Team performance overview</li>
+                        <li>Active agents count</li>
+                        <li>Today's call metrics</li>
+                        <li>Campaign status</li>
+                        <li>Critical alerts</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 2: Monitor Active Agents</h3>
+            <ol>
+                <li>Navigate to <strong>Monitor</strong> section</li>
+                <li>View real-time agent grid showing:
+                    <ul>
+                        <li><strong>Agent Name</strong> and contact info</li>
+                        <li><strong>Status:</strong> Online (🟢), On-call (🔵), Offline (⚪)</li>
+                        <li><strong>Current Call Duration:</strong> Live timer for active calls</li>
+                        <li><strong>Last Status Change:</strong> When they went online/on-call</li>
+                        <li><strong>Calls Today:</strong> Number of calls completed</li>
+                        <li><strong>Assigned Leads:</strong> Total leads in queue</li>
+                        <li><strong>Last Campaign:</strong> Most recent campaign worked</li>
+                    </ul>
+                </li>
+                <li>Identify agents who may need support:
+                    <ul>
+                        <li>Long call durations (over 15 minutes)</li>
+                        <li>Low call volume</li>
+                        <li>Offline when should be working</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 3: Review Team Performance Metrics</h3>
+            <ol>
+                <li>Access the Dashboard to view aggregated metrics:
+                    <ul>
+                        <li>Total Calls Made (team)</li>
+                        <li>Connect Rate %</li>
+                        <li>Conversion Rate %</li>
+                        <li>Total Revenue Generated</li>
+                        <li>Average Handle Time</li>
+                    </ul>
+                </li>
+                <li>Compare against targets</li>
+                <li>Identify trends (improving vs. declining)</li>
+                <li>Note any red flags requiring immediate attention</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 4: Campaign Management</h3>
+            <ol>
+                <li>Navigate to <strong>Campaigns</strong> section</li>
+                <li>Review active campaigns:
+                    <ul>
+                        <li>Calls made vs. target</li>
+                        <li>Conversion performance</li>
+                        <li>Revenue generated</li>
+                        <li>Remaining leads</li>
+                    </ul>
+                </li>
+                <li>Create new campaigns when needed:
+                    <ul>
+                        <li>Define target segment</li>
+                        <li>Set goals (calls, conversions, revenue)</li>
+                        <li>Generate/edit AI scripts</li>
+                        <li>Activate and assign agents</li>
+                    </ul>
+                </li>
+                <li>Optimize underperforming campaigns</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 5: Call Quality Review</h3>
+            <ol>
+                <li>Navigate to agent call history</li>
+                <li>Review detailed call notes written by agents</li>
+                <li>Look for:
+                    <ul>
+                        <li>Compliance adherence</li>
+                        <li>Note quality and detail</li>
+                        <li>Objection handling</li>
+                        <li>Customer sentiment</li>
+                        <li>Follow-up actions</li>
+                    </ul>
+                </li>
+                <li>Identify coaching opportunities</li>
+                <li>Schedule one-on-one sessions if needed</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 6: Generate AI-Powered Reports</h3>
+            <ol>
+                <li>Navigate to <strong>Reports</strong> section</li>
+                <li>Select report parameters:
+                    <ul>
+                        <li>Date range (today, week, month, quarter, custom)</li>
+                        <li>☑ Include Metrics (call statistics)</li>
+                        <li>☑ Include Agents (individual performance)</li>
+                        <li>☑ Include Queues (campaign data)</li>
+                        <li>☑ Include Call Notes (AI-summarized insights)</li>
+                    </ul>
+                </li>
+                <li>Click <strong>"Generate Report"</strong></li>
+                <li>AI analyzes all data including call notes and provides:
+                    <ul>
+                        <li>Executive summary</li>
+                        <li>Performance trends</li>
+                        <li>Agent-specific insights</li>
+                        <li>Summarized call notes themes</li>
+                        <li>Recommendations for improvement</li>
+                    </ul>
+                </li>
+                <li>Export report as HTML (open in Word to save as .docx)</li>
+                <li>Share with stakeholders</li>
+            </ol>
+        </div>
+
+        <div class="workflow-step">
+            <h3>Step 7: Team Communication</h3>
+            <ol>
+                <li>Review notifications and system alerts</li>
+                <li>Communicate important updates to agents</li>
+                <li>Address any escalated customer issues</li>
+                <li>Provide feedback on performance</li>
+                <li>Share best practices and success stories</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>4. Real-Time Agent Monitoring</h2>
+        
+        <h3>4.1 Understanding Agent Status</h3>
+        <table>
+            <tr>
+                <th>Status</th>
+                <th>Meaning</th>
+                <th>What to Monitor</th>
+            </tr>
+            <tr>
+                <td>🟢 Online</td>
+                <td>Agent is logged in and available to make calls</td>
+                <td>Ensure agents start calling promptly, not idle</td>
+            </tr>
+            <tr>
+                <td>🔵 On-call</td>
+                <td>Agent is actively on a call with a customer</td>
+                <td>Watch call duration; intervene if too long (>15 min)</td>
+            </tr>
+            <tr>
+                <td>⚪ Offline</td>
+                <td>Agent is logged out or unavailable</td>
+                <td>Verify offline status matches scheduled breaks/shift end</td>
+            </tr>
+        </table>
+
+        <h3>4.2 Key Monitoring Metrics</h3>
+        <div class="metric-box">
+            <strong>Current Call Duration:</strong><br>
+            Displayed in real-time for agents on active calls. Alert if exceeds 15 minutes - agent may need supervisor assistance.
+        </div>
+
+        <div class="metric-box">
+            <strong>Last Status Change:</strong><br>
+            Shows when agent went online or started current call. Helps track actual working time vs. scheduled time.
+        </div>
+
+        <div class="metric-box">
+            <strong>Calls Today:</strong><br>
+            Running count of completed calls. Compare to targets and identify underperformers early in the shift.
+        </div>
+
+        <div class="metric-box">
+            <strong>Assigned Leads:</strong><br>
+            Number of leads in agent's queue. Ensure fair distribution and adequate pipeline.
+        </div>
+
+        <h3>4.3 When to Intervene</h3>
+        <ul>
+            <li><strong>Call Duration >15 minutes:</strong> Check if agent needs help closing or handling objection</li>
+            <li><strong>Low Call Volume:</strong> If agent has made <50% of target by midday, investigate</li>
+            <li><strong>Offline During Shift:</strong> Verify legitimate break vs. unauthorized absence</li>
+            <li><strong>No Leads Assigned:</strong> Check system for distribution issues</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>5. Performance Analysis and Coaching</h2>
+        
+        <h3>5.1 Key Performance Indicators (KPIs)</h3>
+        <div class="feature-list">
+            <div class="feature-card">
+                <strong>Calls Made</strong>
+                <p>Target: 80-100 per agent/day</p>
+                <p>Low? Check if agent has enough leads or technical issues</p>
+            </div>
+            <div class="feature-card">
+                <strong>Connect Rate</strong>
+                <p>Target: 50%+</p>
+                <p>Low? Review calling times and lead quality</p>
+            </div>
+            <div class="feature-card">
+                <strong>Conversion Rate</strong>
+                <p>Target: 20%+</p>
+                <p>Low? Listen to calls, review script adherence, provide coaching</p>
+            </div>
+            <div class="feature-card">
+                <strong>Avg Handle Time</strong>
+                <p>Target: 5-7 minutes</p>
+                <p>Too long? Coach on efficient closing. Too short? Check if skipping steps</p>
+            </div>
+            <div class="feature-card">
+                <strong>Total Revenue</strong>
+                <p>Target: UGX 500k+ per agent/day</p>
+                <p>Track deposit amounts and conversion quality</p>
+            </div>
+            <div class="feature-card">
+                <strong>Compliance Score</strong>
+                <p>Target: 100%</p>
+                <p>Review call notes; ensure all checklist items covered</p>
+            </div>
+        </div>
+
+        <h3>5.2 Using Call Notes for Coaching</h3>
+        <p>Agent call notes provide invaluable coaching insights:</p>
+        <ul>
+            <li><strong>Objection Patterns:</strong> What objections are agents hearing most? Develop targeted responses</li>
+            <li><strong>Note Quality:</strong> Are notes detailed enough? Coach agents on proper documentation</li>
+            <li><strong>Follow-up Discipline:</strong> Are agents scheduling callbacks properly?</li>
+            <li><strong>Customer Sentiment:</strong> Look for patterns in customer reactions</li>
+            <li><strong>Success Stories:</strong> Identify what's working and share with team</li>
+        </ul>
+
+        <div class="tip">
+            <strong>Pro Tip:</strong> When generating reports, always include call notes. The AI summarizes common themes, objections, and success patterns across hundreds of calls - providing coaching insights you'd miss by reviewing calls individually.
+        </div>
+
+        <h3>5.3 Coaching Best Practices</h3>
+        <ol>
+            <li><strong>Use Data:</strong> Base coaching on actual metrics and call notes, not assumptions</li>
+            <li><strong>Be Specific:</strong> "Your handle time is 12 minutes vs. target of 7. Let's work on efficient closing."</li>
+            <li><strong>Positive Reinforcement:</strong> Highlight what agents are doing well</li>
+            <li><strong>Action Plans:</strong> Set specific improvement goals with timelines</li>
+            <li><strong>Follow Up:</strong> Monitor progress and provide ongoing support</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h2>6. AI-Powered Reporting</h2>
+        
+        <h3>6.1 Report Types Available</h3>
+        <table>
+            <tr>
+                <th>Report Type</th>
+                <th>Purpose</th>
+                <th>Key Insights</th>
+            </tr>
+            <tr>
+                <td><strong>Performance Report</strong></td>
+                <td>Overall team and individual performance</td>
+                <td>Calls, connects, conversions, revenue trends</td>
+            </tr>
+            <tr>
+                <td><strong>Campaign Report</strong></td>
+                <td>Campaign-specific analytics</td>
+                <td>Campaign ROI, script effectiveness, target progress</td>
+            </tr>
+            <tr>
+                <td><strong>Agent Analysis Report</strong></td>
+                <td>Deep dive into individual agent performance</td>
+                <td>Strengths, weaknesses, coaching recommendations</td>
+            </tr>
+            <tr>
+                <td><strong>Call Notes Summary</strong></td>
+                <td>AI-analyzed themes from call notes</td>
+                <td>Common objections, customer sentiment, success patterns</td>
+            </tr>
+        </table>
+
+        <h3>6.2 How AI Analyzes Call Notes</h3>
+        <p>When you include call notes in reports, the AI:</p>
+        <ol>
+            <li><strong>Aggregates:</strong> Collects all call notes from selected date range</li>
+            <li><strong>Categorizes:</strong> Groups notes by themes (objections, interests, commitments)</li>
+            <li><strong>Identifies Patterns:</strong> Finds common customer responses and concerns</li>
+            <li><strong>Sentiment Analysis:</strong> Assesses overall customer sentiment trends</li>
+            <li><strong>Generates Insights:</strong> Provides actionable recommendations</li>
+            <li><strong>Summarizes:</strong> Creates concise executive summary of findings</li>
+        </ol>
+
+        <h3>6.3 Sample AI Insights from Call Notes</h3>
+        <div class="workflow-step">
+            <strong>Example AI Summary:</strong><br><br>
+            "Analysis of 247 call notes from the past week reveals:<br><br>
+            <strong>Top 3 Customer Objections:</strong>
+            <ul>
+                <li>Financial constraints (42% of calls) - "Don't have money right now"</li>
+                <li>Previous negative experience (28%) - "Lost money betting before"</li>
+                <li>Timing concerns (18%) - "Will deposit on payday"</li>
+            </ul>
+            <strong>Success Patterns:</strong>
+            <ul>
+                <li>Agents who emphasized bonus value (50% extra) had 32% higher conversion</li>
+                <li>Offering flexible callback times increased conversion by 24%</li>
+                <li>Mentioning specific sports events improved engagement</li>
+            </ul>
+            <strong>Recommendations:</strong>
+            <ul>
+                <li>Develop script variation addressing previous loss concerns</li>
+                <li>Create payday-timed campaign for "callback on payday" objections</li>
+                <li>Train agents on sports event tie-ins for better engagement</li>
+            </ul>"
+        </div>
+
+        <h3>6.4 Exporting and Sharing Reports</h3>
+        <ol>
+            <li>Generate report with all inclusions</li>
+            <li>Report displays in HTML format</li>
+            <li>To convert to Word:
+                <ul>
+                    <li>Right-click on report</li>
+                    <li>Select "Open in Microsoft Word"</li>
+                    <li>Save as .docx</li>
+                </ul>
+            </li>
+            <li>Share with:
+                <ul>
+                    <li>Upper management for strategic insights</li>
+                    <li>HR for training needs identification</li>
+                    <li>Marketing for customer insight</li>
+                    <li>Admins for system optimization</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h2>7. Campaign Management</h2>
+        
+        <h3>7.1 Creating Effective Campaigns</h3>
+        <div class="workflow-step">
+            <strong>Step-by-Step Campaign Creation:</strong>
+            <ol>
+                <li>Navigate to Campaigns > Create New</li>
+                <li>Define campaign basics:
+                    <ul>
+                        <li>Name (descriptive, e.g., "Football Weekend Bonus Push")</li>
+                        <li>Description (clear goals and context)</li>
+                        <li>Target segment (Hot/Warm/Cold leads)</li>
+                    </ul>
+                </li>
+                <li>Set measurable targets:
+                    <ul>
+                        <li>Total calls target</li>
+                        <li>Conversion target</li>
+                        <li>Revenue target</li>
+                    </ul>
+                </li>
+                <li>Configure AI script:
+                    <ul>
+                        <li>Click "Generate AI Script"</li>
+                        <li>Review and customize</li>
+                        <li>Test with pilot agents</li>
+                    </ul>
+                </li>
+                <li>Set campaign duration (start/end dates)</li>
+                <li>Activate and assign leads</li>
+            </ol>
+        </div>
+
+        <h3>7.2 Monitoring Campaign Performance</h3>
+        <ul>
+            <li>Track progress daily against targets</li>
+            <li>Monitor conversion rates vs. previous campaigns</li>
+            <li>Review agent feedback on script effectiveness</li>
+            <li>Analyze call notes for campaign-specific insights</li>
+            <li>Adjust strategy mid-campaign if needed</li>
+        </ul>
+
+        <h3>7.3 Campaign Optimization Tips</h3>
+        <ul>
+            <li>✓ A/B test different script variations</li>
+            <li>✓ Time campaigns around relevant events (sports matches, paydays)</li>
+            <li>✓ Segment leads carefully for targeted messaging</li>
+            <li>✓ Review and refine based on call note feedback</li>
+            <li>✓ Share top-performing agent techniques with team</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>8. Quality Assurance Process</h2>
+        
+        <h3>8.1 Call Note Review Checklist</h3>
+        <ul>
+            <li>□ Notes are detailed and specific (not vague like "will call back")</li>
+            <li>□ Customer objections documented</li>
+            <li>□ Customer interests captured</li>
+            <li>□ Next actions clearly stated</li>
+            <li>□ Callback dates/times specified when applicable</li>
+            <li>□ Deposit amounts recorded for conversions</li>
+            <li>□ Compliance items mentioned if relevant</li>
+        </ul>
+
+        <h3>8.2 Performance Review Schedule</h3>
+        <ul>
+            <li><strong>Daily:</strong> Quick check of agent metrics and status</li>
+            <li><strong>Weekly:</strong> Detailed review of individual agent performance with coaching sessions</li>
+            <li><strong>Monthly:</strong> Comprehensive performance reviews with AI-generated reports</li>
+            <li><strong>Quarterly:</strong> Strategic review of campaigns, scripts, and overall team effectiveness</li>
+        </ul>
+
+        <h3>8.3 Red Flags Requiring Immediate Attention</h3>
+        <div class="important">
+            <ul>
+                <li>⚠️ Agent consistently offline during scheduled shifts</li>
+                <li>⚠️ Conversion rate drops below 10%</li>
+                <li>⚠️ Multiple compliance violations</li>
+                <li>⚠️ Customer complaints or escalations</li>
+                <li>⚠️ Vague or missing call notes</li>
+                <li>⚠️ Call volume <50% of target by mid-shift</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>9. Best Practices for Managers</h2>
+        
+        <h3>9.1 Daily Excellence</h3>
+        <ul>
+            <li>✓ Check monitor dashboard first thing every day</li>
+            <li>✓ Verify all agents are online and calling within 15 minutes of shift start</li>
+            <li>✓ Monitor active call durations throughout the day</li>
+            <li>✓ Review call notes from previous day for quality</li>
+            <li>✓ Provide real-time support to struggling agents</li>
+            <li>✓ Celebrate wins and share success stories</li>
+        </ul>
+
+        <h3>9.2 Weekly Excellence</h3>
+        <ul>
+            <li>✓ Generate comprehensive AI reports with call notes</li>
+            <li>✓ Conduct one-on-one coaching sessions with each agent</li>
+            <li>✓ Review and optimize active campaigns</li>
+            <li>✓ Analyze call note themes for training needs</li>
+            <li>✓ Update scripts based on performance data</li>
+        </ul>
+
+        <h3>9.3 Data-Driven Decision Making</h3>
+        <ul>
+            <li>✓ Base all decisions on actual metrics, not gut feel</li>
+            <li>✓ Use AI-generated insights from call notes</li>
+            <li>✓ Track trends over time, not just snapshots</li>
+            <li>✓ Compare agent performance fairly (account for lead quality)</li>
+            <li>✓ Document coaching actions and measure impact</li>
+        </ul>
+    </div>
+
+    <div class="tip">
+        <h3>Manager's Quick Reference Guide</h3>
+        <strong>Start of Day:</strong>
+        <ul>
+            <li>□ Login and review dashboard alerts</li>
+            <li>□ Check all agents are online and calling</li>
+            <li>□ Review yesterday's performance summary</li>
+        </ul>
+        <strong>Throughout Day:</strong>
+        <ul>
+            <li>□ Monitor agent status and call durations</li>
+            <li>□ Provide real-time support as needed</li>
+            <li>□ Track progress toward daily targets</li>
+        </ul>
+        <strong>End of Day:</strong>
+        <ul>
+            <li>□ Review call notes quality</li>
+            <li>□ Note agents needing coaching</li>
+            <li>□ Prepare for next day</li>
+        </ul>
+        <strong>Weekly:</strong>
+        <ul>
+            <li>□ Generate AI report with call notes included</li>
+            <li>□ Conduct coaching sessions</li>
+            <li>□ Share insights with admin team</li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        <p>BetSure Call Center Management System | Manager Documentation</p>
+        <p>For support, contact: support@betsure.com</p>
+        <p><strong>Remember:</strong> AI-powered call note analysis gives you insights from hundreds of calls in seconds - use this superpower to drive continuous improvement!</p>
+    </div>
+</body>
+</html>
