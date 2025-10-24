@@ -351,7 +351,7 @@ useEffect(() => {
           lead_name: lead.name,
           phone_number: lead.phone,
           campaign_id: lead.campaignId,
-          status: 'in_progress',
+          status: 'connected',
           start_time: new Date().toISOString()
         })
         .select()
