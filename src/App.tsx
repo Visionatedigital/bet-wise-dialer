@@ -80,6 +80,11 @@ const App = () => (
                   <ManagementCampaigns />
                 </ProtectedRoute>
               } />
+              <Route path="/management-campaign" element={
+                <ProtectedRoute>
+                  <ManagementCampaigns />
+                </ProtectedRoute>
+              } />
               <Route path="/integrations" element={
                 <ProtectedRoute>
                   <Integrations />

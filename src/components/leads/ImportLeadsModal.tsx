@@ -147,20 +147,20 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
             const jsonData = XLSX.utils.sheet_to_json(firstSheet);
 
             const leads = jsonData.map((row: any) => {
-              const phone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || '').trim();
+              const phone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || row.username || '').trim();
               const name = String(row.name || row.Name || row.customer || row.Customer || phone).trim();
               const segment = detectSegment(row);
               const priority = segment === 'vip' ? 'high' : segment === 'dormant' ? 'low' : 'medium';
               
               return {
-                user_id: null, // Admin imports as unassigned
+                user_id: null, // Will be auto-distributed
                 name: name || 'Unknown',
                 phone: phone,
                 segment: segment,
                 priority: priority,
                 score: segment === 'vip' ? 80 : segment === 'semi-active' ? 50 : 20,
                 tags: [],
-                last_deposit_ugx: parseFloat(String(row.last_deposit || row.deposit || 0).replace(/[^0-9.]/g, '')) || 0
+                last_deposit_ugx: parseFloat(String(row.last_deposit || row.deposit || row['近一年充值金额(美元)'] || 0).replace(/[^0-9.]/g, '')) || 0
               };
             }).filter(lead => lead.phone);
 
@@ -170,7 +170,15 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
 
             if (error) throw error;
 
-            toast.success(`Successfully imported ${leads.length} leads with auto-detected segments`);
+            // Auto-distribute leads among agents
+            const { data: distributionData } = await supabase.functions.invoke('distribute-leads');
+            
+            if (distributionData?.distributed > 0) {
+              toast.success(`Successfully imported ${leads.length} leads and distributed to ${distributionData.distribution?.length || 0} agents`);
+            } else {
+              toast.success(`Successfully imported ${leads.length} leads`);
+            }
+            
             onImportComplete();
             onOpenChange(false);
             setFile(null);

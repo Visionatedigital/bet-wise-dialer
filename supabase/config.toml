@@ -35,3 +35,12 @@ verify_jwt = true
 
 [functions.realtime-stream]
 verify_jwt = false
+
+[functions.analyze-performance]
+verify_jwt = true
+
+[functions.distribute-leads]
+verify_jwt = true
+
+[functions.export-report]
+verify_jwt = true
