@@ -630,7 +630,7 @@ const handleCallEnd = () => {
             
             <div className="bg-muted/50 rounded-lg p-3 text-sm">
               <div className="font-medium">{currentLead.name}</div>
-              <div className="text-muted-foreground">{currentLead.phone}</div>
+              <div className="text-muted-foreground">{maskPhone(currentLead.phone)}</div>
               <div className="text-xs text-muted-foreground mt-1">
                 Campaign: {currentLead.campaign}
               </div>

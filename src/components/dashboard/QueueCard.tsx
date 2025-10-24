@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-
+import { maskPhone } from "@/lib/formatters";
 interface Lead {
   id: string;
   name: string;
@@ -99,7 +99,7 @@ export function QueueCard({ nextLead, queueLength, onCallLead }: QueueCardProps)
             </div>
             
             <p className="text-sm text-muted-foreground mb-1">
-              {nextLead.phone}
+              {maskPhone(nextLead.phone)}
             </p>
             
             <div className="flex items-center gap-4 text-xs text-muted-foreground">

@@ -90,21 +90,12 @@ const ManagementReports = () => {
 
   const handleExportReport = async () => {
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/export-report`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ dateRange }),
-        }
-      );
-      
-      if (!response.ok) throw new Error('Export failed');
-      
-      const blob = await response.blob();
+      const { data, error } = await supabase.functions.invoke('export-report', {
+        body: { dateRange },
+      });
+      if (error) throw error;
+      const html = typeof data === 'string' ? data : (data?.html || '');
+      const blob = new Blob([html], { type: 'text/html' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -113,7 +104,6 @@ const ManagementReports = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
       toast.success('Report exported successfully');
     } catch (error) {
       console.error('Error exporting report:', error);

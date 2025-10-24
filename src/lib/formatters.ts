@@ -30,3 +30,18 @@ export const formatDuration = (seconds: number): string => {
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
+
+// Mask phone numbers for agent-facing UI
+export const maskPhone = (phone: string): string => {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  // Uganda +256 format: show country code + first 3 digits, mask middle 3, show last 2
+  if (digits.startsWith('256') && digits.length >= 9) {
+    const p = digits.slice(3); // remove 256
+    const first = p.slice(0, 3);
+    const last = p.slice(-2);
+    return `+256 ${first} XXX ${last}`;
+  }
+  // Generic mask: keep first 3 and last 2
+  return phone.replace(/(\+?\d{3})\d+(\d{2})/, '$1 XXX $2');
+};

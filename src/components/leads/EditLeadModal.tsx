@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Lead } from "@/data/sampleData";
 import { useAuth } from "@/contexts/AuthContext";
+import { maskPhone } from "@/lib/formatters";
 
 interface EditLeadModalProps {
   open: boolean;
@@ -128,7 +129,7 @@ export function EditLeadModal({ open, onOpenChange, lead, onUpdateComplete }: Ed
 
           <div className="space-y-2">
             <Label>Phone</Label>
-            <Input value={lead.phone} disabled />
+            <Input value={maskPhone(lead.phone)} disabled />
           </div>
 
           <div className="space-y-2">
