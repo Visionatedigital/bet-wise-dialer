@@ -262,7 +262,7 @@ useEffect(() => {
       const nextIndex = currentLeadIndex + 1;
       setCurrentLeadIndex(nextIndex);
       setCurrentLead(queueLeads[nextIndex]);
-      toast.success(`Moved to next lead: ${queueLeads[nextIndex].name}`);
+      toast.success(`Moved to next lead: ${safeDisplayName(queueLeads[nextIndex].name)}`);
     } else {
       toast.info("You're at the last lead");
     }

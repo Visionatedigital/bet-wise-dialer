@@ -25,7 +25,8 @@ export function useMonitorData() {
       // Fetch all profiles with their call data
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, email, status, current_call_start, last_status_change') as any;
+        .select('id, full_name, email, status, current_call_start, last_status_change, approved')
+        .eq('approved', true) as any;
 
       if (profilesError) throw profilesError;
 
@@ -33,7 +34,7 @@ export function useMonitorData() {
       const today = new Date().toISOString().split('T')[0];
       const { data: callData, error: callError } = await supabase
         .from('call_activities')
-        .select('user_id, campaign_id, duration_seconds')
+        .select('user_id, campaign_id, duration_seconds, start_time, end_time')
         .gte('start_time', `${today}T00:00:00`)
         .lt('start_time', `${today}T23:59:59`);
 
@@ -59,52 +60,70 @@ export function useMonitorData() {
       });
 
       // Process agent data
-      const agentsData: AgentData[] = profiles?.map((profile: any) => {
-        const agentCalls = callData?.filter(c => c.user_id === profile.id) || [];
-        const currentCampaignId = agentCalls[0]?.campaign_id;
-        const currentCampaign = currentCampaignId ? campaignMap.get(currentCampaignId) : 'No Campaign';
+      const now = new Date();
+      const formatHMS = (secs: number) => {
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = Math.floor(secs % 60);
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s
+          .toString()
+          .padStart(2, '0')}`;
+      };
 
-        // Calculate duration based on status
-        let duration = '00:00';
-        if (profile.status === 'on-call' && profile.current_call_start) {
-          const start = new Date(profile.current_call_start);
-          const now = new Date();
-          const diff = Math.floor((now.getTime() - start.getTime()) / 1000);
-          const minutes = Math.floor(diff / 60);
-          const seconds = diff % 60;
-          duration = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        } else if (profile.last_status_change) {
-          const start = new Date(profile.last_status_change);
-          const now = new Date();
-          const diff = Math.floor((now.getTime() - start.getTime()) / 1000);
-          const minutes = Math.floor(diff / 60);
-          const seconds = diff % 60;
-          duration = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        }
+      const agentsData: AgentData[] = (profiles || [])
+        .map((profile: any) => {
+          const agentCalls = (callData || []).filter((c: any) => c.user_id === profile.id);
+          const lastCall = agentCalls.reduce((acc: any, c: any) => {
+            if (!acc) return c;
+            return new Date(c.start_time) > new Date(acc.start_time) ? c : acc;
+          }, null as any);
 
-        // Get initials for avatar
-        const name = profile.full_name || profile.email || 'Unknown';
-        const words = name.split(' ');
-        const avatar = words.length > 1 
-          ? `${words[0][0]}${words[1][0]}`.toUpperCase()
-          : name.substring(0, 2).toUpperCase();
+          // Derive a more accurate status
+          let derivedStatus: string = profile.status || 'offline';
+          if (profile.current_call_start) {
+            derivedStatus = 'on-call';
+          } else if (lastCall) {
+            const start = new Date(lastCall.start_time);
+            const ended = lastCall.end_time ? new Date(lastCall.end_time) : null;
+            if (!ended && (now.getTime() - start.getTime()) < 10 * 60 * 1000) {
+              derivedStatus = 'on-call';
+            }
+          }
 
-        // Calculate average score (mock for now, could be based on quality scores)
-        const score = 4.0 + Math.random() * 1.0;
+          // Duration since current state began
+          let duration = '00:00:00';
+          if (derivedStatus === 'on-call' && profile.current_call_start) {
+            duration = formatHMS(Math.floor((now.getTime() - new Date(profile.current_call_start).getTime()) / 1000));
+          } else if (profile.last_status_change) {
+            duration = formatHMS(Math.floor((now.getTime() - new Date(profile.last_status_change).getTime()) / 1000));
+          }
 
-        return {
-          id: profile.id,
-          name,
-          email: profile.email || '',
-          status: profile.status || 'offline',
-          duration,
-          campaign: currentCampaign || 'No Campaign',
-          avatar,
-          score: parseFloat(score.toFixed(1)),
-          calls: agentCalls.length,
-          assignedLeads: leadsCountMap.get(profile.id) || 0,
-        };
-      }) || [];
+          // Avatar initials
+          const name = profile.full_name || profile.email || 'Unknown';
+          const words = name.split(' ');
+          const avatar = words.length > 1
+            ? `${words[0][0]}${words[1][0]}`.toUpperCase()
+            : name.substring(0, 2).toUpperCase();
+
+          // Current campaign (from most recent call today)
+          const currentCampaignId = lastCall?.campaign_id;
+          const currentCampaign = currentCampaignId ? campaignMap.get(currentCampaignId) : 'No Campaign';
+
+          return {
+            id: profile.id,
+            name,
+            email: profile.email || '',
+            status: derivedStatus,
+            duration,
+            campaign: currentCampaign || 'No Campaign',
+            avatar,
+            score: 0,
+            calls: agentCalls.length,
+            assignedLeads: leadsCountMap.get(profile.id) || 0,
+          } as AgentData;
+        })
+        // Keep only agent-like accounts
+        .filter((a: AgentData) => a.assignedLeads > 0 || a.calls > 0 || a.status === 'on-call');
 
       setAgents(agentsData);
     } catch (error) {
