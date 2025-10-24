@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import * as XLSX from 'xlsx';
 
 interface ImportLeadsModalProps {
   open: boolean;
@@ -24,13 +25,72 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      if (!selectedFile.name.endsWith('.csv')) {
-        toast.error('Please select a CSV file');
+      const isCSV = selectedFile.name.endsWith('.csv');
+      const isExcel = selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls');
+      
+      if (!isCSV && !isExcel) {
+        toast.error('Please select a CSV or Excel file');
         return;
       }
       setFile(selectedFile);
-      parseCSVPreview(selectedFile);
+      
+      if (isExcel) {
+        parseExcelPreview(selectedFile);
+      } else {
+        parseCSVPreview(selectedFile);
+      }
     }
+  };
+
+  const detectSegment = (data: any): string => {
+    // Auto-detect segment based on data patterns
+    const lastDepositStr = String(data.last_deposit || data.lastDeposit || data.deposit || '0').toLowerCase();
+    const lastDeposit = parseFloat(lastDepositStr.replace(/[^0-9.]/g, '')) || 0;
+    
+    const lastActivityStr = String(data.last_activity || data.lastActivity || data.activity || '').toLowerCase();
+    const daysInactive = lastActivityStr.includes('day') 
+      ? parseInt(lastActivityStr.match(/\d+/)?.[0] || '0')
+      : 0;
+
+    // VIP: High deposits (>100,000 UGX) or marked as VIP
+    if (lastDeposit > 100000 || lastActivityStr.includes('vip')) {
+      return 'vip';
+    }
+    
+    // Dormant: Inactive for 30+ days or marked dormant
+    if (daysInactive > 30 || lastActivityStr.includes('dormant') || lastActivityStr.includes('inactive')) {
+      return 'dormant';
+    }
+    
+    // Default to semi-active
+    return 'semi-active';
+  };
+
+  const parseExcelPreview = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+        
+        const previewData = jsonData.slice(0, 5).map((row: any) => {
+          const phone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || '').trim();
+          const name = String(row.name || row.Name || row.customer || row.Customer || phone).trim();
+          return {
+            name: name || 'Unknown',
+            phone: phone
+          };
+        });
+
+        setPreview(previewData);
+      } catch (error) {
+        console.error('Error parsing Excel:', error);
+        toast.error('Failed to parse Excel file');
+      }
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   const parseCSVPreview = (file: File) => {
@@ -74,51 +134,101 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
 
     setImporting(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const text = e.target?.result as string;
-        const lines = text.split('\n').filter(line => line.trim());
-        const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-        
-        const nameIndex = headers.findIndex(h => h.includes('name'));
-        const phoneIndex = headers.findIndex(h => h.includes('phone') || h.includes('number'));
+      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+      
+      if (isExcel) {
+        // Handle Excel import
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet);
 
-        // If no phone column found, assume first column is phone numbers
-        const actualPhoneIndex = phoneIndex !== -1 ? phoneIndex : 0;
+            const leads = jsonData.map((row: any) => {
+              const phone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || '').trim();
+              const name = String(row.name || row.Name || row.customer || row.Customer || phone).trim();
+              const segment = detectSegment(row);
+              const priority = segment === 'vip' ? 'high' : segment === 'dormant' ? 'low' : 'medium';
+              
+              return {
+                user_id: null, // Admin imports as unassigned
+                name: name || 'Unknown',
+                phone: phone,
+                segment: segment,
+                priority: priority,
+                score: segment === 'vip' ? 80 : segment === 'semi-active' ? 50 : 20,
+                tags: [],
+                last_deposit_ugx: parseFloat(String(row.last_deposit || row.deposit || 0).replace(/[^0-9.]/g, '')) || 0
+              };
+            }).filter(lead => lead.phone);
 
-        const leads = lines.slice(1).map(line => {
-          const values = line.split(',').map(v => v.trim());
-          const phone = values[actualPhoneIndex] || '';
-          const name = nameIndex !== -1 ? values[nameIndex] : phone;
+            const { error } = await supabase
+              .from('leads')
+              .insert(leads);
+
+            if (error) throw error;
+
+            toast.success(`Successfully imported ${leads.length} leads with auto-detected segments`);
+            onImportComplete();
+            onOpenChange(false);
+            setFile(null);
+            setPreview([]);
+          } catch (error) {
+            console.error('Error importing Excel:', error);
+            toast.error('Failed to import Excel file');
+          } finally {
+            setImporting(false);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        // Handle CSV import
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const text = e.target?.result as string;
+          const lines = text.split('\n').filter(line => line.trim());
+          const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
           
-          return {
-            user_id: user.id,
-            name: name || 'Unknown',
-            phone: phone,
-            segment: 'dormant',
-            priority: 'low',
-            score: 0,
-            tags: []
-          };
-        }).filter(lead => lead.phone); // Only require phone number
+          const nameIndex = headers.findIndex(h => h.includes('name'));
+          const phoneIndex = headers.findIndex(h => h.includes('phone') || h.includes('number'));
 
-        const { error } = await supabase
-          .from('leads')
-          .insert(leads);
+          const actualPhoneIndex = phoneIndex !== -1 ? phoneIndex : 0;
 
-        if (error) throw error;
+          const leads = lines.slice(1).map(line => {
+            const values = line.split(',').map(v => v.trim());
+            const phone = values[actualPhoneIndex] || '';
+            const name = nameIndex !== -1 ? values[nameIndex] : phone;
+            
+            return {
+              user_id: null, // Admin imports as unassigned
+              name: name || 'Unknown',
+              phone: phone,
+              segment: 'dormant',
+              priority: 'low',
+              score: 20,
+              tags: []
+            };
+          }).filter(lead => lead.phone);
 
-        toast.success(`Successfully imported ${leads.length} leads`);
-        onImportComplete();
-        onOpenChange(false);
-        setFile(null);
-        setPreview([]);
-      };
-      reader.readAsText(file);
+          const { error } = await supabase
+            .from('leads')
+            .insert(leads);
+
+          if (error) throw error;
+
+          toast.success(`Successfully imported ${leads.length} leads`);
+          onImportComplete();
+          onOpenChange(false);
+          setFile(null);
+          setPreview([]);
+        };
+        reader.readAsText(file);
+      }
     } catch (error) {
       console.error('Error importing leads:', error);
       toast.error('Failed to import leads');
-    } finally {
       setImporting(false);
     }
   };
@@ -127,9 +237,9 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Import Leads from CSV</DialogTitle>
+          <DialogTitle>Import Leads from CSV/Excel</DialogTitle>
           <DialogDescription>
-            Upload a CSV file with phone numbers. Optional: include a "name" column for contact names.
+            Upload a CSV or Excel file with phone numbers. System will auto-detect segments (VIP, Semi-Active, Dormant) based on deposit and activity data.
           </DialogDescription>
         </DialogHeader>
 
@@ -140,7 +250,7 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
               <Input
                 id="csv-file"
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx,.xls"
                 onChange={handleFileChange}
                 disabled={importing}
               />
@@ -189,8 +299,8 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              <strong>CSV Format:</strong> Your file should have phone numbers. Include headers like "phone", "number", or just list numbers. 
-              Optionally add a "name" column: name,phone
+              <strong>File Format:</strong> CSV or Excel with phone numbers required. Optional columns: name, last_deposit, last_activity.
+              <br />System will auto-assign segments: VIP (&gt;100k deposits), Dormant (30+ days inactive), Semi-Active (others).
             </AlertDescription>
           </Alert>
 
