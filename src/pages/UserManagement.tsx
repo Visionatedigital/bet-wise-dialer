@@ -31,8 +31,9 @@ interface UserProfile {
 }
 
 const UserManagement = () => {
-  const [users, setUsers] = useState<UserProfile[]>([]);
+const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [approvingAll, setApprovingAll] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -89,7 +90,7 @@ const UserManagement = () => {
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: string) => {
+const handleRoleChange = async (userId: string, newRole: string) => {
     try {
       // Remove existing roles
       await supabase
@@ -112,12 +113,55 @@ const UserManagement = () => {
     }
   };
 
+  const handleApproveAll = async () => {
+    const pendingUsers = users.filter(u => !u.approved);
+    if (pendingUsers.length === 0) {
+      toast.info('No pending users to approve');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to approve ${pendingUsers.length} pending user(s)?`)) {
+      return;
+    }
+
+    setApprovingAll(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ approved: true })
+        .in('id', pendingUsers.map(u => u.id));
+
+      if (error) throw error;
+
+      toast.success(`${pendingUsers.length} user(s) approved successfully`);
+      fetchUsers();
+    } catch (error) {
+      console.error('Error approving users:', error);
+      toast.error('Failed to approve users');
+    } finally {
+      setApprovingAll(false);
+    }
+  };
+
+const pendingCount = users.filter(u => !u.approved).length;
+
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
-          <p className="text-muted-foreground">Approve users and manage roles</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+            <p className="text-muted-foreground">Approve users and manage roles</p>
+          </div>
+          {pendingCount > 0 && (
+            <Button 
+              onClick={handleApproveAll}
+              disabled={approvingAll}
+              className="bg-green-500 hover:bg-green-600"
+            >
+              {approvingAll ? 'Approving...' : `Approve All (${pendingCount})`}
+            </Button>
+          )}
         </div>
         
         <Card>
@@ -168,7 +212,7 @@ const UserManagement = () => {
                         {new Date(user.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        {!user.approved && (
+                        {!user.approved ? (
                           <Button
                             size="sm"
                             onClick={() => handleApprove(user.id)}
@@ -176,6 +220,8 @@ const UserManagement = () => {
                           >
                             Approve
                           </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Approved</span>
                         )}
                       </TableCell>
                     </TableRow>

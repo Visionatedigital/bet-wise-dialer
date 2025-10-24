@@ -438,6 +438,6 @@ const Layout = isManager ? ManagementLayout : DashboardLayout;
         )}
         </div>
       </div>
-</>
+    </Layout>
   );
 }
