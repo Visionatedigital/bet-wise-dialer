@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { BarChart3, Download, TrendingUp, Lightbulb, Target, Users, FileText } from 'lucide-react';
 import { useFunnelAnalysis } from '@/hooks/useFunnelAnalysis';
 import { useAgentAnalysis } from '@/hooks/useAgentAnalysis';
@@ -20,6 +22,10 @@ const ManagementReports = () => {
   const [loadingPerformance, setLoadingPerformance] = useState(false);
   const [reportPreview, setReportPreview] = useState<string>('');
   const [activeTab, setActiveTab] = useState('overview');
+  const [includeMetrics, setIncludeMetrics] = useState(true);
+  const [includeAgents, setIncludeAgents] = useState(true);
+  const [includeQueues, setIncludeQueues] = useState(true);
+  const [includeCallNotes, setIncludeCallNotes] = useState(true);
   
   const { funnelData, insights, message, loading } = useFunnelAnalysis(dateRange, '');
   const { agents, insights: agentInsights } = useAgentAnalysis(dateRange);
@@ -90,11 +96,45 @@ const ManagementReports = () => {
 
   const handleExportReport = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('export-report', {
-        body: { dateRange },
+      toast.info('Generating AI-powered report...');
+      
+      const startDate = getStartDate(dateRange);
+      const endDate = new Date().toISOString().split('T')[0];
+      
+      const { data, error } = await supabase.functions.invoke('generate-report', {
+        body: { 
+          startDate,
+          endDate,
+          includeMetrics,
+          includeAgents,
+          includeQueues,
+          includeCallNotes
+        },
       });
+      
       if (error) throw error;
-      const html = typeof data === 'string' ? data : (data?.html || '');
+      
+      const report = data?.report || '';
+      const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Performance Report - ${dateRange}</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; max-width: 1200px; margin: 0 auto; padding: 40px 20px; color: #333; }
+    h1 { color: #2563eb; border-bottom: 3px solid #2563eb; padding-bottom: 10px; margin-bottom: 30px; }
+    h2 { color: #1e40af; margin-top: 30px; margin-bottom: 15px; border-left: 4px solid #2563eb; padding-left: 15px; }
+    h3 { color: #1e3a8a; margin-top: 20px; margin-bottom: 10px; }
+    pre { background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <pre>${report}</pre>
+</body>
+</html>`;
+      
       const blob = new Blob([html], { type: 'text/html' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -111,6 +151,28 @@ const ManagementReports = () => {
     }
   };
 
+  const getStartDate = (range: string): string => {
+    const now = new Date();
+    switch (range) {
+      case 'today':
+        return now.toISOString().split('T')[0];
+      case 'week':
+        const weekAgo = new Date(now);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return weekAgo.toISOString().split('T')[0];
+      case 'month':
+        const monthAgo = new Date(now);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        return monthAgo.toISOString().split('T')[0];
+      case 'quarter':
+        const quarterAgo = new Date(now);
+        quarterAgo.setMonth(quarterAgo.getMonth() - 3);
+        return quarterAgo.toISOString().split('T')[0];
+      default:
+        return now.toISOString().split('T')[0];
+    }
+  };
+
   return (
     <ManagementLayout>
       <div className="space-y-6">
@@ -119,10 +181,30 @@ const ManagementReports = () => {
             <h1 className="text-3xl font-bold tracking-tight">Performance Reports</h1>
             <p className="text-muted-foreground">AI-powered insights and team analytics</p>
           </div>
-          <Button onClick={handleExportReport}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Report
-          </Button>
+          <div className="flex gap-4 items-center">
+            <div className="flex gap-4 items-center bg-card p-4 rounded-lg border">
+              <div className="flex items-center gap-2">
+                <Checkbox id="metrics" checked={includeMetrics} onCheckedChange={(checked) => setIncludeMetrics(checked === true)} />
+                <Label htmlFor="metrics" className="cursor-pointer text-sm">Metrics</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="agents" checked={includeAgents} onCheckedChange={(checked) => setIncludeAgents(checked === true)} />
+                <Label htmlFor="agents" className="cursor-pointer text-sm">Agents</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="queues" checked={includeQueues} onCheckedChange={(checked) => setIncludeQueues(checked === true)} />
+                <Label htmlFor="queues" className="cursor-pointer text-sm">Campaigns</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="callnotes" checked={includeCallNotes} onCheckedChange={(checked) => setIncludeCallNotes(checked === true)} />
+                <Label htmlFor="callnotes" className="cursor-pointer text-sm">Call Notes</Label>
+              </div>
+            </div>
+            <Button onClick={handleExportReport}>
+              <Download className="h-4 w-4 mr-2" />
+              Export Report
+            </Button>
+          </div>
         </div>
 
         <Select value={dateRange} onValueChange={setDateRange}>

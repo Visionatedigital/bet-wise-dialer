@@ -13,9 +13,9 @@ serve(async (req) => {
   }
 
   try {
-    const { startDate, endDate, includeAgents, includeMetrics, includeQueues } = await req.json();
+    const { startDate, endDate, includeAgents, includeMetrics, includeQueues, includeCallNotes } = await req.json();
     
-    console.log('Generating report for:', { startDate, endDate, includeAgents, includeMetrics, includeQueues });
+    console.log('Generating report for:', { startDate, endDate, includeAgents, includeMetrics, includeQueues, includeCallNotes });
 
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openAIApiKey) {
@@ -78,6 +78,17 @@ serve(async (req) => {
       reportData.campaigns = campaigns || [];
     }
 
+    if (includeCallNotes) {
+      const { data: callActivities } = await supabase
+        .from('call_activities')
+        .select('notes, lead_name, status, start_time, duration_seconds')
+        .gte('start_time', `${startDate}T00:00:00`)
+        .lte('start_time', `${endDate}T23:59:59`)
+        .not('notes', 'is', null);
+      
+      reportData.callNotes = callActivities || [];
+    }
+
     // Create prompt for GPT-5
     const prompt = `You are a professional call center analyst. Generate a comprehensive report based on the following data for the period from ${startDate} to ${endDate}:
 
@@ -88,7 +99,8 @@ Create a well-formatted, professional report with the following sections:
 2. ${includeMetrics ? 'Performance Metrics - Detailed analysis of call metrics, conversion rates, and handle times' : ''}
 3. ${includeAgents ? 'Agent Performance - Individual agent statistics and performance analysis' : ''}
 4. ${includeQueues ? 'Campaign Analysis - Campaign-wise breakdown and insights' : ''}
-5. Recommendations - Actionable insights and recommendations for improvement
+5. ${includeCallNotes ? 'Call Notes Analysis - AI-powered summary and insights from call notes, identifying patterns, common objections, successful tactics, and areas for improvement' : ''}
+6. Recommendations - Actionable insights and recommendations for improvement
 
 Format the report with clear headings, bullet points, and paragraphs. Make it professional and easy to read.`;
 
