@@ -3,12 +3,13 @@ import { ManagementLayout } from "@/components/layout/ManagementLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Target, TrendingUp, Phone, Users, DollarSign, Plus, Play, Pause, Trash2 } from "lucide-react";
+import { Target, TrendingUp, Phone, Users, DollarSign, Plus, Play, Pause, Trash2, Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { formatUGX } from "@/lib/formatters";
 import { CreateCampaignModal } from "@/components/campaigns/CreateCampaignModal";
+import { EditCampaignModal } from "@/components/campaigns/EditCampaignModal";
 import {
   Table,
   TableBody,
@@ -39,6 +40,8 @@ export default function ManagementCampaigns() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [campaignToEdit, setCampaignToEdit] = useState<Campaign | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => {
@@ -148,6 +151,13 @@ export default function ManagementCampaigns() {
           userId={user?.id || ''}
         />
 
+        <EditCampaignModal
+          open={editModalOpen}
+          onOpenChange={setEditModalOpen}
+          onEditComplete={fetchCampaigns}
+          campaign={campaignToEdit}
+        />
+
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card>
@@ -216,7 +226,7 @@ export default function ManagementCampaigns() {
               <div className="text-center py-8 text-muted-foreground">Loading campaigns...</div>
             ) : campaigns.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No campaigns yet. Create your first campaign to get started!
+                No campaigns yet.
               </div>
             ) : (
               <Table>
@@ -275,6 +285,17 @@ export default function ManagementCampaigns() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setCampaignToEdit(campaign);
+                                setEditModalOpen(true);
+                              }}
+                              disabled={updating === campaign.id}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
                             {campaign.status !== 'completed' && (
                               <Button
                                 size="sm"

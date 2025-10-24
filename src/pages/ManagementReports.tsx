@@ -5,16 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BarChart3, Download, TrendingUp, Lightbulb, Target, Users } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { BarChart3, Download, TrendingUp, Lightbulb, Target, Users, FileText } from 'lucide-react';
 import { useFunnelAnalysis } from '@/hooks/useFunnelAnalysis';
 import { useAgentAnalysis } from '@/hooks/useAgentAnalysis';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatUGX } from '@/lib/formatters';
 
 const ManagementReports = () => {
   const [dateRange, setDateRange] = useState('week');
   const [performanceData, setPerformanceData] = useState<any>(null);
   const [loadingPerformance, setLoadingPerformance] = useState(false);
+  const [reportPreview, setReportPreview] = useState<string>('');
+  const [activeTab, setActiveTab] = useState('overview');
   
   const { funnelData, insights, message, loading } = useFunnelAnalysis(dateRange, '');
   const { agents, insights: agentInsights } = useAgentAnalysis(dateRange);
@@ -22,6 +27,12 @@ const ManagementReports = () => {
   useEffect(() => {
     fetchPerformanceAnalysis();
   }, [dateRange]);
+
+  useEffect(() => {
+    if (performanceData) {
+      generateReportPreview();
+    }
+  }, [performanceData]);
 
   const fetchPerformanceAnalysis = async () => {
     try {
@@ -36,6 +47,45 @@ const ManagementReports = () => {
     } finally {
       setLoadingPerformance(false);
     }
+  };
+
+  const generateReportPreview = () => {
+    if (!performanceData) return;
+
+    const totalCalls = performanceData.agents?.reduce((sum: number, a: any) => sum + a.calls, 0) || 0;
+    const totalConversions = performanceData.agents?.reduce((sum: number, a: any) => sum + a.conversions, 0) || 0;
+    const totalRevenue = performanceData.agents?.reduce((sum: number, a: any) => sum + a.revenue, 0) || 0;
+    
+    let preview = `PERFORMANCE REPORT - ${dateRange.toUpperCase()}\n\n`;
+    preview += `SUMMARY\n${performanceData.summary || 'No summary available'}\n\n`;
+    preview += `METRICS\n`;
+    preview += `Total Calls: ${totalCalls}\n`;
+    preview += `Total Conversions: ${totalConversions}\n`;
+    preview += `Total Revenue: ${formatUGX(totalRevenue)}\n`;
+    preview += `Conversion Rate: ${totalCalls > 0 ? ((totalConversions / totalCalls) * 100).toFixed(2) : 0}%\n\n`;
+    
+    if (performanceData.insights && performanceData.insights.length > 0) {
+      preview += `KEY INSIGHTS\n`;
+      performanceData.insights.forEach((insight: any, idx: number) => {
+        preview += `${idx + 1}. ${insight.title}\n   ${insight.description}\n`;
+        if (insight.agents) preview += `   Agents: ${insight.agents.join(', ')}\n`;
+      });
+      preview += '\n';
+    }
+
+    if (performanceData.agents && performanceData.agents.length > 0) {
+      preview += `AGENT PERFORMANCE\n`;
+      performanceData.agents
+        .filter((a: any) => a.calls > 0)
+        .sort((a: any, b: any) => b.conversions - a.conversions)
+        .forEach((agent: any) => {
+          preview += `\n${agent.name}\n`;
+          preview += `  Calls: ${agent.calls} | Conversions: ${agent.conversions} | Rate: ${agent.conversionRate}%\n`;
+          preview += `  Revenue: ${formatUGX(agent.revenue)} | Avg Handle Time: ${agent.avgHandleTime}s\n`;
+        });
+    }
+
+    setReportPreview(preview);
   };
 
   const handleExportReport = async () => {
@@ -96,6 +146,14 @@ const ManagementReports = () => {
             <SelectItem value="quarter">This Quarter</SelectItem>
           </SelectContent>
         </Select>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="preview">Report Preview</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6 mt-6">
 
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
@@ -236,6 +294,40 @@ const ManagementReports = () => {
             </CardContent>
           </Card>
         )}
+          </TabsContent>
+
+          <TabsContent value="preview" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Report Preview & Edit
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Review and edit the report before exporting. Changes made here will be included in the export.
+                </p>
+                <Textarea
+                  value={reportPreview}
+                  onChange={(e) => setReportPreview(e.target.value)}
+                  rows={25}
+                  className="font-mono text-sm"
+                  placeholder="Loading report preview..."
+                />
+                <div className="flex justify-end gap-2 mt-4">
+                  <Button variant="outline" onClick={generateReportPreview}>
+                    Reset to Original
+                  </Button>
+                  <Button onClick={handleExportReport}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Report
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </ManagementLayout>
   );
