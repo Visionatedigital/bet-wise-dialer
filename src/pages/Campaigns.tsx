@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { ManagementLayout } from "@/components/layout/ManagementLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,11 +37,16 @@ export default function Campaigns() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [updating, setUpdating] = useState(false);
+const [updating, setUpdating] = useState(false);
+  const [isManager, setIsManager] = useState(false);
 
-  useEffect(() => {
+useEffect(() => {
     if (user) {
       fetchCampaigns();
+      // Check role
+      supabase.from('user_roles').select('role').eq('user_id', user.id).single().then(({ data }) => {
+        setIsManager(data?.role === 'management' || data?.role === 'admin');
+      });
     }
   }, [user]);
 
@@ -137,8 +143,9 @@ export default function Campaigns() {
     }
   };
 
+const Layout = isManager ? ManagementLayout : DashboardLayout;
   return (
-    <DashboardLayout>
+    <Layout>
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -431,6 +438,6 @@ export default function Campaigns() {
         )}
         </div>
       </div>
-    </DashboardLayout>
+</>
   );
 }
