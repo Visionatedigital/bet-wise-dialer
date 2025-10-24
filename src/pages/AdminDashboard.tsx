@@ -50,12 +50,24 @@ const AdminDashboard = () => {
       const { data: monitorData, error: monitorError } = await supabase.rpc('get_agent_monitor_data');
       if (monitorError) throw monitorError;
 
+      // Build a map of today's assigned leads per agent
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const { data: leadAgg, error: leadAggError } = await supabase
+        .from('leads')
+        .select('user_id, count:id')
+        .not('user_id', 'is', null)
+        .gte('assigned_at', start.toISOString());
+      if (leadAggError) throw leadAggError;
+      const leadCounts: Record<string, number> = {};
+      (leadAgg || []).forEach((r: any) => { if (r.user_id) leadCounts[r.user_id] = Number(r.count) || 0; });
+
       const agentsWithLeads = (monitorData || []).map((a: any) => ({
         id: a.id,
         full_name: a.full_name || a.email || 'Unknown',
         email: a.email || '',
         status: a.current_call_start ? 'on-call' : (a.status || 'offline'),
-        assignedLeads: a.assigned_leads || 0,
+        assignedLeads: leadCounts[a.id] ?? 0,
       }));
 
       setAgents(agentsWithLeads);
