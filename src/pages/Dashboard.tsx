@@ -392,20 +392,36 @@ useEffect(() => {
       await saveCallNotes();
     }
     
-    // Update call end time and status
+    // Update call end time, duration, and status
     if (currentCallId) {
       try {
+        // Fetch the call start time to calculate duration
+        const { data: callData, error: fetchError } = await supabase
+          .from('call_activities')
+          .select('start_time')
+          .eq('id', currentCallId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        const endTime = new Date();
+        const startTime = new Date(callData.start_time);
+        const durationSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
+
         const { error } = await supabase
           .from('call_activities')
           .update({
-            end_time: new Date().toISOString(),
+            end_time: endTime.toISOString(),
+            duration_seconds: durationSeconds,
             status: 'completed'
           })
           .eq('id', currentCallId);
 
         if (error) throw error;
         
+        setCallDuration(durationSeconds);
         toast.success('Call notes saved');
+        console.log('[Dashboard] Call ended, duration:', durationSeconds, 'seconds');
       } catch (error) {
         console.error('[Dashboard] Error ending call:', error);
         toast.error('Failed to save call notes');
@@ -416,7 +432,6 @@ useEffect(() => {
     await updateStatus('online');
     
     setShowACS(true);
-    setCallDuration(450); // Mock duration
     setCurrentCallId(null);
   };
 
