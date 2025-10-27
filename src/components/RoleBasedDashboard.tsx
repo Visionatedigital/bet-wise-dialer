@@ -55,8 +55,15 @@ export const RoleBasedDashboard = () => {
     );
   }
 
+  // Check if admin is viewing as agent
+  const adminViewMode = localStorage.getItem('adminViewMode');
+  
   // Render the appropriate dashboard based on role
   if (role === 'admin') {
+    // Allow admin to view agent dashboard if view mode is set
+    if (adminViewMode === 'agent') {
+      return <Dashboard />;
+    }
     return <AdminDashboard />;
   } else if (role === 'management') {
     return <ManagementDashboard />;

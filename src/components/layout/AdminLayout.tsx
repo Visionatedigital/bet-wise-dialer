@@ -1,7 +1,8 @@
+import React from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "./AdminSidebar";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, Bell } from "lucide-react";
+import { Moon, Sun, Bell, Eye, Shield } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -19,6 +20,16 @@ interface AdminLayoutProps {
 export function AdminLayout({ children }: AdminLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
+  const [viewMode, setViewMode] = React.useState<'admin' | 'agent'>(() => {
+    return (localStorage.getItem('adminViewMode') as 'admin' | 'agent') || 'admin';
+  });
+
+  const toggleViewMode = () => {
+    const newMode = viewMode === 'admin' ? 'agent' : 'admin';
+    setViewMode(newMode);
+    localStorage.setItem('adminViewMode', newMode);
+    window.location.reload(); // Reload to apply new view
+  };
 
   const getInitials = (email: string): string => {
     if (!email) return "A";
@@ -42,6 +53,25 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <div className="flex-1" />
 
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleViewMode}
+                  className="gap-2"
+                >
+                  {viewMode === 'admin' ? (
+                    <>
+                      <Eye className="h-4 w-4" />
+                      View as Agent
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="h-4 w-4" />
+                      Back to Admin
+                    </>
+                  )}
+                </Button>
+
                 <Button
                   variant="ghost"
                   size="icon"
