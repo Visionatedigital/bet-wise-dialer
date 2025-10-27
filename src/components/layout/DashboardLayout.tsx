@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Search, User, Settings, Moon, Sun, Coffee, Shield } from "lucide-react";
+import { Search, User, Settings, Moon, Sun, Coffee } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,35 +27,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { status, updateStatus } = useAgentStatus();
   const [queueCount, setQueueCount] = useState(0);
   const [todayCallsCount, setTodayCallsCount] = useState(0);
-  const [isAdminViewing, setIsAdminViewing] = useState(false);
-
-  // Check if admin is viewing as agent
-  useEffect(() => {
-    const checkAdminView = async () => {
-      if (!user) return;
-      
-      const adminViewMode = localStorage.getItem('adminViewMode');
-      if (adminViewMode === 'agent') {
-        // Verify user is actually an admin
-        const { data } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (data?.role === 'admin') {
-          setIsAdminViewing(true);
-        }
-      }
-    };
-    
-    checkAdminView();
-  }, [user]);
-
-  const handleBackToAdmin = () => {
-    localStorage.setItem('adminViewMode', 'admin');
-    window.location.reload();
-  };
 
   useEffect(() => {
     if (!user) return;
@@ -179,19 +150,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
               {/* Right Actions */}
               <div className="flex items-center gap-2">
-                {/* Back to Admin Button */}
-                {isAdminViewing && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleBackToAdmin}
-                    className="gap-2"
-                  >
-                    <Shield className="h-4 w-4" />
-                    <span className="hidden md:inline">Back to Admin</span>
-                  </Button>
-                )}
-
                 {/* Theme Toggle */}
                 <Button
                   variant="ghost"
