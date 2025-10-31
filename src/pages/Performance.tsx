@@ -126,7 +126,12 @@ export default function Performance() {
           </Card>
         ) : null}
 
-        <ExportReportModal open={exportOpen} onOpenChange={setExportOpen} />
+        <ExportReportModal 
+          open={exportOpen} 
+          onOpenChange={setExportOpen}
+          dateRange={dateRange}
+          selectedAgent="all"
+        />
       </div>
     </ManagementLayout>
   );

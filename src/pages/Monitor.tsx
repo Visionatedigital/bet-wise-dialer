@@ -92,7 +92,12 @@ export default function Monitor() {
           </div>
         </div>
 
-        <ExportReportModal open={showExportModal} onOpenChange={setShowExportModal} />
+        <ExportReportModal 
+          open={showExportModal} 
+          onOpenChange={setShowExportModal}
+          dateRange="today"
+          selectedAgent="all"
+        />
 
         {/* Today's Overview */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

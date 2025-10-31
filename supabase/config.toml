@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.generate-report]
 verify_jwt = false
 
+[functions.generate-ai-report]
+verify_jwt = true
+
 [functions.transcribe-call]
 verify_jwt = false
 

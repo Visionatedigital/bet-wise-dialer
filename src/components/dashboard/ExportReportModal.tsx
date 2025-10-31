@@ -1,235 +1,197 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { CalendarIcon, Loader2 } from "lucide-react";
-import { format } from "date-fns";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { Download, Loader2, Sparkles } from "lucide-react";
+import { jsPDF } from "jspdf";
 
 interface ExportReportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  dateRange: string;
+  selectedAgent: string;
 }
 
-export function ExportReportModal({ open, onOpenChange }: ExportReportModalProps) {
-  const [startDate, setStartDate] = useState<Date>();
-  const [endDate, setEndDate] = useState<Date>();
-  const [includeAgents, setIncludeAgents] = useState(true);
-  const [includeMetrics, setIncludeMetrics] = useState(true);
-  const [includeQueues, setIncludeQueues] = useState(true);
+export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent }: ExportReportModalProps) {
+  const [verbosity, setVerbosity] = useState("balanced");
+  const [focusArea, setFocusArea] = useState("all");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedReport, setGeneratedReport] = useState<string | null>(null);
 
   const handleGenerateReport = async () => {
-    if (!startDate || !endDate) {
-      toast.error("Please select both start and end dates");
-      return;
-    }
-
-    if (endDate < startDate) {
-      toast.error("End date must be after start date");
-      return;
-    }
-
     setIsGenerating(true);
-    setGeneratedReport(null);
-
     try {
-      const { data, error } = await supabase.functions.invoke('generate-report', {
+      // Calculate date range
+      const daysMap: Record<string, number> = {
+        'today': 0,
+        'week': 7,
+        'month': 30,
+        'quarter': 90
+      };
+      const daysAgo = daysMap[dateRange] || 7;
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysAgo);
+
+      // Fetch call activities with filters
+      let query = supabase
+        .from('call_activities')
+        .select(`
+          *,
+          profiles!call_activities_user_id_fkey(full_name, email),
+          campaigns(name)
+        `)
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (selectedAgent !== 'all') {
+        query = query.eq('user_id', selectedAgent);
+      }
+
+      const { data: callActivities, error: fetchError } = await query;
+      if (fetchError) throw fetchError;
+
+      // Generate AI report
+      const { data, error } = await supabase.functions.invoke('generate-ai-report', {
         body: {
-          startDate: format(startDate, 'yyyy-MM-dd'),
-          endDate: format(endDate, 'yyyy-MM-dd'),
-          includeAgents,
-          includeMetrics,
-          includeQueues,
+          callActivities,
+          dateRange,
+          verbosity,
+          focusArea
         }
       });
 
       if (error) throw error;
 
-      if (data?.report) {
-        setGeneratedReport(data.report);
-        toast.success("Report generated successfully!");
-      } else {
-        throw new Error("No report data received");
+      // Generate PDF
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const maxWidth = pageWidth - (margin * 2);
+      let yPosition = margin;
+
+      // Title
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text("Call Center Performance Report", margin, yPosition);
+      yPosition += 10;
+
+      // Date range
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Period: ${dateRange.charAt(0).toUpperCase() + dateRange.slice(1)}`, margin, yPosition);
+      yPosition += 5;
+      doc.text(`Generated: ${new Date().toLocaleDateString()}`, margin, yPosition);
+      yPosition += 15;
+
+      // Split report into lines and add to PDF
+      doc.setFontSize(11);
+      const lines = doc.splitTextToSize(data.report, maxWidth);
+      
+      for (let i = 0; i < lines.length; i++) {
+        if (yPosition > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        
+        // Check for section headers (lines that end with :)
+        if (lines[i].trim().endsWith(':') && lines[i].trim().length < 50) {
+          doc.setFont("helvetica", "bold");
+          doc.text(lines[i], margin, yPosition);
+          doc.setFont("helvetica", "normal");
+        } else {
+          doc.text(lines[i], margin, yPosition);
+        }
+        
+        yPosition += 7;
       }
+
+      // Download PDF
+      doc.save(`call-center-report-${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success("Report generated and downloaded!");
+      onOpenChange(false);
     } catch (error) {
       console.error('Error generating report:', error);
-      toast.error("Failed to generate report. Please try again.");
+      toast.error("Failed to generate report");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleDownload = () => {
-    if (!generatedReport) return;
-
-    const blob = new Blob([generatedReport], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `call-center-report-${format(startDate || new Date(), 'yyyy-MM-dd')}-to-${format(endDate || new Date(), 'yyyy-MM-dd')}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Report downloaded!");
-  };
-
-  const handleClose = () => {
-    setGeneratedReport(null);
-    onOpenChange(false);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Export Call Center Report</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            AI-Powered Performance Report
+          </DialogTitle>
         </DialogHeader>
 
-        {!generatedReport ? (
-          <div className="space-y-6 py-4">
-            {/* Date Range Selection */}
-            <div className="space-y-4">
-              <Label>Date Range</Label>
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <Label className="text-xs text-muted-foreground">Start Date</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !startDate && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {startDate ? format(startDate, "PPP") : "Pick a date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={startDate}
-                        onSelect={setStartDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
+        <div className="space-y-6">
+          <div className="bg-muted/50 rounded-lg p-4 text-sm">
+            <p className="mb-2">
+              <strong>Report Period:</strong> {dateRange.charAt(0).toUpperCase() + dateRange.slice(1)}
+            </p>
+            <p>
+              <strong>Agent Filter:</strong> {selectedAgent === 'all' ? 'All Agents' : 'Selected Agent'}
+            </p>
+          </div>
 
-                <div className="flex-1">
-                  <Label className="text-xs text-muted-foreground">End Date</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !endDate && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {endDate ? format(endDate, "PPP") : "Pick a date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={endDate}
-                        onSelect={setEndDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
+          {/* Customization Options */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="verbosity">Report Detail Level</Label>
+              <Select value={verbosity} onValueChange={setVerbosity}>
+                <SelectTrigger id="verbosity">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="concise">Concise - Key insights only</SelectItem>
+                  <SelectItem value="balanced">Balanced - Standard detail</SelectItem>
+                  <SelectItem value="detailed">Detailed - Comprehensive analysis</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Content Selection */}
-            <div className="space-y-4">
-              <Label>Include in Report</Label>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="metrics"
-                    checked={includeMetrics}
-                    onCheckedChange={(checked) => setIncludeMetrics(checked as boolean)}
-                  />
-                  <Label htmlFor="metrics" className="font-normal cursor-pointer">
-                    Performance Metrics (calls, conversions, handle times)
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="agents"
-                    checked={includeAgents}
-                    onCheckedChange={(checked) => setIncludeAgents(checked as boolean)}
-                  />
-                  <Label htmlFor="agents" className="font-normal cursor-pointer">
-                    Agent Performance (individual statistics)
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="queues"
-                    checked={includeQueues}
-                    onCheckedChange={(checked) => setIncludeQueues(checked as boolean)}
-                  />
-                  <Label htmlFor="queues" className="font-normal cursor-pointer">
-                    Campaign Analysis (queue status and performance)
-                  </Label>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleGenerateReport} 
-                disabled={isGenerating || !startDate || !endDate}
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  "Generate Report"
-                )}
-              </Button>
+            <div className="space-y-2">
+              <Label htmlFor="focus">Focus Area</Label>
+              <Select value={focusArea} onValueChange={setFocusArea}>
+                <SelectTrigger id="focus">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Metrics</SelectItem>
+                  <SelectItem value="conversion">Conversion Optimization</SelectItem>
+                  <SelectItem value="efficiency">Call Efficiency</SelectItem>
+                  <SelectItem value="quality">Call Quality & Notes</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        ) : (
-          <div className="space-y-4 py-4">
-            <div className="p-4 bg-muted rounded-lg max-h-[50vh] overflow-y-auto">
-              <pre className="whitespace-pre-wrap text-sm font-mono">
-                {generatedReport}
-              </pre>
-            </div>
 
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={handleClose}>
-                Close
-              </Button>
-              <Button onClick={handleDownload}>
-                Download Report
-              </Button>
-            </div>
+          {/* Generate Button */}
+          <div className="flex justify-end gap-3 pt-4">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isGenerating}>
+              Cancel
+            </Button>
+            <Button onClick={handleGenerateReport} disabled={isGenerating}>
+              {isGenerating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating AI Report...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Generate & Download PDF
+                </>
+              )}
+            </Button>
           </div>
-        )}
+        </div>
       </DialogContent>
     </Dialog>
   );

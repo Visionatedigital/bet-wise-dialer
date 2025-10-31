@@ -253,6 +253,8 @@ const ManagementDashboard = () => {
       <ExportReportModal 
         open={showExportModal}
         onOpenChange={setShowExportModal}
+        dateRange={dateRange}
+        selectedAgent={selectedAgent}
       />
     </ManagementLayout>
   );
