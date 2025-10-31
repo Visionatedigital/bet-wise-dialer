@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Dashboard from '@/pages/Dashboard';
 import AdminDashboard from '@/pages/AdminDashboard';
 import ManagementDashboard from '@/pages/ManagementDashboard';
+import { DashboardSelectionDialog } from './DashboardSelectionDialog';
 
 export const RoleBasedDashboard = () => {
   const { user } = useAuth();
@@ -12,6 +13,7 @@ export const RoleBasedDashboard = () => {
   const location = useLocation();
   const [role, setRole] = useState<'admin' | 'management' | 'agent' | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showDashboardSelection, setShowDashboardSelection] = useState(false);
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -31,7 +33,16 @@ export const RoleBasedDashboard = () => {
           console.error('Error fetching user role:', error);
           setRole('agent'); // Default to agent
         } else {
-          setRole(data.role as 'admin' | 'management' | 'agent');
+          const userRole = data.role as 'admin' | 'management' | 'agent';
+          setRole(userRole);
+          
+          // Check if admin needs to select dashboard
+          if (userRole === 'admin') {
+            const savedViewMode = localStorage.getItem('adminViewMode');
+            if (!savedViewMode) {
+              setShowDashboardSelection(true);
+            }
+          }
         }
       } catch (error) {
         console.error('Error:', error);
@@ -44,6 +55,12 @@ export const RoleBasedDashboard = () => {
     fetchUserRole();
   }, [user]);
 
+  const handleDashboardSelection = (dashboard: 'agent' | 'management' | 'admin') => {
+    localStorage.setItem('adminViewMode', dashboard);
+    setShowDashboardSelection(false);
+    window.location.reload();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -55,14 +72,26 @@ export const RoleBasedDashboard = () => {
     );
   }
 
-  // Check if admin is viewing as agent
+  // Check if admin is viewing as different role
   const adminViewMode = localStorage.getItem('adminViewMode');
+  
+  // Show dashboard selection dialog for admins
+  if (role === 'admin' && showDashboardSelection) {
+    return (
+      <DashboardSelectionDialog
+        open={showDashboardSelection}
+        onSelect={handleDashboardSelection}
+      />
+    );
+  }
   
   // Render the appropriate dashboard based on role
   if (role === 'admin') {
-    // Allow admin to view agent dashboard if view mode is set
+    // Allow admin to view any dashboard based on view mode
     if (adminViewMode === 'agent') {
       return <Dashboard />;
+    } else if (adminViewMode === 'management') {
+      return <ManagementDashboard />;
     }
     return <AdminDashboard />;
   } else if (role === 'management') {

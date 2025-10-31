@@ -2,7 +2,7 @@ import React from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "./AdminSidebar";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, Bell, Eye, Shield } from "lucide-react";
+import { Moon, Sun, Bell, LayoutDashboard, Users } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -20,15 +20,10 @@ interface AdminLayoutProps {
 export function AdminLayout({ children }: AdminLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
-  const [viewMode, setViewMode] = React.useState<'admin' | 'agent'>(() => {
-    return (localStorage.getItem('adminViewMode') as 'admin' | 'agent') || 'admin';
-  });
 
-  const toggleViewMode = () => {
-    const newMode = viewMode === 'admin' ? 'agent' : 'admin';
-    setViewMode(newMode);
-    localStorage.setItem('adminViewMode', newMode);
-    window.location.reload(); // Reload to apply new view
+  const switchDashboard = (mode: 'agent' | 'management' | 'admin') => {
+    localStorage.setItem('adminViewMode', mode);
+    window.location.reload();
   };
 
   const getInitials = (email: string): string => {
@@ -54,25 +49,6 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleViewMode}
-                  className="gap-2"
-                >
-                  {viewMode === 'admin' ? (
-                    <>
-                      <Eye className="h-4 w-4" />
-                      View as Agent
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="h-4 w-4" />
-                      Back to Admin
-                    </>
-                  )}
-                </Button>
-
-                <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -97,6 +73,15 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5 text-sm font-medium">{userEmail}</div>
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">Administrator</div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => switchDashboard('agent')}>
+                      <Users className="mr-2 h-4 w-4" />
+                      Switch to Agent View
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => switchDashboard('management')}>
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      Switch to Management View
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem className="text-destructive" onClick={() => signOut()}>
                       Sign out

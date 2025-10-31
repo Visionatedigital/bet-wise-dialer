@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Search, User, Settings, Moon, Sun, Coffee } from "lucide-react";
+import { Search, User, Settings, Moon, Sun, Coffee, Shield, LayoutDashboard } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificationDropdown } from "./NotificationDropdown";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,8 +26,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { status, updateStatus } = useAgentStatus();
+  const { isAdmin } = useUserRole();
   const [queueCount, setQueueCount] = useState(0);
   const [todayCallsCount, setTodayCallsCount] = useState(0);
+
+  const switchDashboard = (mode: 'agent' | 'management' | 'admin') => {
+    localStorage.setItem('adminViewMode', mode);
+    window.location.reload();
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -198,6 +205,19 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuItem onClick={() => switchDashboard('management')}>
+                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                          Switch to Management View
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => switchDashboard('admin')}>
+                          <Shield className="mr-2 h-4 w-4" />
+                          Switch to Admin Panel
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem className="text-destructive" onClick={() => signOut()}>
                       Sign out
                     </DropdownMenuItem>

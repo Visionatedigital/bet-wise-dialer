@@ -1,9 +1,10 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ManagementSidebar } from "./ManagementSidebar";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, Bell } from "lucide-react";
+import { Moon, Sun, Bell, Shield, Users } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +20,12 @@ interface ManagementLayoutProps {
 export function ManagementLayout({ children }: ManagementLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
+  const { isAdmin } = useUserRole();
+
+  const switchDashboard = (mode: 'agent' | 'management' | 'admin') => {
+    localStorage.setItem('adminViewMode', mode);
+    window.location.reload();
+  };
 
   const getInitials = (email: string): string => {
     if (!email) return "M";
@@ -68,6 +75,19 @@ export function ManagementLayout({ children }: ManagementLayoutProps) {
                     <div className="px-2 py-1.5 text-sm font-medium">{userEmail}</div>
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">Manager</div>
                     <DropdownMenuSeparator />
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuItem onClick={() => switchDashboard('agent')}>
+                          <Users className="mr-2 h-4 w-4" />
+                          Switch to Agent View
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => switchDashboard('admin')}>
+                          <Shield className="mr-2 h-4 w-4" />
+                          Switch to Admin Panel
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem className="text-destructive" onClick={() => signOut()}>
                       Sign out
                     </DropdownMenuItem>
