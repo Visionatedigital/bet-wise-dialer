@@ -243,51 +243,6 @@ const ManagementDashboard = () => {
           </Card>
         )}
 
-        {/* Agent Performance Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Agent Performance</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {agentsMessage || 'Individual agent metrics and rankings'}
-            </p>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading...</div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Agent</TableHead>
-                    <TableHead className="text-right">Calls</TableHead>
-                    <TableHead className="text-right">Connects</TableHead>
-                    <TableHead className="text-right">Conversions</TableHead>
-                    <TableHead className="text-right">Conv. Rate</TableHead>
-                    <TableHead className="text-right">Total Deposits</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAgents.map((agent) => (
-                    <TableRow key={agent.agentId}>
-                      <TableCell className="font-medium">{agent.agentName}</TableCell>
-                      <TableCell className="text-right">{agent.calls}</TableCell>
-                      <TableCell className="text-right">{agent.connects}</TableCell>
-                      <TableCell className="text-right">{agent.conversions}</TableCell>
-                      <TableCell className="text-right">
-                        {agent.calls > 0 
-                          ? `${((agent.conversions / agent.calls) * 100).toFixed(1)}%`
-                          : '0%'
-                        }
-                      </TableCell>
-                      <TableCell className="text-right">{formatUGX(agent.deposits)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Recent Call Activities */}
         <RecentCallActivities 
           dateRange={dateRange}

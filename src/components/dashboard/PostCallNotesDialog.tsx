@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Clock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { maskPhone } from "@/lib/formatters";
 
 interface PostCallNotesDialogProps {
   open: boolean;
@@ -62,7 +63,7 @@ export function PostCallNotesDialog({
           {/* Call Details */}
           <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
             <div><strong>Lead:</strong> {leadName}</div>
-            <div><strong>Phone:</strong> {phoneNumber}</div>
+            <div><strong>Phone:</strong> {maskPhone(phoneNumber)}</div>
             <div><strong>Campaign:</strong> {campaign}</div>
             <div className="flex items-center gap-2">
               <Clock className="h-3 w-3" />

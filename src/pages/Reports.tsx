@@ -34,7 +34,7 @@ import {
   LayoutGrid,
   List
 } from "lucide-react";
-import { formatUGX } from "@/lib/formatters";
+import { formatUGX, maskPhone } from "@/lib/formatters";
 import { usePerformanceData } from "@/hooks/usePerformanceData";
 import { useFunnelAnalysis } from "@/hooks/useFunnelAnalysis";
 import { useRecentCalls } from "@/hooks/useRecentCalls";
@@ -575,7 +575,7 @@ Customer: Yes, let's do it.`;
                               </Badge>
                             </div>
                             <div className="text-xs text-muted-foreground mb-1">
-                              {call.phone_number}
+                              {maskPhone(call.phone_number)}
                             </div>
                             <div className="flex items-center justify-between">
                               <div className="text-xs text-muted-foreground">
@@ -606,7 +606,7 @@ Customer: Yes, let's do it.`;
                       </CardTitle>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span>Duration: {formatDuration(selectedCall.duration_seconds)}</span>
-                        <span>Phone: {selectedCall.phone_number}</span>
+                        <span>Phone: {maskPhone(selectedCall.phone_number)}</span>
                         <span>Status: {selectedCall.status}</span>
                       </div>
                     </CardHeader>
