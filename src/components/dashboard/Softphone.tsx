@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { SipClient } from "@/utils/SipClient";
 import { SessionState } from "sip.js";
 import { maskPhone } from "@/lib/formatters";
+import { PostCallNotesDialog } from "./PostCallNotesDialog";
 
 // @ts-ignore - AfricasTalking WebRTC SDK
 declare const Africastalking: any;
@@ -53,6 +54,13 @@ export function Softphone({
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>('webrtc');
   const [isWebRTCReady, setIsWebRTCReady] = useState(false);
   const [webrtcToken, setWebrtcToken] = useState<string | null>(null);
+  const [showPostCallNotes, setShowPostCallNotes] = useState(false);
+  const [pendingCallData, setPendingCallData] = useState<{
+    phoneNumber: string;
+    duration: number;
+    leadName: string;
+    campaign: string;
+  } | null>(null);
   
   const { createCallActivity, updateCallActivity } = useCallMetrics();
   const { user } = useAuth();
@@ -292,21 +300,60 @@ const handleCallEnd = () => {
       clearInterval(callIntervalRef.current);
     }
 
-    // Only log call activity if using SIP (WebRTC calls are logged by voice-callback)
-    if (callStartTime && connectionMode === 'sip') {
+    // Store call data and show post-call notes dialog
+    if (callStartTime) {
       const duration = Math.floor((Date.now() - callStartTime.getTime()) / 1000);
-      createCallActivity({
-        phone_number: currentLead?.phone || dialedNumber,
-        duration_seconds: duration,
-        status: 'completed',
-        notes: ''
-      } as any);
+      setPendingCallData({
+        phoneNumber: currentLead?.phone || dialedNumber,
+        duration: duration,
+        leadName: currentLead?.name || 'Unknown',
+        campaign: currentLead?.campaign || 'No Campaign'
+      });
+      setShowPostCallNotes(true);
     }
 
     setCallStatus('idle');
     setCallDuration(0);
     setCallStartTime(null);
     setCurrentCallId(null);
+  };
+
+  const handleSaveCallNotes = async (notes: string) => {
+    if (!pendingCallData) return;
+
+    try {
+      // Get campaign_id if available
+      let campaignId = null;
+      if (pendingCallData.campaign !== 'No Campaign') {
+        const { data: campaignData } = await supabase
+          .from('campaigns')
+          .select('id')
+          .eq('name', pendingCallData.campaign)
+          .single();
+        
+        if (campaignData) {
+          campaignId = campaignData.id;
+        }
+      }
+
+      // Save call activity with notes
+      await createCallActivity({
+        phone_number: pendingCallData.phoneNumber,
+        lead_name: pendingCallData.leadName,
+        duration_seconds: pendingCallData.duration,
+        status: 'completed',
+        notes: notes,
+        campaign_id: campaignId,
+        call_type: 'outbound'
+      } as any);
+
+      toast.success("Call notes saved successfully");
+      setShowPostCallNotes(false);
+      setPendingCallData(null);
+    } catch (error) {
+      console.error('Error saving call notes:', error);
+      toast.error("Failed to save call notes");
+    }
   };
 
   const handleCall = async (phoneNumber?: string) => {
@@ -795,6 +842,18 @@ const handleCallEnd = () => {
           All calls are recorded for quality assurance
         </div>
       </CardContent>
+
+      {/* Post-Call Notes Dialog */}
+      {pendingCallData && (
+        <PostCallNotesDialog
+          open={showPostCallNotes}
+          onSave={handleSaveCallNotes}
+          leadName={pendingCallData.leadName}
+          phoneNumber={pendingCallData.phoneNumber}
+          campaign={pendingCallData.campaign}
+          callDuration={pendingCallData.duration}
+        />
+      )}
     </Card>
   );
 }
