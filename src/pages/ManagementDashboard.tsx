@@ -13,6 +13,7 @@ import { RecentCallActivities } from "@/components/dashboard/RecentCallActivitie
 import { useFunnelAnalysis } from '@/hooks/useFunnelAnalysis';
 import { useAgentAnalysis } from '@/hooks/useAgentAnalysis';
 import { formatUGX } from '@/lib/formatters';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AgentStats {
   agentId: string;
@@ -25,6 +26,7 @@ interface AgentStats {
 }
 
 const ManagementDashboard = () => {
+  const { user } = useAuth();
   const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState("week");
@@ -47,19 +49,17 @@ const ManagementDashboard = () => {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - daysAgo);
 
-      // Fetch agents with agent role
-      const { data: agentRoles } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role', 'agent');
-
-      const agentIds = agentRoles?.map(r => r.user_id) || [];
-
+      // Fetch agents assigned to this manager
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
-        .in('id', agentIds)
-        .eq('approved', true);
+        .select('id, full_name, email, manager_id')
+        .eq('approved', true)
+        .eq('manager_id', user?.id || '');
+
+      if (!profiles || profiles.length === 0) {
+        setAgentStats([]);
+        return;
+      }
 
       // Fetch call activities for each agent
       const agentStats = await Promise.all(
@@ -98,7 +98,7 @@ const ManagementDashboard = () => {
     }
   };
 
-  const filteredAgents = selectedAgent === "all" 
+  const filteredAgents = selectedAgent === "all"
     ? agentStats 
     : agentStats.filter(a => a.agentId === selectedAgent);
 

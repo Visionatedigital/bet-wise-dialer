@@ -18,6 +18,14 @@ interface Agent {
   email: string;
   status: string;
   assignedLeads: number;
+  managerId?: string | null;
+}
+
+interface Manager {
+  id: string;
+  full_name: string;
+  email: string;
+  assignedAgents: number;
 }
 
 interface Lead {
@@ -31,6 +39,7 @@ interface Lead {
 
 const AdminDashboard = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [managers, setManagers] = useState<Manager[]>([]);
   const [unassignedLeads, setUnassignedLeads] = useState<Lead[]>([]);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const [selectedSegment, setSelectedSegment] = useState<string>('all');
@@ -47,7 +56,9 @@ const AdminDashboard = () => {
       setLoading(true);
       
       // Fetch agent monitor data from secure function
-      const { data: monitorData, error: monitorError } = await supabase.rpc('get_agent_monitor_data');
+      const { data: monitorData, error: monitorError } = await supabase.rpc('get_agent_monitor_data', {
+        manager_filter: null
+      });
       if (monitorError) throw monitorError;
 
       // Build a map of today's assigned leads per agent (client-side aggregation to avoid group-by issues)
@@ -68,9 +79,33 @@ const AdminDashboard = () => {
         email: a.email || '',
         status: a.current_call_start ? 'on-call' : (a.status || 'offline'),
         assignedLeads: leadCounts[a.id] ?? 0,
+        managerId: a.manager_id,
       }));
 
       setAgents(agentsWithLeads);
+
+      // Fetch managers
+      const { data: managerRoles } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'management');
+
+      const managerIds = managerRoles?.map(r => r.user_id) || [];
+
+      const { data: managerProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', managerIds)
+        .eq('approved', true);
+
+      const managersWithAgents = (managerProfiles || []).map((m: any) => ({
+        id: m.id,
+        full_name: m.full_name || m.email || 'Unknown',
+        email: m.email || '',
+        assignedAgents: agentsWithLeads.filter(a => a.managerId === m.id).length,
+      }));
+
+      setManagers(managersWithAgents);
 
       // Fetch unassigned leads
       const { data: leads } = await supabase
@@ -132,6 +167,23 @@ const AdminDashboard = () => {
     );
   };
 
+  const handleManagerAssignment = async (agentId: string, managerId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ manager_id: managerId === 'unassign' ? null : managerId })
+        .eq('id', agentId);
+
+      if (error) throw error;
+
+      toast.success('Manager assignment updated');
+      fetchData();
+    } catch (error) {
+      console.error('Error assigning manager:', error);
+      toast.error('Failed to assign manager');
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -165,7 +217,8 @@ const AdminDashboard = () => {
                       <TableRow>
                         <TableHead>Agent</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Assigned Leads</TableHead>
+                        <TableHead>Manager</TableHead>
+                        <TableHead className="text-right">Leads</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -180,6 +233,24 @@ const AdminDashboard = () => {
                               {agent.status}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            <Select 
+                              value={agent.managerId || 'unassign'}
+                              onValueChange={(value) => handleManagerAssignment(agent.id, value)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Assign manager" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="unassign">Unassigned</SelectItem>
+                                {managers.map((manager) => (
+                                  <SelectItem key={manager.id} value={manager.id}>
+                                    {manager.full_name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
                           <TableCell className="text-right">{agent.assignedLeads}</TableCell>
                         </TableRow>
                       ))}
@@ -190,6 +261,51 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
 
+          {/* Active Managers */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Active Managers
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-4 text-muted-foreground">Loading...</div>
+              ) : (
+                <div className="space-y-2">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Manager</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead className="text-right">Assigned Agents</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {managers.map((manager) => (
+                        <TableRow key={manager.id}>
+                          <TableCell className="font-medium">{manager.full_name}</TableCell>
+                          <TableCell className="text-muted-foreground text-sm">{manager.email}</TableCell>
+                          <TableCell className="text-right">{manager.assignedAgents}</TableCell>
+                        </TableRow>
+                      ))}
+                      {managers.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center text-muted-foreground">
+                            No managers found
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-1">
           {/* Bulk Lead Assignment */}
           <Card>
             <CardHeader>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserRole } from './useUserRole';
 
 interface AgentData {
   id: string;
@@ -13,17 +14,22 @@ interface AgentData {
   calls: number;
   email: string;
   assignedLeads: number;
+  managerId?: string;
 }
 
 export function useMonitorData() {
   const { user } = useAuth();
+  const { isManagement, isAdmin } = useUserRole();
   const [agents, setAgents] = useState<AgentData[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAgents = async () => {
     try {
-      // Call the secure function to fetch only agent data
-      const { data, error } = await supabase.rpc('get_agent_monitor_data');
+      // Call the secure function to fetch agent data, filtered by manager if needed
+      const managerFilter = (isManagement && !isAdmin && user) ? user.id : null;
+      const { data, error } = await supabase.rpc('get_agent_monitor_data', { 
+        manager_filter: managerFilter 
+      });
 
       if (error) throw error;
 
@@ -70,6 +76,7 @@ export function useMonitorData() {
           score: 0,
           calls: agent.calls_today || 0,
           assignedLeads: agent.assigned_leads || 0,
+          managerId: agent.manager_id,
         } as AgentData;
       });
 
@@ -126,7 +133,7 @@ export function useMonitorData() {
       supabase.removeChannel(callChannel);
       clearInterval(interval);
     };
-  }, [user]);
+  }, [user, isManagement, isAdmin]);
 
   return { agents, loading, refetch: fetchAgents };
 }

@@ -343,6 +343,7 @@ export type Database = {
           full_name: string | null
           id: string
           last_status_change: string | null
+          manager_id: string | null
           status: string | null
           updated_at: string
         }
@@ -355,6 +356,7 @@ export type Database = {
           full_name?: string | null
           id: string
           last_status_change?: string | null
+          manager_id?: string | null
           status?: string | null
           updated_at?: string
         }
@@ -367,10 +369,19 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_status_change?: string | null
+          manager_id?: string | null
           status?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -429,20 +440,36 @@ export type Database = {
     }
     Functions: {
       cleanup_expired_webrtc_tokens: { Args: never; Returns: undefined }
-      get_agent_monitor_data: {
-        Args: never
-        Returns: {
-          assigned_leads: number
-          calls_today: number
-          current_call_start: string
-          email: string
-          full_name: string
-          id: string
-          last_campaign_name: string
-          last_status_change: string
-          status: string
-        }[]
-      }
+      get_agent_monitor_data:
+        | {
+            Args: never
+            Returns: {
+              assigned_leads: number
+              calls_today: number
+              current_call_start: string
+              email: string
+              full_name: string
+              id: string
+              last_campaign_name: string
+              last_status_change: string
+              status: string
+            }[]
+          }
+        | {
+            Args: { manager_filter?: string }
+            Returns: {
+              assigned_leads: number
+              calls_today: number
+              current_call_start: string
+              email: string
+              full_name: string
+              id: string
+              last_campaign_name: string
+              last_status_change: string
+              manager_id: string
+              status: string
+            }[]
+          }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
