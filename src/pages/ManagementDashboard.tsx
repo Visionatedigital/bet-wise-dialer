@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { BarChart3, TrendingUp, Phone, DollarSign, Download, CheckCircle, Lightbulb } from "lucide-react";
 import { ExportReportModal } from "@/components/dashboard/ExportReportModal";
+import { RecentCallActivities } from "@/components/dashboard/RecentCallActivities";
 import { useFunnelAnalysis } from '@/hooks/useFunnelAnalysis';
 import { useAgentAnalysis } from '@/hooks/useAgentAnalysis';
 import { formatUGX } from '@/lib/formatters';
@@ -286,6 +287,12 @@ const ManagementDashboard = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Recent Call Activities */}
+        <RecentCallActivities 
+          dateRange={dateRange}
+          selectedAgent={selectedAgent}
+        />
       </div>
 
       <ExportReportModal 
