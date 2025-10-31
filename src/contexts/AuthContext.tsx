@@ -81,9 +81,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    // Clear WebRTC token on logout
-    await supabase.from('webrtc_tokens').delete().eq('user_id', user?.id);
-    await supabase.auth.signOut();
+    try {
+      console.log('[Auth] Sign out initiated');
+      // Clear WebRTC token on logout
+      if (user?.id) {
+        await supabase.from('webrtc_tokens').delete().eq('user_id', user.id);
+      }
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('[Auth] Sign out error:', error);
+        throw error;
+      }
+      console.log('[Auth] Sign out successful');
+      // Clear admin view mode on logout
+      localStorage.removeItem('adminViewMode');
+      window.location.href = '/auth';
+    } catch (error) {
+      console.error('[Auth] Sign out failed:', error);
+    }
   };
 
   const value = {
