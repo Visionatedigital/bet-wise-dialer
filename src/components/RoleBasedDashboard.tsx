@@ -36,11 +36,15 @@ export const RoleBasedDashboard = () => {
           const userRole = data.role as 'admin' | 'management' | 'agent';
           setRole(userRole);
           
-          // Check if admin needs to select dashboard
+          // Show dashboard selection for admins on every sign-in
           if (userRole === 'admin') {
             const savedViewMode = localStorage.getItem('adminViewMode');
-            if (!savedViewMode) {
+            const hasSeenDialog = sessionStorage.getItem('dashboardDialogShown');
+            
+            // Show dialog if no saved preference OR if they haven't seen it this session
+            if (!savedViewMode || !hasSeenDialog) {
               setShowDashboardSelection(true);
+              sessionStorage.setItem('dashboardDialogShown', 'true');
             }
           }
         }
