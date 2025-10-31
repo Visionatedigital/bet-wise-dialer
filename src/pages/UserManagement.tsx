@@ -5,6 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Trash2 } from 'lucide-react';
+import {
   Table,
   TableBody,
   TableCell,
@@ -31,9 +42,11 @@ interface UserProfile {
 }
 
 const UserManagement = () => {
-const [users, setUsers] = useState<UserProfile[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [approvingAll, setApprovingAll] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -143,6 +156,50 @@ const handleRoleChange = async (userId: string, newRole: string) => {
     }
   };
 
+  const handleDeleteClick = (user: UserProfile) => {
+    setUserToDelete(user);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!userToDelete) return;
+
+    try {
+      // Delete user roles first
+      await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userToDelete.id);
+
+      // Delete profile (this will cascade from auth.users deletion)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userToDelete.id);
+
+      if (profileError) throw profileError;
+
+      // Call edge function to delete auth user
+      const { error: authError } = await supabase.functions.invoke('delete-user', {
+        body: { userId: userToDelete.id }
+      });
+
+      if (authError) {
+        console.error('Error deleting auth user:', authError);
+        toast.warning('User profile deleted but auth account may remain');
+      } else {
+        toast.success('User deleted successfully');
+      }
+
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
+      fetchUsers();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast.error('Failed to delete user');
+    }
+  };
+
 const pendingCount = users.filter(u => !u.approved).length;
 
   return (
@@ -212,17 +269,26 @@ const pendingCount = users.filter(u => !u.approved).length;
                         {new Date(user.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        {!user.approved ? (
+                        <div className="flex items-center gap-2">
+                          {!user.approved ? (
+                            <Button
+                              size="sm"
+                              onClick={() => handleApprove(user.id)}
+                              className="bg-green-500 hover:bg-green-600"
+                            >
+                              Approve
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Approved</span>
+                          )}
                           <Button
                             size="sm"
-                            onClick={() => handleApprove(user.id)}
-                            className="bg-green-500 hover:bg-green-600"
+                            variant="destructive"
+                            onClick={() => handleDeleteClick(user)}
                           >
-                            Approve
+                            <Trash2 className="h-4 w-4" />
                           </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Approved</span>
-                        )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -232,6 +298,27 @@ const pendingCount = users.filter(u => !u.approved).length;
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {userToDelete?.full_name || userToDelete?.email}'s account.
+              This action cannot be undone. All associated data including leads, calls, and metrics will be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Delete User
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 };
