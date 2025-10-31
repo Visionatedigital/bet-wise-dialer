@@ -2,12 +2,11 @@ import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Search, User, Settings, Moon, Sun, Coffee, LayoutDashboard } from "lucide-react";
+import { Search, User, Settings, Moon, Sun, Coffee } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
-import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificationDropdown } from "./NotificationDropdown";
 import {
@@ -26,7 +25,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { status, updateStatus } = useAgentStatus();
-  const { isAdmin } = useUserRole();
   const [queueCount, setQueueCount] = useState(0);
   const [todayCallsCount, setTodayCallsCount] = useState(0);
 
@@ -115,11 +113,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const userEmail = user?.email || "user@example.com";
   const userInitials = getInitials(userEmail);
 
-  const handleSwitchToAdmin = () => {
-    localStorage.setItem('adminViewMode', 'admin');
-    window.location.reload();
-  };
-
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full bg-dashboard-bg">
@@ -196,15 +189,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       {status === 'break' ? 'End Break' : 'Take Break'}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    {isAdmin && (
-                      <>
-                        <DropdownMenuItem onClick={handleSwitchToAdmin}>
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
-                          Switch to Admin Panel
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                      </>
-                    )}
                     <DropdownMenuItem>
                       <User className="mr-2 h-4 w-4" />
                       Profile
