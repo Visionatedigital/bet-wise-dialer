@@ -21,6 +21,7 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [preview, setPreview] = useState<{ name: string; phone: string }[]>([]);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -133,6 +134,8 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
     }
 
     setImporting(true);
+    setProgress({ current: 0, total: 0 });
+    
     try {
       const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
       
@@ -153,7 +156,7 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
               const priority = segment === 'vip' ? 'high' : segment === 'dormant' ? 'low' : 'medium';
               
               return {
-                user_id: null, // Will be auto-distributed
+                user_id: null,
                 name: name || 'Customer',
                 phone: phone,
                 segment: segment,
@@ -164,25 +167,30 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
               };
             }).filter(lead => lead.phone);
 
-            const { error } = await supabase
-              .from('leads')
-              .insert(leads);
+            // Batch insert in chunks of 100
+            const BATCH_SIZE = 100;
+            const totalBatches = Math.ceil(leads.length / BATCH_SIZE);
+            setProgress({ current: 0, total: totalBatches });
 
-            if (error) throw error;
+            for (let i = 0; i < leads.length; i += BATCH_SIZE) {
+              const batch = leads.slice(i, i + BATCH_SIZE);
+              const { error } = await supabase
+                .from('leads')
+                .insert(batch);
+
+              if (error) throw error;
+              setProgress({ current: Math.floor(i / BATCH_SIZE) + 1, total: totalBatches });
+            }
 
             // Auto-distribute leads among agents
-            const { data: distributionData } = await supabase.functions.invoke('distribute-leads');
+            await supabase.functions.invoke('distribute-leads');
             
-            if (distributionData?.distributed > 0) {
-              toast.success(`Successfully imported ${leads.length} leads and distributed to ${distributionData.distribution?.length || 0} agents`);
-            } else {
-              toast.success(`Successfully imported ${leads.length} leads`);
-            }
-            
+            toast.success(`Successfully imported ${leads.length} leads`);
             onImportComplete();
             onOpenChange(false);
             setFile(null);
             setPreview([]);
+            setProgress({ current: 0, total: 0 });
           } catch (error) {
             console.error('Error importing Excel:', error);
             toast.error('Failed to import Excel file');
@@ -195,42 +203,61 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
         // Handle CSV import
         const reader = new FileReader();
         reader.onload = async (e) => {
-          const text = e.target?.result as string;
-          const lines = text.split('\n').filter(line => line.trim());
-          const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-          
-          const nameIndex = headers.findIndex(h => h.includes('name'));
-          const phoneIndex = headers.findIndex(h => h.includes('phone') || h.includes('number'));
-
-          const actualPhoneIndex = phoneIndex !== -1 ? phoneIndex : 0;
-
-          const leads = lines.slice(1).map(line => {
-            const values = line.split(',').map(v => v.trim());
-            const phone = values[actualPhoneIndex] || '';
-            const name = nameIndex !== -1 ? values[nameIndex] : '';
+          try {
+            const text = e.target?.result as string;
+            const lines = text.split('\n').filter(line => line.trim());
+            const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
             
-            return {
-              user_id: null, // Admin imports as unassigned
-              name: name || 'Customer',
-              phone: phone,
-              segment: 'dormant',
-              priority: 'low',
-              score: 20,
-              tags: []
-            };
-          }).filter(lead => lead.phone);
+            const nameIndex = headers.findIndex(h => h.includes('name'));
+            const phoneIndex = headers.findIndex(h => h.includes('phone') || h.includes('number'));
 
-          const { error } = await supabase
-            .from('leads')
-            .insert(leads);
+            const actualPhoneIndex = phoneIndex !== -1 ? phoneIndex : 0;
 
-          if (error) throw error;
+            const leads = lines.slice(1).map(line => {
+              const values = line.split(',').map(v => v.trim());
+              const phone = values[actualPhoneIndex] || '';
+              const name = nameIndex !== -1 ? values[nameIndex] : '';
+              
+              return {
+                user_id: null,
+                name: name || 'Customer',
+                phone: phone,
+                segment: 'dormant',
+                priority: 'low',
+                score: 20,
+                tags: []
+              };
+            }).filter(lead => lead.phone);
 
-          toast.success(`Successfully imported ${leads.length} leads`);
-          onImportComplete();
-          onOpenChange(false);
-          setFile(null);
-          setPreview([]);
+            // Batch insert in chunks of 100
+            const BATCH_SIZE = 100;
+            const totalBatches = Math.ceil(leads.length / BATCH_SIZE);
+            setProgress({ current: 0, total: totalBatches });
+
+            for (let i = 0; i < leads.length; i += BATCH_SIZE) {
+              const batch = leads.slice(i, i + BATCH_SIZE);
+              const { error } = await supabase
+                .from('leads')
+                .insert(batch);
+
+              if (error) throw error;
+              setProgress({ current: Math.floor(i / BATCH_SIZE) + 1, total: totalBatches });
+            }
+
+            await supabase.functions.invoke('distribute-leads');
+
+            toast.success(`Successfully imported ${leads.length} leads`);
+            onImportComplete();
+            onOpenChange(false);
+            setFile(null);
+            setPreview([]);
+            setProgress({ current: 0, total: 0 });
+          } catch (error) {
+            console.error('Error importing CSV:', error);
+            toast.error('Failed to import CSV file');
+          } finally {
+            setImporting(false);
+          }
         };
         reader.readAsText(file);
       }
@@ -324,7 +351,11 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
               onClick={handleImport}
               disabled={!file || importing}
             >
-              {importing ? "Importing..." : "Import Leads"}
+              {importing 
+                ? progress.total > 0 
+                  ? `Importing... ${progress.current}/${progress.total}` 
+                  : "Importing..." 
+                : "Import Leads"}
             </Button>
           </div>
         </div>
