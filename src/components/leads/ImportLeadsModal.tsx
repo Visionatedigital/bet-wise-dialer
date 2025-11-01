@@ -43,6 +43,24 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
     }
   };
 
+  const formatPhoneNumber = (phone: string): string => {
+    // Remove all non-digit characters
+    let cleaned = phone.replace(/\D/g, '');
+    
+    // If number starts with 0, replace with 256 (Uganda country code)
+    if (cleaned.startsWith('0')) {
+      cleaned = '256' + cleaned.substring(1);
+    }
+    
+    // If number doesn't start with country code, add 256
+    if (!cleaned.startsWith('256') && cleaned.length === 9) {
+      cleaned = '256' + cleaned;
+    }
+    
+    // Ensure it starts with + for international format
+    return '+' + cleaned;
+  };
+
   const detectSegment = (data: any): string => {
     // Auto-detect segment based on data patterns
     const lastDepositStr = String(data.last_deposit || data.lastDeposit || data.deposit || '0').toLowerCase();
@@ -150,7 +168,8 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
             const jsonData = XLSX.utils.sheet_to_json(firstSheet);
 
             const leads = jsonData.map((row: any) => {
-              const phone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || row.username || '').trim();
+              const rawPhone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || row.username || '').trim();
+              const phone = formatPhoneNumber(rawPhone);
               const name = String(row.name || row.Name || row.customer || row.Customer || '').trim();
               const segment = detectSegment(row);
               const priority = segment === 'vip' ? 'high' : segment === 'dormant' ? 'low' : 'medium';
@@ -165,7 +184,7 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
                 tags: [],
                 last_deposit_ugx: parseFloat(String(row.last_deposit || row.deposit || row['近一年充值金额(美元)'] || 0).replace(/[^0-9.]/g, '')) || 0
               };
-            }).filter(lead => lead.phone);
+            }).filter(lead => lead.phone && lead.phone.length >= 12);
 
             // Batch insert in chunks of 100
             const BATCH_SIZE = 100;
@@ -213,21 +232,22 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
 
             const actualPhoneIndex = phoneIndex !== -1 ? phoneIndex : 0;
 
-            const leads = lines.slice(1).map(line => {
-              const values = line.split(',').map(v => v.trim());
-              const phone = values[actualPhoneIndex] || '';
-              const name = nameIndex !== -1 ? values[nameIndex] : '';
-              
-              return {
-                user_id: null,
-                name: name || 'Customer',
-                phone: phone,
-                segment: 'dormant',
-                priority: 'low',
-                score: 20,
-                tags: []
-              };
-            }).filter(lead => lead.phone);
+          const leads = lines.slice(1).map(line => {
+            const values = line.split(',').map(v => v.trim());
+            const rawPhone = values[actualPhoneIndex] || '';
+            const phone = formatPhoneNumber(rawPhone);
+            const name = nameIndex !== -1 ? values[nameIndex] : '';
+            
+            return {
+              user_id: null,
+              name: name || 'Customer',
+              phone: phone,
+              segment: 'dormant',
+              priority: 'low',
+              score: 20,
+              tags: []
+            };
+          }).filter(lead => lead.phone && lead.phone.length >= 12);
 
             // Batch insert in chunks of 100
             const BATCH_SIZE = 100;
