@@ -201,8 +201,16 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
               setProgress({ current: Math.floor(i / BATCH_SIZE) + 1, total: totalBatches });
             }
 
-            // Auto-distribute leads among agents
-            await supabase.functions.invoke('distribute-leads');
+            // Trigger auto-distribution in background (non-blocking)
+            supabase.functions.invoke('distribute-leads')
+              .then(() => {
+                // Optional informational toast
+                // toast.info('Leads distribution started');
+              })
+              .catch((err) => {
+                console.error('Distribution error:', err);
+                toast.message('Leads imported. Auto-distribution may have failed; you can distribute manually.');
+              });
             
             toast.success(`Successfully imported ${leads.length} leads`);
             onImportComplete();
@@ -264,7 +272,16 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
               setProgress({ current: Math.floor(i / BATCH_SIZE) + 1, total: totalBatches });
             }
 
-            await supabase.functions.invoke('distribute-leads');
+            // Trigger auto-distribution in background (non-blocking)
+            supabase.functions.invoke('distribute-leads')
+              .then(() => {
+                // Optional informational toast
+                // toast.info('Leads distribution started');
+              })
+              .catch((err) => {
+                console.error('Distribution error:', err);
+                toast.message('Leads imported. Auto-distribution may have failed; you can distribute manually.');
+              });
 
             toast.success(`Successfully imported ${leads.length} leads`);
             onImportComplete();
