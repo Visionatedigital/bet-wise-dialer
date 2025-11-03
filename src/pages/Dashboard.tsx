@@ -209,7 +209,9 @@ useEffect(() => {
   const fetchLeads = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // Fetch all leads assigned to the user
+      const { data: leadsData, error: leadsError } = await supabase
         .from('leads')
         .select(`
           *,
@@ -218,9 +220,27 @@ useEffect(() => {
         .eq('user_id', user?.id as string)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (leadsError) throw leadsError;
 
-      const formattedLeads: Lead[] = (data || []).map(lead => ({
+      // Fetch all call activities for this user to determine which leads have been called
+      const { data: callActivities, error: callError } = await supabase
+        .from('call_activities')
+        .select('phone_number')
+        .eq('user_id', user?.id as string);
+
+      if (callError) throw callError;
+
+      // Create a set of phone numbers that have been called
+      const calledPhones = new Set(
+        (callActivities || []).map(activity => activity.phone_number)
+      );
+
+      // Filter out leads that have already been called
+      const uncalledLeads = (leadsData || []).filter(
+        lead => !calledPhones.has(lead.phone)
+      );
+
+      const formattedLeads: Lead[] = uncalledLeads.map(lead => ({
         id: lead.id,
         name: safeDisplayName(lead.name),
         phone: lead.phone,
