@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Trash2 } from 'lucide-react';
+import { Trash2, KeyRound } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -200,6 +200,26 @@ const handleRoleChange = async (userId: string, newRole: string) => {
     }
   };
 
+  const handlePasswordReset = async (email: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('reset-user-password', {
+        body: { email }
+      });
+
+      if (error) throw error;
+
+      if (data?.resetLink) {
+        toast.success('Password reset link generated! Check console for link.');
+        console.log('Password reset link:', data.resetLink);
+      } else {
+        toast.success('Password reset email sent to user');
+      }
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      toast.error('Failed to reset password');
+    }
+  };
+
 const pendingCount = users.filter(u => !u.approved).length;
 
   return (
@@ -281,6 +301,14 @@ const pendingCount = users.filter(u => !u.approved).length;
                           ) : (
                             <span className="text-xs text-muted-foreground">Approved</span>
                           )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePasswordReset(user.email)}
+                            title="Reset Password"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
                           <Button
                             size="sm"
                             variant="destructive"
