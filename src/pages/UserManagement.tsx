@@ -14,6 +14,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Trash2, KeyRound } from 'lucide-react';
 import {
   Table,
@@ -47,6 +50,10 @@ const UserManagement = () => {
   const [approvingAll, setApprovingAll] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [userToResetPassword, setUserToResetPassword] = useState<UserProfile | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [settingPassword, setSettingPassword] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -220,6 +227,38 @@ const handleRoleChange = async (userId: string, newRole: string) => {
     }
   };
 
+  const handleManualPasswordClick = (user: UserProfile) => {
+    setUserToResetPassword(user);
+    setNewPassword('');
+    setPasswordDialogOpen(true);
+  };
+
+  const handleManualPasswordSet = async () => {
+    if (!userToResetPassword || !newPassword) return;
+
+    setSettingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-set-password', {
+        body: { 
+          email: userToResetPassword.email,
+          password: newPassword
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success('Password updated successfully');
+      setPasswordDialogOpen(false);
+      setUserToResetPassword(null);
+      setNewPassword('');
+    } catch (error) {
+      console.error('Error setting password:', error);
+      toast.error('Failed to set password');
+    } finally {
+      setSettingPassword(false);
+    }
+  };
+
 const pendingCount = users.filter(u => !u.approved).length;
 
   return (
@@ -304,8 +343,8 @@ const pendingCount = users.filter(u => !u.approved).length;
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handlePasswordReset(user.email)}
-                            title="Reset Password"
+                            onClick={() => handleManualPasswordClick(user)}
+                            title="Set Password Manually"
                           >
                             <KeyRound className="h-4 w-4" />
                           </Button>
@@ -347,6 +386,46 @@ const pendingCount = users.filter(u => !u.approved).length;
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Password for {userToResetPassword?.full_name}</DialogTitle>
+            <DialogDescription>
+              Manually set a new password for {userToResetPassword?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="text"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setPasswordDialogOpen(false)}
+                disabled={settingPassword}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleManualPasswordSet}
+                disabled={!newPassword || settingPassword}
+                className="flex-1 bg-green-500 hover:bg-green-600"
+              >
+                {settingPassword ? 'Setting...' : 'Set Password'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 };
