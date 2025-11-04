@@ -90,6 +90,31 @@ serve(async (req) => {
         </tr>
       `).join('');
 
+    // Generate call notes section with phone numbers
+    const callNotesRows = calls
+      ?.filter(call => call.notes && call.notes.trim() !== '')
+      .map(call => {
+        const agentName = call.profiles?.full_name || 'Unknown';
+        const formattedDate = new Date(call.start_time).toLocaleString();
+        const status = call.status || 'Unknown';
+        const statusColor = status === 'converted' ? '#22c55e' : status === 'connected' ? '#3b82f6' : '#64748b';
+        
+        return `
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;">${formattedDate}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${agentName}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">${call.phone_number || 'N/A'}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${call.lead_name || 'N/A'}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">
+              <span style="background: ${statusColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
+                ${status}
+              </span>
+            </td>
+            <td style="padding: 8px; border: 1px solid #ddd; max-width: 300px;">${call.notes}</td>
+          </tr>
+        `;
+      }).join('') || '<tr><td colspan="6" style="padding: 8px; text-align: center; color: #666;">No call notes found for this period</td></tr>';
+
     const html = `
 <!DOCTYPE html>
 <html>
@@ -156,6 +181,23 @@ serve(async (req) => {
     </thead>
     <tbody>
       ${agentRows}
+    </tbody>
+  </table>
+
+  <h2>Detailed Call Notes</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Date & Time</th>
+        <th>Agent</th>
+        <th>Phone Number</th>
+        <th>Lead Name</th>
+        <th>Status</th>
+        <th style="width: 300px;">Call Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${callNotesRows}
     </tbody>
   </table>
 
