@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Users, Target } from "lucide-react";
@@ -41,9 +41,9 @@ const AdminDashboard = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [managers, setManagers] = useState<Manager[]>([]);
   const [unassignedLeads, setUnassignedLeads] = useState<Lead[]>([]);
-  const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const [selectedSegment, setSelectedSegment] = useState<string>('all');
   const [selectedAgent, setSelectedAgent] = useState<string>("");
+  const [numberOfLeads, setNumberOfLeads] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
 
@@ -133,10 +133,34 @@ const AdminDashboard = () => {
   };
 
   const handleAssignLeads = async () => {
-    if (!selectedAgent || selectedLeads.length === 0) {
-      toast.error('Please select an agent and at least one lead');
+    if (!selectedAgent) {
+      toast.error('Please select an agent');
       return;
     }
+
+    const numLeads = parseInt(numberOfLeads);
+    if (!numLeads || numLeads <= 0) {
+      toast.error('Please enter a valid number of leads');
+      return;
+    }
+
+    // Filter leads by segment
+    const filteredLeads = unassignedLeads.filter(lead => 
+      selectedSegment === 'all' || lead.segment === selectedSegment
+    );
+
+    if (filteredLeads.length === 0) {
+      toast.error('No unassigned leads available in the selected segment');
+      return;
+    }
+
+    if (numLeads > filteredLeads.length) {
+      toast.error(`Only ${filteredLeads.length} leads available in this segment`);
+      return;
+    }
+
+    // Take the first N leads
+    const leadsToAssign = filteredLeads.slice(0, numLeads).map(lead => lead.id);
 
     try {
       const { error } = await supabase
@@ -145,26 +169,18 @@ const AdminDashboard = () => {
           user_id: selectedAgent,
           assigned_at: new Date().toISOString()
         })
-        .in('id', selectedLeads);
+        .in('id', leadsToAssign);
 
       if (error) throw error;
 
-      toast.success(`Assigned ${selectedLeads.length} lead(s) successfully`);
-      setSelectedLeads([]);
+      toast.success(`Assigned ${numLeads} lead(s) successfully`);
+      setNumberOfLeads("");
       setSelectedAgent("");
       fetchData();
     } catch (error) {
       console.error('Error assigning leads:', error);
       toast.error('Failed to assign leads');
     }
-  };
-
-  const toggleLeadSelection = (leadId: string) => {
-    setSelectedLeads(prev =>
-      prev.includes(leadId)
-        ? prev.filter(id => id !== leadId)
-        : [...prev, leadId]
-    );
   };
 
   const handleManagerAssignment = async (agentId: string, managerId: string | null) => {
@@ -336,14 +352,7 @@ const AdminDashboard = () => {
                   <Label>Select Segment</Label>
                   <Select 
                     value={selectedSegment} 
-                    onValueChange={(value) => {
-                      setSelectedSegment(value);
-                      // Auto-select all leads in this segment
-                      const segmentLeads = unassignedLeads
-                        .filter(lead => lead.segment === value)
-                        .map(lead => lead.id);
-                      setSelectedLeads(segmentLeads);
-                    }}
+                    onValueChange={setSelectedSegment}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Choose segment" />
@@ -357,48 +366,28 @@ const AdminDashboard = () => {
                   </Select>
                 </div>
 
-                <div className="border rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm">Unassigned Leads</Label>
-                    <span className="text-xs text-muted-foreground">
-                      {selectedLeads.length} selected
-                    </span>
-                  </div>
-                  {unassignedLeads
-                    .filter(lead => selectedSegment === 'all' || lead.segment === selectedSegment)
-                    .map((lead) => (
-                    <div key={lead.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={lead.id}
-                        checked={selectedLeads.includes(lead.id)}
-                        onCheckedChange={(checked) => toggleLeadSelection(lead.id)}
-                      />
-                      <label
-                        htmlFor={lead.id}
-                        className="text-sm cursor-pointer flex-1 flex items-center justify-between"
-                      >
-                        <span>{lead.name}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {lead.segment}
-                        </Badge>
-                      </label>
-                    </div>
-                  ))}
-                  {unassignedLeads.filter(lead => 
-                    selectedSegment === 'all' || lead.segment === selectedSegment
-                  ).length === 0 && (
-                    <div className="text-center py-4 text-sm text-muted-foreground">
-                      No unassigned leads in this segment
-                    </div>
-                  )}
+                <div className="space-y-2">
+                  <Label>Number of Leads to Assign</Label>
+                  <Input 
+                    type="number"
+                    min="1"
+                    placeholder="e.g., 150"
+                    value={numberOfLeads}
+                    onChange={(e) => setNumberOfLeads(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {unassignedLeads.filter(lead => 
+                      selectedSegment === 'all' || lead.segment === selectedSegment
+                    ).length} unassigned leads available in this segment
+                  </p>
                 </div>
 
                 <Button 
                   onClick={handleAssignLeads}
-                  disabled={!selectedAgent || selectedLeads.length === 0 || loading}
+                  disabled={!selectedAgent || !numberOfLeads || loading}
                   className="w-full"
                 >
-                  Assign {selectedLeads.length} Lead{selectedLeads.length !== 1 ? 's' : ''}
+                  Assign Leads
                 </Button>
               </div>
             </CardContent>
