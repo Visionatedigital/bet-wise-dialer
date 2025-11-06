@@ -210,37 +210,13 @@ useEffect(() => {
     try {
       setLoading(true);
       
-      // Fetch all leads assigned to the user
-      const { data: leadsData, error: leadsError } = await supabase
-        .from('leads')
-        .select(`
-          *,
-          campaigns(name)
-        `)
-        .eq('user_id', user?.id as string)
-        .order('created_at', { ascending: true });
+      // Use optimized database function that filters uncalled leads on the server side
+      const { data: uncalledLeads, error } = await supabase
+        .rpc('get_agent_uncalled_leads', { agent_id: user?.id as string });
 
-      if (leadsError) throw leadsError;
+      if (error) throw error;
 
-      // Fetch all call activities for this user to determine which leads have been called
-      const { data: callActivities, error: callError } = await supabase
-        .from('call_activities')
-        .select('phone_number')
-        .eq('user_id', user?.id as string);
-
-      if (callError) throw callError;
-
-      // Create a set of phone numbers that have been called
-      const calledPhones = new Set(
-        (callActivities || []).map(activity => activity.phone_number)
-      );
-
-      // Filter out leads that have already been called
-      const uncalledLeads = (leadsData || []).filter(
-        lead => !calledPhones.has(lead.phone)
-      );
-
-      const formattedLeads: Lead[] = uncalledLeads.map(lead => ({
+      const formattedLeads: Lead[] = (uncalledLeads || []).map(lead => ({
         id: lead.id,
         name: safeDisplayName(lead.name),
         phone: lead.phone,
@@ -254,7 +230,7 @@ useEffect(() => {
         ownerUserId: lead.user_id,
         nextAction: lead.next_action || undefined,
         nextActionDue: lead.next_action_due || undefined,
-        campaign: lead.campaigns?.name || "No Campaign",
+        campaign: lead.campaign || "No Campaign",
         campaignId: lead.campaign_id || undefined,
         priority: lead.priority as "high" | "medium" | "low",
         slaMinutes: lead.sla_minutes || 0,
