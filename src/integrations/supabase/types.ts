@@ -470,6 +470,33 @@ export type Database = {
               status: string
             }[]
           }
+      get_agent_uncalled_leads: {
+        Args: { agent_id: string }
+        Returns: {
+          assigned_at: string
+          assigned_by: string
+          campaign: string
+          campaign_id: string
+          created_at: string
+          id: string
+          intent: string
+          last_activity: string
+          last_bet_date: string
+          last_contact_at: string
+          last_deposit_ugx: number
+          name: string
+          next_action: string
+          next_action_due: string
+          phone: string
+          priority: string
+          score: number
+          segment: string
+          sla_minutes: number
+          tags: string[]
+          updated_at: string
+          user_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
