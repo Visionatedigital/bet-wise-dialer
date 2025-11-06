@@ -9,8 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Users, Target, UserX } from "lucide-react";
+import { Users, Target, UserX, Upload } from "lucide-react";
 import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
+import { ImportLeadsForAgentModal } from "@/components/leads/ImportLeadsForAgentModal";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface Agent {
@@ -47,6 +48,7 @@ const AdminDashboard = () => {
   const [numberOfLeads, setNumberOfLeads] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showAgentImportModal, setShowAgentImportModal] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -434,6 +436,25 @@ const AdminDashboard = () => {
                 >
                   Assign Leads
                 </Button>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or</span>
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={() => setShowAgentImportModal(true)}
+                  disabled={!selectedAgent || loading}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import CSV for Selected Agent
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -444,6 +465,14 @@ const AdminDashboard = () => {
         open={showImportModal}
         onOpenChange={setShowImportModal}
         onImportComplete={fetchData}
+      />
+
+      <ImportLeadsForAgentModal
+        open={showAgentImportModal}
+        onOpenChange={setShowAgentImportModal}
+        onImportComplete={fetchData}
+        agentId={selectedAgent}
+        agentName={agents.find(a => a.id === selectedAgent)?.full_name || ''}
       />
     </AdminLayout>
   );
