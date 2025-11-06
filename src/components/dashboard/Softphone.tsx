@@ -300,17 +300,20 @@ const handleCallEnd = () => {
       clearInterval(callIntervalRef.current);
     }
 
-    // Store call data and show post-call notes dialog
-    if (callStartTime) {
-      const duration = Math.floor((Date.now() - callStartTime.getTime()) / 1000);
-      setPendingCallData({
-        phoneNumber: currentLead?.phone || dialedNumber,
-        duration: duration,
-        leadName: currentLead?.name || 'Unknown',
-        campaign: currentLead?.campaign || 'No Campaign'
-      });
-      setShowPostCallNotes(true);
-    }
+    // Always show post-call notes dialog after any call attempt
+    // Calculate duration if call was connected, otherwise use 0
+    const duration = callStartTime 
+      ? Math.floor((Date.now() - callStartTime.getTime()) / 1000)
+      : 0;
+    
+    // Store call data for any call attempt (ringing, connected, or failed)
+    setPendingCallData({
+      phoneNumber: currentLead?.phone || dialedNumber,
+      duration: duration,
+      leadName: currentLead?.name || 'Unknown',
+      campaign: currentLead?.campaign || 'No Campaign'
+    });
+    setShowPostCallNotes(true);
 
     setCallStatus('idle');
     setCallDuration(0);
@@ -336,12 +339,16 @@ const handleCallEnd = () => {
         }
       }
 
+      // Determine call status based on duration
+      // If duration is 0, call wasn't answered (failed/no answer)
+      const callStatus = pendingCallData.duration > 0 ? 'completed' : 'failed';
+
       // Save call activity with notes
       await createCallActivity({
         phone_number: pendingCallData.phoneNumber,
         lead_name: pendingCallData.leadName,
         duration_seconds: pendingCallData.duration,
-        status: 'completed',
+        status: callStatus,
         notes: notes,
         campaign_id: campaignId,
         call_type: 'outbound'
