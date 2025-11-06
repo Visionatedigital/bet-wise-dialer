@@ -210,11 +210,18 @@ useEffect(() => {
     try {
       setLoading(true);
       
+      console.log('[Dashboard] Fetching leads for agent:', user?.id);
+      
       // Use optimized database function that filters uncalled leads on the server side
       const { data: uncalledLeads, error } = await supabase
         .rpc('get_agent_uncalled_leads', { agent_id: user?.id as string });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Dashboard] RPC error:', error);
+        throw error;
+      }
+      
+      console.log('[Dashboard] Fetched uncalled leads:', uncalledLeads?.length || 0);
 
       const formattedLeads: Lead[] = (uncalledLeads || []).map(lead => ({
         id: lead.id,
@@ -256,9 +263,15 @@ useEffect(() => {
           toast.success(`Restored position: Lead ${validIndex + 1} of ${formattedLeads.length}`);
         }
       }
-    } catch (error) {
-      console.error('Error fetching leads:', error);
-      toast.error('Failed to load leads');
+    } catch (error: any) {
+      console.error('[Dashboard] Error fetching leads:', error);
+      console.error('[Dashboard] Error details:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code
+      });
+      toast.error(`Failed to load leads: ${error?.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
