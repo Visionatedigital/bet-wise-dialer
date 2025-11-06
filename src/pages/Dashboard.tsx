@@ -458,16 +458,7 @@ useEffect(() => {
       {/* KPIs */}
       <AgentKPIs />
 
-      {loading ? (
-        <div className="text-center py-12 text-muted-foreground">
-          Loading leads...
-        </div>
-      ) : queueLeads.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          No leads available. Import leads to get started!
-        </div>
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Left Column - Softphone & Queue */}
         <div className="lg:col-span-1 space-y-6">
           <Softphone 
@@ -696,7 +687,6 @@ useEffect(() => {
           </Card>
         </div>
       </div>
-      )}
 
       {/* After Call Summary Modal */}
       <AfterCallSummary
