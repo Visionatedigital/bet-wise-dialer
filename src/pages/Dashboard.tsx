@@ -458,17 +458,25 @@ useEffect(() => {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
-        <p className="text-muted-foreground">
-          Your workspace for managing calls and leads • {new Date().toLocaleDateString('en-UG', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric',
-            timeZone: 'Africa/Kampala'
-          })}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
+          <p className="text-muted-foreground">
+            Your workspace for managing calls and leads • {new Date().toLocaleDateString('en-UG', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric',
+              timeZone: 'Africa/Kampala'
+            })}
+          </p>
+        </div>
+        {!loading && queueLeads.length > 0 && (
+          <div className="text-right">
+            <div className="text-2xl font-bold">{queueLeads.length}</div>
+            <p className="text-xs text-muted-foreground">Uncalled Leads in Queue</p>
+          </div>
+        )}
       </div>
 
       {/* KPIs */}

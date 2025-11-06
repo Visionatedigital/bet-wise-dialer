@@ -9,8 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Users, Target } from "lucide-react";
+import { Users, Target, UserX } from "lucide-react";
 import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface Agent {
   id: string;
@@ -200,6 +201,26 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleUnassignAllLeads = async () => {
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({ 
+          user_id: null,
+          assigned_at: null
+        })
+        .not('user_id', 'is', null);
+
+      if (error) throw error;
+
+      toast.success('All leads unassigned successfully');
+      fetchData();
+    } catch (error) {
+      console.error('Error unassigning leads:', error);
+      toast.error('Failed to unassign leads');
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -208,10 +229,34 @@ const AdminDashboard = () => {
             <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
             <p className="text-muted-foreground">Manage users, agents and lead assignments</p>
           </div>
-          <Button onClick={() => setShowImportModal(true)}>
-            <Target className="h-4 w-4 mr-2" />
-            Import Leads
-          </Button>
+          <div className="flex gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline">
+                  <UserX className="h-4 w-4 mr-2" />
+                  Unassign All Leads
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Unassign all leads?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove all lead assignments from all agents. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleUnassignAllLeads}>
+                    Unassign All
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <Button onClick={() => setShowImportModal(true)}>
+              <Target className="h-4 w-4 mr-2" />
+              Import Leads
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
