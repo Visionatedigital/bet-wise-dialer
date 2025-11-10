@@ -6,8 +6,9 @@ import { useCallbacks, Callback } from "@/hooks/useCallbacks";
 import { startOfDay, addDays, addWeeks, isWithinInterval, isPast, isToday } from "date-fns";
 import { toast } from "sonner";
 import { Bell } from "lucide-react";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
-export default function Callbacks() {
+function CallbacksContent() {
   const { callbacks, loading, updateCallback } = useCallbacks();
   const [activeCallback, setActiveCallback] = useState<Callback | null>(null);
   const [overdueCount, setOverdueCount] = useState(0);
@@ -109,7 +110,7 @@ export default function Callbacks() {
   }
 
   return (
-    <div className="p-6">
+    <div>
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">Smart Callback Board</h1>
         <p className="text-muted-foreground">
@@ -156,5 +157,13 @@ export default function Callbacks() {
         </DragOverlay>
       </DndContext>
     </div>
+  );
+}
+
+export default function Callbacks() {
+  return (
+    <DashboardLayout>
+      <CallbacksContent />
+    </DashboardLayout>
   );
 }
