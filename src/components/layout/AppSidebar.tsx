@@ -9,7 +9,8 @@ import {
   Monitor,
   Plug,
   Home,
-  LogOut
+  LogOut,
+  CalendarClock
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -39,6 +40,12 @@ const navigationItems = [
     url: "/leads", 
     icon: Users,
     description: "Manage contacts & prospects"
+  },
+  { 
+    title: "Callbacks", 
+    url: "/callbacks", 
+    icon: CalendarClock,
+    description: "Smart callback board"
   },
   { 
     title: "Campaigns", 

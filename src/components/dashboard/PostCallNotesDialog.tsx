@@ -32,13 +32,13 @@ export function PostCallNotesDialog({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!notes.trim()) {
       toast.error("Please enter call notes before saving");
       return;
     }
 
-    onSave(notes);
+    await onSave(notes);
     setNotes("");
   };
 

@@ -20,6 +20,7 @@ import Performance from "./pages/Performance";
 import ManagementMonitor from "./pages/ManagementMonitor";
 import ManagementCampaigns from "./pages/ManagementCampaigns";
 import Integrations from "./pages/Integrations";
+import Callbacks from "./pages/Callbacks";
 import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
 
@@ -88,6 +89,11 @@ const App = () => (
               <Route path="/integrations" element={
                 <ProtectedRoute>
                   <Integrations />
+                </ProtectedRoute>
+              } />
+              <Route path="/callbacks" element={
+                <ProtectedRoute>
+                  <Callbacks />
                 </ProtectedRoute>
               } />
               <Route path="/settings" element={

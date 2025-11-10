@@ -13,6 +13,7 @@ import { SipClient } from "@/utils/SipClient";
 import { SessionState } from "sip.js";
 import { maskPhone } from "@/lib/formatters";
 import { PostCallNotesDialog } from "./PostCallNotesDialog";
+import { parseCallbackIntent } from "@/utils/parseCallbackIntent";
 
 // @ts-ignore - AfricasTalking WebRTC SDK
 declare const Africastalking: any;
@@ -339,12 +340,24 @@ const handleCallEnd = () => {
         }
       }
 
+      // Get lead_id from phone number
+      let leadId = null;
+      const { data: leadData } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('phone', pendingCallData.phoneNumber)
+        .single();
+      
+      if (leadData) {
+        leadId = leadData.id;
+      }
+
       // Determine call status based on duration
       // If duration is 0, call wasn't answered (failed/no answer)
       const callStatus = pendingCallData.duration > 0 ? 'completed' : 'failed';
 
       // Save call activity with notes
-      await createCallActivity({
+      const callActivityData = await createCallActivity({
         phone_number: pendingCallData.phoneNumber,
         lead_name: pendingCallData.leadName,
         duration_seconds: pendingCallData.duration,
@@ -354,7 +367,30 @@ const handleCallEnd = () => {
         call_type: 'outbound'
       } as any);
 
-      toast.success("Call notes saved successfully");
+      // Parse notes for callback intent
+      const callbackIntent = parseCallbackIntent(notes);
+      
+      if (callbackIntent.shouldCreateCallback && user && leadId) {
+        // Automatically create callback
+        await supabase.from('callbacks').insert([{
+          lead_id: leadId,
+          user_id: user.id,
+          call_activity_id: callActivityData?.id || null,
+          scheduled_for: callbackIntent.callbackDate!.toISOString(),
+          priority: callbackIntent.priority,
+          status: 'pending',
+          notes: notes,
+          lead_name: pendingCallData.leadName,
+          phone_number: pendingCallData.phoneNumber
+        }]);
+
+        toast.success("Call notes saved and callback scheduled", {
+          description: `Callback set for ${callbackIntent.callbackDate!.toLocaleDateString()}`
+        });
+      } else {
+        toast.success("Call notes saved successfully");
+      }
+
       setShowPostCallNotes(false);
       setPendingCallData(null);
     } catch (error) {
