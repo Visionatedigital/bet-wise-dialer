@@ -95,9 +95,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('[Auth] Sign out successful');
       // Clear admin view mode on logout
       localStorage.removeItem('adminViewMode');
-      window.location.href = '/auth';
+      // Force full page redirect to auth page
+      window.location.replace('/auth');
     } catch (error) {
       console.error('[Auth] Sign out failed:', error);
+      // Even if there's an error, redirect to auth page
+      window.location.replace('/auth');
     }
   };
 
