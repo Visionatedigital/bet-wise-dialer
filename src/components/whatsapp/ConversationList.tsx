@@ -7,6 +7,7 @@ import { Search, Check, CheckCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useWhatsAppConversations } from "@/hooks/useWhatsAppConversations";
+import { NewConversationDialog } from "./NewConversationDialog";
 
 interface ConversationListProps {
   selectedConversation: string | null;
@@ -32,8 +33,9 @@ export function ConversationList({ selectedConversation, onSelectConversation }:
 
   return (
     <div className="w-80 border-r border-border flex flex-col">
-      <div className="p-4 border-b border-border">
-        <h2 className="text-xl font-semibold mb-3">Messages</h2>
+      <div className="p-4 border-b border-border space-y-3">
+        <h2 className="text-xl font-semibold">Messages</h2>
+        <NewConversationDialog onConversationCreated={onSelectConversation} />
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
