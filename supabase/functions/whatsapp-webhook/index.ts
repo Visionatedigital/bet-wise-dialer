@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
               .select()
               .single();
 
-            if (convError) {
+            if (convError || !newConversation) {
               console.error('Error creating conversation:', convError);
               continue;
             }
@@ -115,6 +115,12 @@ Deno.serve(async (req) => {
                 unread_count: supabase.rpc('increment', { x: 1 }),
               })
               .eq('id', conversation.id);
+          }
+
+          // Ensure conversation exists before inserting message
+          if (!conversation) {
+            console.error('No conversation available');
+            continue;
           }
 
           // Insert message
@@ -160,7 +166,7 @@ Deno.serve(async (req) => {
     return new Response('Method not allowed', { status: 405 });
   } catch (error) {
     console.error('Error processing webhook:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

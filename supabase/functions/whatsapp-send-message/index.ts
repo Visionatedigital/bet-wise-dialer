@@ -18,27 +18,78 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get request data
-    const { conversationId, message } = await req.json();
+    // Get authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Authorization header required');
+    }
+
+    // Get user from JWT token
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    );
+
+    if (userError || !user) {
+      throw new Error('Unauthorized');
+    }
+
+    // Get request data - support both conversationId and phone number
+    const { conversationId, phoneNumber, message } = await req.json();
     
-    console.log('Send message request:', { conversationId, message });
+    console.log('Send message request:', { conversationId, phoneNumber, message, userId: user.id });
 
-    // Get conversation details
-    const { data: conversation, error: convError } = await supabase
-      .from('whatsapp_conversations')
-      .select('agent_id, contact_phone')
-      .eq('id', conversationId)
-      .single();
+    let conversation;
 
-    if (convError || !conversation) {
-      throw new Error('Conversation not found');
+    if (conversationId) {
+      // Get existing conversation
+      const { data, error: convError } = await supabase
+        .from('whatsapp_conversations')
+        .select('agent_id, contact_phone')
+        .eq('id', conversationId)
+        .eq('agent_id', user.id)
+        .single();
+
+      if (convError || !data) {
+        throw new Error('Conversation not found');
+      }
+      conversation = { id: conversationId, ...data };
+    } else if (phoneNumber) {
+      // Look for existing conversation or create new one
+      const { data: existing } = await supabase
+        .from('whatsapp_conversations')
+        .select('id, agent_id, contact_phone')
+        .eq('agent_id', user.id)
+        .eq('contact_phone', phoneNumber)
+        .single();
+
+      if (existing) {
+        conversation = existing;
+      } else {
+        // Create new conversation
+        const { data: newConv, error: createError } = await supabase
+          .from('whatsapp_conversations')
+          .insert({
+            agent_id: user.id,
+            contact_phone: phoneNumber,
+            contact_name: phoneNumber, // Will be updated when they reply
+          })
+          .select()
+          .single();
+
+        if (createError || !newConv) {
+          throw new Error('Failed to create conversation');
+        }
+        conversation = newConv;
+      }
+    } else {
+      throw new Error('Either conversationId or phoneNumber required');
     }
 
     // Get agent's WhatsApp configuration
     const { data: agentConfig, error: configError } = await supabase
       .from('agent_whatsapp_config')
       .select('phone_number_id')
-      .eq('user_id', conversation.agent_id)
+      .eq('user_id', user.id)
       .eq('is_active', true)
       .single();
 
@@ -79,7 +130,7 @@ Deno.serve(async (req) => {
     const { data: savedMessage, error: messageError } = await supabase
       .from('whatsapp_messages')
       .insert({
-        conversation_id: conversationId,
+        conversation_id: conversation.id,
         whatsapp_message_id: messageId,
         sender_type: 'agent',
         content: message,
@@ -100,7 +151,7 @@ Deno.serve(async (req) => {
         last_message_text: message,
         last_message_at: new Date().toISOString(),
       })
-      .eq('id', conversationId);
+      .eq('id', conversation.id);
 
     return new Response(
       JSON.stringify({
@@ -115,7 +166,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error sending message:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
