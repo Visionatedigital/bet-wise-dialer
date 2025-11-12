@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Paperclip, Image as ImageIcon, Smile } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface MessageComposerProps {
   conversationId: string;
@@ -13,12 +14,20 @@ export function MessageComposer({ conversationId }: MessageComposerProps) {
   const [isSending, setIsSending] = useState(false);
 
   const handleSend = async () => {
-    if (!message.trim()) return;
+    if (!message.trim() || isSending) return;
 
     setIsSending(true);
     try {
-      // TODO: Send message via WhatsApp Business API
-      console.log("Sending message:", message, "to conversation:", conversationId);
+      const { data, error } = await supabase.functions.invoke('whatsapp-send-message', {
+        body: {
+          conversationId,
+          message: message.trim(),
+        },
+      });
+
+      if (error) throw error;
+
+      console.log("Message sent:", data);
       toast.success("Message sent!");
       setMessage("");
     } catch (error) {
@@ -38,7 +47,7 @@ export function MessageComposer({ conversationId }: MessageComposerProps) {
 
   const handleMediaUpload = () => {
     // TODO: Implement media upload
-    toast.info("Media upload will be available once WhatsApp API is configured");
+    toast.info("Media upload will be available soon");
   };
 
   return (

@@ -50,3 +50,9 @@ verify_jwt = true
 
 [functions.delete-user]
 verify_jwt = true
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.whatsapp-send-message]
+verify_jwt = true

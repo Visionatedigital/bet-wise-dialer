@@ -1,58 +1,30 @@
+import { useEffect } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MessageComposer } from "./MessageComposer";
 import { format } from "date-fns";
-import { Check, CheckCheck, Phone, Video, MoreVertical, Image as ImageIcon, FileText } from "lucide-react";
+import { Check, CheckCheck, Phone, Video, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-interface Message {
-  id: string;
-  content: string;
-  timestamp: Date;
-  isFromAgent: boolean;
-  status: 'sent' | 'delivered' | 'read';
-  mediaUrl?: string;
-  mediaType?: 'image' | 'document' | 'video';
-}
+import { useWhatsAppMessages } from "@/hooks/useWhatsAppMessages";
+import { useWhatsAppConversations } from "@/hooks/useWhatsAppConversations";
 
 interface MessageThreadProps {
   conversationId: string | null;
 }
 
-// Mock data - will be replaced with real data from database
-const mockMessages: Message[] = [
-  {
-    id: "1",
-    content: "Hi John! I'm reaching out about the sports betting opportunities we discussed.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60),
-    isFromAgent: true,
-    status: 'read'
-  },
-  {
-    id: "2",
-    content: "Yes, I'm interested! Can you tell me more?",
-    timestamp: new Date(Date.now() - 1000 * 60 * 55),
-    isFromAgent: false,
-    status: 'read'
-  },
-  {
-    id: "3",
-    content: "Of course! We have special promotions this month. Let me share the details with you.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 50),
-    isFromAgent: true,
-    status: 'read'
-  },
-  {
-    id: "4",
-    content: "Thanks for the information!",
-    timestamp: new Date(Date.now() - 1000 * 60 * 5),
-    isFromAgent: false,
-    status: 'read'
-  },
-];
-
 export function MessageThread({ conversationId }: MessageThreadProps) {
+  const { messages, loading, markAsRead } = useWhatsAppMessages(conversationId);
+  const { conversations } = useWhatsAppConversations();
+
+  const conversation = conversations.find(c => c.id === conversationId);
+
+  useEffect(() => {
+    if (conversationId && messages.length > 0) {
+      markAsRead();
+    }
+  }, [conversationId, messages.length, markAsRead]);
+
   if (!conversationId) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -64,17 +36,28 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-muted-foreground">Loading messages...</p>
+      </div>
+    );
+  }
+
+  const displayName = conversation?.contact_name || conversation?.contact_phone || 'Unknown';
+  const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+
   return (
     <div className="flex-1 flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Avatar>
-            <AvatarFallback>JM</AvatarFallback>
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div>
-            <h3 className="font-semibold">John Mutua</h3>
-            <p className="text-sm text-muted-foreground">+256700123456</p>
+            <h3 className="font-semibold">{displayName}</h3>
+            <p className="text-sm text-muted-foreground">{conversation?.contact_phone}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -93,57 +76,50 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
-          {mockMessages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "flex",
-                message.isFromAgent ? "justify-end" : "justify-start"
-              )}
-            >
+          {messages.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              <p>No messages yet. Start the conversation!</p>
+            </div>
+          ) : (
+            messages.map((message) => (
               <div
+                key={message.id}
                 className={cn(
-                  "max-w-[70%] rounded-lg p-3",
-                  message.isFromAgent
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                  "flex",
+                  message.sender_type === 'agent' ? "justify-end" : "justify-start"
                 )}
               >
-                {message.mediaUrl && (
-                  <div className="mb-2 rounded overflow-hidden">
-                    {message.mediaType === 'image' && (
-                      <img src={message.mediaUrl} alt="Shared media" className="max-w-full" />
-                    )}
-                    {message.mediaType === 'document' && (
-                      <div className="flex items-center gap-2 p-2 bg-background/10 rounded">
-                        <FileText className="h-8 w-8" />
-                        <span className="text-sm">Document.pdf</span>
-                      </div>
+                <div
+                  className={cn(
+                    "max-w-[70%] rounded-lg p-3",
+                    message.sender_type === 'agent'
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  )}
+                >
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <div className="flex items-center justify-end gap-1 mt-1">
+                    <span className="text-xs opacity-70">
+                      {format(new Date(message.timestamp), 'HH:mm')}
+                    </span>
+                    {message.sender_type === 'agent' && (
+                      <>
+                        {message.status === 'read' && (
+                          <CheckCheck className="h-4 w-4 text-blue-400" />
+                        )}
+                        {message.status === 'delivered' && (
+                          <CheckCheck className="h-4 w-4" />
+                        )}
+                        {message.status === 'sent' && (
+                          <Check className="h-4 w-4" />
+                        )}
+                      </>
                     )}
                   </div>
-                )}
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                <div className="flex items-center justify-end gap-1 mt-1">
-                  <span className="text-xs opacity-70">
-                    {format(message.timestamp, 'HH:mm')}
-                  </span>
-                  {message.isFromAgent && (
-                    <>
-                      {message.status === 'read' && (
-                        <CheckCheck className="h-4 w-4 text-blue-400" />
-                      )}
-                      {message.status === 'delivered' && (
-                        <CheckCheck className="h-4 w-4" />
-                      )}
-                      {message.status === 'sent' && (
-                        <Check className="h-4 w-4" />
-                      )}
-                    </>
-                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </ScrollArea>
 
