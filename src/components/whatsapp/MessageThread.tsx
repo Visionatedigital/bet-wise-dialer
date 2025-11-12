@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MessageComposer } from "./MessageComposer";
 import { format } from "date-fns";
-import { Check, CheckCheck, MoreVertical, Bot } from "lucide-react";
+import { Check, CheckCheck, MoreVertical, Bot, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWhatsAppMessages } from "@/hooks/useWhatsAppMessages";
@@ -12,16 +12,35 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface MessageThreadProps {
   conversationId: string | null;
+  onConversationDeleted?: () => void;
 }
 
-export function MessageThread({ conversationId }: MessageThreadProps) {
+export function MessageThread({ conversationId, onConversationDeleted }: MessageThreadProps) {
   const { messages, loading, markAsRead } = useWhatsAppMessages(conversationId);
   const { conversations } = useWhatsAppConversations();
   const [aiMode, setAiMode] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const previousMessageCountRef = useRef(messages.length);
 
   const conversation = conversations.find(c => c.id === conversationId);
@@ -40,6 +59,30 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
     if (conversationId) {
       localStorage.setItem(`ai-mode-${conversationId}`, checked.toString());
       toast.success(checked ? 'AI Assistant enabled' : 'AI Assistant disabled');
+    }
+  };
+
+  // Handle delete conversation
+  const handleDeleteConversation = async () => {
+    if (!conversationId) return;
+
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('whatsapp_conversations')
+        .delete()
+        .eq('id', conversationId);
+
+      if (error) throw error;
+
+      toast.success('Chat deleted successfully');
+      setShowDeleteDialog(false);
+      onConversationDeleted?.();
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      toast.error('Failed to delete chat');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -174,11 +217,45 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
               <span className="text-sm font-medium">AI Chat</span>
             </Label>
           </div>
-          <Button variant="ghost" size="icon">
-            <MoreVertical className="h-5 w-5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreVertical className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 bg-popover z-50">
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive cursor-pointer"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Chat
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this conversation and all its messages. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConversation}
+              disabled={isDeleting}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">

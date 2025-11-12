@@ -7,6 +7,10 @@ import { Card } from "@/components/ui/card";
 export default function WhatsApp() {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
 
+  const handleConversationDeleted = () => {
+    setSelectedConversation(null);
+  };
+
   return (
     <DashboardLayout>
       <div className="h-[calc(100vh-8rem)]">
@@ -15,7 +19,10 @@ export default function WhatsApp() {
             selectedConversation={selectedConversation}
             onSelectConversation={setSelectedConversation}
           />
-          <MessageThread conversationId={selectedConversation} />
+          <MessageThread 
+            conversationId={selectedConversation}
+            onConversationDeleted={handleConversationDeleted}
+          />
         </Card>
       </div>
     </DashboardLayout>
