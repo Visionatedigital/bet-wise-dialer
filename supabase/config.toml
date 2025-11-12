@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.whatsapp-send-message]
 verify_jwt = false
+
+[functions.whatsapp-ai-response]
+verify_jwt = true

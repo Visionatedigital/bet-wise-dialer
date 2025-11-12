@@ -1,13 +1,17 @@
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MessageComposer } from "./MessageComposer";
 import { format } from "date-fns";
-import { Check, CheckCheck, Phone, Video, MoreVertical } from "lucide-react";
+import { Check, CheckCheck, MoreVertical, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWhatsAppMessages } from "@/hooks/useWhatsAppMessages";
 import { useWhatsAppConversations } from "@/hooks/useWhatsAppConversations";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface MessageThreadProps {
   conversationId: string | null;
@@ -16,8 +20,86 @@ interface MessageThreadProps {
 export function MessageThread({ conversationId }: MessageThreadProps) {
   const { messages, loading, markAsRead } = useWhatsAppMessages(conversationId);
   const { conversations } = useWhatsAppConversations();
+  const [aiMode, setAiMode] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const previousMessageCountRef = useRef(messages.length);
 
   const conversation = conversations.find(c => c.id === conversationId);
+
+  // Load AI mode from localStorage
+  useEffect(() => {
+    if (conversationId) {
+      const stored = localStorage.getItem(`ai-mode-${conversationId}`);
+      setAiMode(stored === 'true');
+    }
+  }, [conversationId]);
+
+  // Handle AI mode toggle
+  const toggleAiMode = (checked: boolean) => {
+    setAiMode(checked);
+    if (conversationId) {
+      localStorage.setItem(`ai-mode-${conversationId}`, checked.toString());
+      toast.success(checked ? 'AI Assistant enabled' : 'AI Assistant disabled');
+    }
+  };
+
+  // Handle incoming messages when AI mode is on
+  useEffect(() => {
+    const handleIncomingMessage = async () => {
+      if (!conversationId || !aiMode || isProcessing) return;
+      
+      // Check if new message came in
+      if (messages.length > previousMessageCountRef.current) {
+        const latestMessage = messages[messages.length - 1];
+        
+        // Only respond to user messages
+        if (latestMessage.sender_type === 'user') {
+          setIsProcessing(true);
+          
+          try {
+            // Get AI response
+            const { data: aiData, error: aiError } = await supabase.functions.invoke(
+              'whatsapp-ai-response',
+              {
+                body: { 
+                  messages: messages.slice(-10), // Last 10 messages for context
+                  conversationContext: {
+                    contact_name: conversation?.contact_name,
+                    contact_phone: conversation?.contact_phone
+                  }
+                }
+              }
+            );
+
+            if (aiError) throw aiError;
+
+            // Send AI response
+            const { error: sendError } = await supabase.functions.invoke(
+              'whatsapp-send-message',
+              {
+                body: {
+                  conversationId,
+                  message: aiData.response
+                }
+              }
+            );
+
+            if (sendError) throw sendError;
+
+          } catch (error) {
+            console.error('AI response error:', error);
+            toast.error('Failed to generate AI response');
+          } finally {
+            setIsProcessing(false);
+          }
+        }
+      }
+      
+      previousMessageCountRef.current = messages.length;
+    };
+
+    handleIncomingMessage();
+  }, [messages.length, conversationId, aiMode, isProcessing, messages, conversation]);
 
   useEffect(() => {
     if (conversationId && messages.length > 0) {
@@ -60,13 +142,19 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
             <p className="text-sm text-muted-foreground">{conversation?.contact_phone}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon">
-            <Phone className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon">
-            <Video className="h-5 w-5" />
-          </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="ai-mode"
+              checked={aiMode}
+              onCheckedChange={toggleAiMode}
+              disabled={isProcessing}
+            />
+            <Label htmlFor="ai-mode" className="flex items-center gap-2 cursor-pointer">
+              <Bot className={cn("h-4 w-4", aiMode && "text-primary")} />
+              <span className="text-sm font-medium">AI Chat</span>
+            </Label>
+          </div>
           <Button variant="ghost" size="icon">
             <MoreVertical className="h-5 w-5" />
           </Button>
@@ -124,7 +212,7 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
       </ScrollArea>
 
       {/* Composer */}
-      <MessageComposer conversationId={conversationId} />
+      <MessageComposer conversationId={conversationId} disabled={aiMode} />
     </div>
   );
 }

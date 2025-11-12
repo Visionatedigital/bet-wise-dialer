@@ -7,9 +7,10 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface MessageComposerProps {
   conversationId: string;
+  disabled?: boolean;
 }
 
-export function MessageComposer({ conversationId }: MessageComposerProps) {
+export function MessageComposer({ conversationId, disabled = false }: MessageComposerProps) {
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
 
@@ -58,6 +59,7 @@ export function MessageComposer({ conversationId }: MessageComposerProps) {
           size="icon"
           onClick={handleMediaUpload}
           className="flex-shrink-0"
+          disabled={disabled}
         >
           <Paperclip className="h-5 w-5" />
         </Button>
@@ -66,23 +68,26 @@ export function MessageComposer({ conversationId }: MessageComposerProps) {
           size="icon"
           onClick={handleMediaUpload}
           className="flex-shrink-0"
+          disabled={disabled}
         >
           <ImageIcon className="h-5 w-5" />
         </Button>
         
         <div className="flex-1 relative">
           <Textarea
-            placeholder="Type a message..."
+            placeholder={disabled ? "AI mode active - responses automated" : "Type a message..."}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             className="min-h-[44px] max-h-32 resize-none pr-10"
             rows={1}
+            disabled={disabled}
           />
           <Button
             variant="ghost"
             size="icon"
             className="absolute right-2 top-1/2 -translate-y-1/2"
+            disabled={disabled}
           >
             <Smile className="h-5 w-5" />
           </Button>
@@ -90,7 +95,7 @@ export function MessageComposer({ conversationId }: MessageComposerProps) {
 
         <Button
           onClick={handleSend}
-          disabled={!message.trim() || isSending}
+          disabled={!message.trim() || isSending || disabled}
           className="flex-shrink-0"
         >
           <Send className="h-5 w-5" />
