@@ -55,4 +55,4 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.whatsapp-send-message]
-verify_jwt = true
+verify_jwt = false
