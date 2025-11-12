@@ -67,9 +67,10 @@ Remember: You're representing BetSure, so maintain professionalism while being a
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5-2025-08-07',
+        model: 'gpt-4o-mini',
         messages: chatMessages,
-        max_completion_tokens: 500,
+        max_tokens: 500,
+        temperature: 0.7,
       }),
     });
 
@@ -84,68 +85,15 @@ Remember: You're representing BetSure, so maintain professionalism while being a
     
     const aiResponse = data.choices?.[0]?.message?.content;
 
-    if (!aiResponse) {
-      console.error('[AI Response] No content in Chat Completions response. Trying fallback to Responses API...');
-
-      // Fallback: Use the Responses API and extract output_text
-      const input = chatMessages.map((m) => ({
-        role: m.role,
-        content: [{ type: 'text', text: m.content }]
-      }));
-
-      const resp2 = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-5-2025-08-07',
-          input,
-          max_output_tokens: 500,
-        }),
-      });
-
-      if (!resp2.ok) {
-        const t = await resp2.text();
-        console.error('[AI Response] Responses API error:', resp2.status, t);
-        throw new Error(`OpenAI (responses) error: ${resp2.status} - ${t}`);
+    if (!aiResponse || aiResponse.trim().length === 0) {
+      console.error('[AI Response] Empty content from OpenAI. Full response:', JSON.stringify(data, null, 2));
+      
+      // Check if there's an error in the response
+      if (data.error) {
+        throw new Error(`OpenAI error: ${JSON.stringify(data.error)}`);
       }
-
-      const data2 = await resp2.json();
-      console.log('[AI Response] Responses API full response:', JSON.stringify(data2, null, 2));
-
-      // Try multiple extraction strategies
-      let textOut = '';
-      if (typeof data2.output_text === 'string') textOut = data2.output_text;
-      else if (Array.isArray(data2.output_text)) textOut = data2.output_text.join('\n');
-
-      if (!textOut && Array.isArray(data2.output)) {
-        try {
-          for (const item of data2.output) {
-            if (Array.isArray(item.content)) {
-              for (const c of item.content) {
-                if (c.type === 'output_text' && c.text) {
-                  textOut += c.text + '\n';
-                } else if (c.type === 'text' && c.text) {
-                  textOut += c.text + '\n';
-                }
-              }
-            }
-          }
-          textOut = textOut.trim();
-        } catch (_) { /* ignore */ }
-      }
-
-      if (!textOut) {
-        throw new Error(`OpenAI returned no content (fallback). Keys: ${JSON.stringify(Object.keys(data2))}`);
-      }
-
-      console.log('[AI Response] Fallback response length:', textOut.length);
-      return new Response(
-        JSON.stringify({ response: textOut }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      
+      throw new Error(`OpenAI returned empty content. Response keys: ${JSON.stringify(Object.keys(data))}`);
     }
 
     console.log('[AI Response] Generated response length:', aiResponse.length);
