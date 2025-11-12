@@ -54,7 +54,11 @@ Remember: You're representing BetSure, so maintain professionalism while being a
       }))
     ];
 
-    console.log('[AI Response] Calling OpenAI with', chatMessages.length, 'messages');
+    console.log('[AI Response] Chat messages being sent:', JSON.stringify(chatMessages.map(m => ({
+      role: m.role,
+      contentLength: m.content.length,
+      contentPreview: m.content.substring(0, 50)
+    })), null, 2));
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -76,16 +80,26 @@ Remember: You're representing BetSure, so maintain professionalism while being a
     }
 
     const data = await response.json();
-    console.log('[AI Response] OpenAI response received');
+    console.log('[AI Response] OpenAI full response:', JSON.stringify(data, null, 2));
     
     const aiResponse = data.choices?.[0]?.message?.content;
 
     if (!aiResponse) {
-      console.error('[AI Response] No content in OpenAI response:', data);
-      throw new Error('OpenAI returned no content');
+      console.error('[AI Response] No content in OpenAI response. Full data:', JSON.stringify(data, null, 2));
+      console.error('[AI Response] Choices:', data.choices);
+      console.error('[AI Response] First choice:', data.choices?.[0]);
+      console.error('[AI Response] Message:', data.choices?.[0]?.message);
+      
+      // Check if there's an error in the response
+      if (data.error) {
+        throw new Error(`OpenAI error: ${JSON.stringify(data.error)}`);
+      }
+      
+      throw new Error(`OpenAI returned no content. Response structure: ${JSON.stringify(Object.keys(data))}`);
     }
 
-    console.log('[AI Response] Generated response:', aiResponse.substring(0, 100) + '...');
+    console.log('[AI Response] Generated response length:', aiResponse.length);
+    console.log('[AI Response] Response preview:', aiResponse.substring(0, 100) + '...');
 
     return new Response(
       JSON.stringify({ response: aiResponse }),
