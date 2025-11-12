@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Paperclip, Image as ImageIcon, Smile } from "lucide-react";
+import { Send, Paperclip, Image as ImageIcon, Smile, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface MessageComposerProps {
   conversationId: string;
@@ -11,18 +12,51 @@ interface MessageComposerProps {
 }
 
 export function MessageComposer({ conversationId, disabled = false }: MessageComposerProps) {
+  const { user } = useAuth();
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = async () => {
-    if (!message.trim() || isSending) return;
+    if ((!message.trim() && !selectedFile) || isSending || !user) return;
 
     setIsSending(true);
     try {
+      let mediaUrl = null;
+      let mediaType = null;
+
+      // Upload file to storage if selected
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('whatsapp-media')
+          .upload(fileName, selectedFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('whatsapp-media')
+          .getPublicUrl(fileName);
+
+        mediaUrl = publicUrl;
+        mediaType = selectedFile.type;
+      }
+
       const { data, error } = await supabase.functions.invoke('whatsapp-send-message', {
         body: {
           conversationId,
-          message: message.trim(),
+          message: message.trim() || '📎 Media file',
+          mediaUrl,
+          mediaType,
         },
       });
 
@@ -31,6 +65,8 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
       console.log("Message sent:", data);
       toast.success("Message sent!");
       setMessage("");
+      setSelectedFile(null);
+      setPreviewUrl(null);
     } catch (error) {
       console.error("Error sending message:", error);
       toast.error("Failed to send message");
@@ -46,29 +82,96 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
     }
   };
 
-  const handleMediaUpload = () => {
-    // TODO: Implement media upload
-    toast.info("Media upload will be available soon");
+  const handleFileSelect = (file: File | null) => {
+    if (!file) return;
+
+    // Check file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size must be less than 10MB");
+      return;
+    }
+
+    setSelectedFile(file);
+
+    // Create preview for images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setPreviewUrl(null);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
   return (
     <div className="p-4 border-t border-border">
+      {selectedFile && (
+        <div className="mb-2 p-2 bg-muted rounded-lg flex items-center gap-2">
+          {previewUrl ? (
+            <img src={previewUrl} alt="Preview" className="h-16 w-16 object-cover rounded" />
+          ) : (
+            <div className="h-16 w-16 bg-background rounded flex items-center justify-center">
+              <Paperclip className="h-6 w-6 text-muted-foreground" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {(selectedFile.size / 1024).toFixed(2)} KB
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRemoveFile}
+            className="flex-shrink-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+      
       <div className="flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+          disabled={disabled}
+        />
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+          disabled={disabled}
+        />
+        
         <Button
           variant="ghost"
           size="icon"
-          onClick={handleMediaUpload}
+          onClick={() => fileInputRef.current?.click()}
           className="flex-shrink-0"
-          disabled={disabled}
+          disabled={disabled || !!selectedFile}
         >
           <Paperclip className="h-5 w-5" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          onClick={handleMediaUpload}
+          onClick={() => imageInputRef.current?.click()}
           className="flex-shrink-0"
-          disabled={disabled}
+          disabled={disabled || !!selectedFile}
         >
           <ImageIcon className="h-5 w-5" />
         </Button>
@@ -95,7 +198,7 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
 
         <Button
           onClick={handleSend}
-          disabled={!message.trim() || isSending || disabled}
+          disabled={(!message.trim() && !selectedFile) || isSending || disabled}
           className="flex-shrink-0"
         >
           <Send className="h-5 w-5" />

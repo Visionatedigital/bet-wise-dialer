@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     // Parse body early to support public fallback
     let body: any = {};
     try { body = await req.json(); } catch (_) {}
-    const { conversationId, phoneNumber, message, agentId } = body;
+    const { conversationId, phoneNumber, message, agentId, mediaUrl, mediaType } = body;
 
     let supabase;
     let actingAgentId: string | null = null;
@@ -56,12 +56,12 @@ Deno.serve(async (req) => {
       supabase = createClient(supabaseUrl, supabaseServiceKey);
     }
 
-    console.log('Send message request:', { conversationId, phoneNumber, message, actingAgentId });
+    console.log('Send message request:', { conversationId, phoneNumber, message, actingAgentId, mediaUrl });
 
-    // Validate message content
-    if (!message || message.trim().length === 0) {
-      console.error('Empty message provided');
-      throw new Error('Message content is required and cannot be empty');
+    // Validate message content (allow empty if media is present)
+    if ((!message || message.trim().length === 0) && !mediaUrl) {
+      console.error('Empty message and no media provided');
+      throw new Error('Message content or media is required');
     }
 
     let conversation;
@@ -127,6 +127,32 @@ Deno.serve(async (req) => {
     // Strip + from phone number to match Meta's format
     const cleanPhone = conversation.contact_phone.replace(/^\+/, '');
     
+    let whatsappPayload: any = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanPhone,
+    };
+
+    // If media is present, send as media message
+    if (mediaUrl && mediaType) {
+      const mediaTypeCategory = mediaType.startsWith('image/') ? 'image' : 
+                               mediaType.startsWith('video/') ? 'video' :
+                               mediaType.startsWith('audio/') ? 'audio' : 'document';
+      
+      whatsappPayload.type = mediaTypeCategory;
+      whatsappPayload[mediaTypeCategory] = {
+        link: mediaUrl,
+        caption: message || ''
+      };
+    } else {
+      // Text only message
+      whatsappPayload.type = 'text';
+      whatsappPayload.text = {
+        preview_url: false,
+        body: message,
+      };
+    }
+    
     const whatsappResponse = await fetch(
       `https://graph.facebook.com/v22.0/${agentConfig.phone_number_id}/messages`,
       {
@@ -135,16 +161,7 @@ Deno.serve(async (req) => {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'text',
-          text: {
-            preview_url: false,
-            body: message,
-          },
-        }),
+        body: JSON.stringify(whatsappPayload),
       }
     );
 
@@ -164,7 +181,9 @@ Deno.serve(async (req) => {
         conversation_id: conversation.id,
         whatsapp_message_id: messageId,
         sender_type: 'agent',
-        content: message,
+        content: message || '📎 Media',
+        media_url: mediaUrl || null,
+        media_type: mediaType || null,
         timestamp: new Date().toISOString(),
         status: 'sent',
       })

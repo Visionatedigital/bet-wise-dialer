@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MessageComposer } from "./MessageComposer";
 import { format } from "date-fns";
-import { Check, CheckCheck, MoreVertical, Bot, Trash2 } from "lucide-react";
+import { Check, CheckCheck, MoreVertical, Bot, Trash2, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWhatsAppMessages } from "@/hooks/useWhatsAppMessages";
@@ -289,6 +289,25 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
                     animationFillMode: 'both'
                   }}
                 >
+                  {message.media_url && message.media_type?.startsWith('image/') && (
+                    <img 
+                      src={message.media_url} 
+                      alt="Shared media" 
+                      className="max-w-full rounded mb-2 cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => window.open(message.media_url!, '_blank')}
+                    />
+                  )}
+                  {message.media_url && !message.media_type?.startsWith('image/') && (
+                    <a 
+                      href={message.media_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm underline mb-2"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                      View attachment
+                    </a>
+                  )}
                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   <div className="flex items-center justify-end gap-1 mt-1">
                     <span className="text-xs opacity-70">
