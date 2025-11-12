@@ -10,7 +10,8 @@ import {
   Plug,
   Home,
   LogOut,
-  CalendarClock
+  CalendarClock,
+  MessageCircle
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -46,6 +47,12 @@ const navigationItems = [
     url: "/callbacks", 
     icon: CalendarClock,
     description: "Smart callback board"
+  },
+  { 
+    title: "WhatsApp", 
+    url: "/whatsapp", 
+    icon: MessageCircle,
+    description: "WhatsApp messaging"
   },
   { 
     title: "Campaigns", 

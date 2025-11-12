@@ -21,6 +21,7 @@ import ManagementMonitor from "./pages/ManagementMonitor";
 import ManagementCampaigns from "./pages/ManagementCampaigns";
 import Integrations from "./pages/Integrations";
 import Callbacks from "./pages/Callbacks";
+import WhatsApp from "./pages/WhatsApp";
 import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
 
@@ -91,11 +92,16 @@ const App = () => (
                   <Integrations />
                 </ProtectedRoute>
               } />
-              <Route path="/callbacks" element={
-                <ProtectedRoute>
-                  <Callbacks />
-                </ProtectedRoute>
-              } />
+          <Route path="/callbacks" element={
+            <ProtectedRoute>
+              <Callbacks />
+            </ProtectedRoute>
+          } />
+          <Route path="/whatsapp" element={
+            <ProtectedRoute>
+              <WhatsApp />
+            </ProtectedRoute>
+          } />
               <Route path="/settings" element={
                 <ProtectedRoute>
                   <RoleBasedSettings />
