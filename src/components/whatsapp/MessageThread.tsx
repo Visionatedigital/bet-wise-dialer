@@ -188,21 +188,29 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
               <p>No messages yet. Start the conversation!</p>
             </div>
           ) : (
-            messages.map((message) => (
+            messages.map((message, index) => (
               <div
                 key={message.id}
                 className={cn(
-                  "flex",
+                  "flex animate-fade-in",
                   message.sender_type === 'agent' ? "justify-end" : "justify-start"
                 )}
+                style={{
+                  animationDelay: `${index * 0.05}s`,
+                  animationFillMode: 'both'
+                }}
               >
                 <div
                   className={cn(
                     "max-w-[70%] rounded-lg p-3",
                     message.sender_type === 'agent'
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                      ? "bg-primary text-primary-foreground animate-slide-in-from-right"
+                      : "bg-muted animate-slide-in-from-left"
                   )}
+                  style={{
+                    animationDelay: `${index * 0.05}s`,
+                    animationFillMode: 'both'
+                  }}
                 >
                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   <div className="flex items-center justify-end gap-1 mt-1">
