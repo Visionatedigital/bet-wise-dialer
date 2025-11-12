@@ -14,24 +14,34 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const accessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
     
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     // Get authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       throw new Error('Authorization header required');
     }
 
+    // Create client with user's JWT for RLS
+    const userToken = authHeader.replace('Bearer ', '');
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: authHeader,
+        },
+      },
+    });
+
     // Get user from JWT token
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
+    const { data: { user }, error: userError } = await supabase.auth.getUser(userToken);
 
     if (userError || !user) {
+      console.error('Auth error:', userError);
       throw new Error('Unauthorized');
     }
+
+    console.log('Authenticated user:', user.id);
 
     // Get request data - support both conversationId and phone number
     const { conversationId, phoneNumber, message } = await req.json();
