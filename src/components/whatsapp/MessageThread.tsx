@@ -57,6 +57,8 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
           setIsProcessing(true);
           
           try {
+            console.log('[AI] Generating response for message:', latestMessage.content);
+            
             // Get AI response
             const { data: aiData, error: aiError } = await supabase.functions.invoke(
               'whatsapp-ai-response',
@@ -71,10 +73,22 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
               }
             );
 
-            if (aiError) throw aiError;
+            console.log('[AI] Response received:', aiData);
+
+            if (aiError) {
+              console.error('[AI] Error from AI function:', aiError);
+              throw aiError;
+            }
+
+            if (!aiData?.response) {
+              console.error('[AI] No response in AI data:', aiData);
+              throw new Error('AI returned empty response');
+            }
+
+            console.log('[AI] Sending message:', aiData.response);
 
             // Send AI response
-            const { error: sendError } = await supabase.functions.invoke(
+            const { data: sendData, error: sendError } = await supabase.functions.invoke(
               'whatsapp-send-message',
               {
                 body: {
@@ -84,11 +98,16 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
               }
             );
 
-            if (sendError) throw sendError;
+            if (sendError) {
+              console.error('[AI] Error sending message:', sendError);
+              throw sendError;
+            }
+
+            console.log('[AI] Message sent successfully:', sendData);
 
           } catch (error) {
-            console.error('AI response error:', error);
-            toast.error('Failed to generate AI response');
+            console.error('[AI] Full error:', error);
+            toast.error('Failed to generate AI response: ' + (error instanceof Error ? error.message : 'Unknown error'));
           } finally {
             setIsProcessing(false);
           }

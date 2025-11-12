@@ -58,6 +58,12 @@ Deno.serve(async (req) => {
 
     console.log('Send message request:', { conversationId, phoneNumber, message, actingAgentId });
 
+    // Validate message content
+    if (!message || message.trim().length === 0) {
+      console.error('Empty message provided');
+      throw new Error('Message content is required and cannot be empty');
+    }
+
     let conversation;
 
     if (conversationId) {

@@ -13,10 +13,18 @@ serve(async (req) => {
 
   try {
     const { messages, conversationContext } = await req.json();
+    console.log('[AI Response] Received request with', messages?.length || 0, 'messages');
+    
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
     if (!OPENAI_API_KEY) {
+      console.error('[AI Response] OPENAI_API_KEY not configured');
       throw new Error('OPENAI_API_KEY is not configured');
+    }
+
+    if (!messages || messages.length === 0) {
+      console.error('[AI Response] No messages provided');
+      throw new Error('No messages provided');
     }
 
     const systemPrompt = `You are a virtual assistant for BetSure, a premier sports betting platform.
@@ -46,6 +54,8 @@ Remember: You're representing BetSure, so maintain professionalism while being a
       }))
     ];
 
+    console.log('[AI Response] Calling OpenAI with', chatMessages.length, 'messages');
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -61,12 +71,21 @@ Remember: You're representing BetSure, so maintain professionalism while being a
 
     if (!response.ok) {
       const error = await response.text();
-      console.error('OpenAI API error:', response.status, error);
-      throw new Error(`OpenAI API error: ${response.status}`);
+      console.error('[AI Response] OpenAI API error:', response.status, error);
+      throw new Error(`OpenAI API error: ${response.status} - ${error}`);
     }
 
     const data = await response.json();
-    const aiResponse = data.choices[0].message.content;
+    console.log('[AI Response] OpenAI response received');
+    
+    const aiResponse = data.choices?.[0]?.message?.content;
+
+    if (!aiResponse) {
+      console.error('[AI Response] No content in OpenAI response:', data);
+      throw new Error('OpenAI returned no content');
+    }
+
+    console.log('[AI Response] Generated response:', aiResponse.substring(0, 100) + '...');
 
     return new Response(
       JSON.stringify({ response: aiResponse }),
