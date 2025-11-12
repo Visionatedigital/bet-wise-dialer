@@ -118,8 +118,11 @@ Deno.serve(async (req) => {
     }
 
     // Send message via WhatsApp Business API
+    // Strip + from phone number to match Meta's format
+    const cleanPhone = conversation.contact_phone.replace(/^\+/, '');
+    
     const whatsappResponse = await fetch(
-      `https://graph.facebook.com/v21.0/${agentConfig.phone_number_id}/messages`,
+      `https://graph.facebook.com/v22.0/${agentConfig.phone_number_id}/messages`,
       {
         method: 'POST',
         headers: {
@@ -128,9 +131,11 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           messaging_product: 'whatsapp',
-          to: conversation.contact_phone,
+          recipient_type: 'individual',
+          to: cleanPhone,
           type: 'text',
           text: {
+            preview_url: false,
             body: message,
           },
         }),
