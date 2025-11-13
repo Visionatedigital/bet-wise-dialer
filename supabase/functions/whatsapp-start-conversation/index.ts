@@ -30,8 +30,9 @@ Deno.serve(async (req) => {
       }
     );
 
-    // Get authenticated user from JWT
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Get authenticated user from JWT explicitly
+    const jwt = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
     if (authError || !user) {
       console.error('[Start Conversation] Auth error:', authError);
       return new Response(
