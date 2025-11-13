@@ -118,12 +118,15 @@ Deno.serve(async (req) => {
       }
       conversation = { id: conversationId, ...data };
     } else if (phoneNumber) {
+      // Normalize phone number - add + prefix if missing
+      const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+      
       // Look for existing conversation or create new one
       const { data: existing } = await supabase
         .from('whatsapp_conversations')
         .select('id, agent_id, contact_phone')
         .eq('agent_id', actingAgentId)
-        .eq('contact_phone', phoneNumber)
+        .eq('contact_phone', formattedPhone)
         .single();
 
       if (existing) {
@@ -134,8 +137,8 @@ Deno.serve(async (req) => {
           .from('whatsapp_conversations')
           .insert({
             agent_id: actingAgentId,
-            contact_phone: phoneNumber,
-            contact_name: phoneNumber, // Will be updated when they reply
+            contact_phone: formattedPhone,
+            contact_name: formattedPhone, // Will be updated when they reply
           })
           .select()
           .single();

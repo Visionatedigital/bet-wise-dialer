@@ -61,7 +61,11 @@ Deno.serve(async (req) => {
       // Handle incoming messages
       if (value.messages) {
         for (const message of value.messages) {
-          const fromPhone = message.from;
+          let fromPhone = message.from;
+          // Normalize phone number - add + prefix if missing
+          if (!fromPhone.startsWith('+')) {
+            fromPhone = '+' + fromPhone;
+          }
           const messageText = message.text?.body || '';
           const messageId = message.id;
           const timestamp = new Date(parseInt(message.timestamp) * 1000);
