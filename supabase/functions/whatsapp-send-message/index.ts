@@ -61,40 +61,8 @@ Deno.serve(async (req) => {
 
     console.log('Send message request:', { conversationId, phoneNumber, message, actingAgentId, mediaUrl });
 
-    // Get agent's manager to determine which phone number to use
-    const { data: agentProfile, error: profileError } = await supabase
-      .from('profiles')
-      .select('manager_id')
-      .eq('id', actingAgentId)
-      .single();
-
-    if (profileError || !agentProfile) {
-      console.error('Agent profile not found:', profileError);
-      throw new Error('Agent profile not found');
-    }
-
-    // Determine which phone number and access token to use based on manager
     let phoneNumberId: string;
     let accessToken: string;
-    
-    if (agentProfile.manager_id === PHILIMON_MANAGER_ID || actingAgentId === PHILIMON_MANAGER_ID) {
-      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
-      accessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
-      console.log('Using phone number 1 for Philimon team');
-    } else if (agentProfile.manager_id === OLIVIOUS_MANAGER_ID || actingAgentId === OLIVIOUS_MANAGER_ID) {
-      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID_2')!;
-      accessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN_2')!;
-      console.log('Using phone number 2 for Olivious team');
-    } else {
-      // Default to first phone number for unassigned agents
-      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
-      accessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
-      console.log('Using default phone number 1');
-    }
-
-    if (!phoneNumberId || !accessToken) {
-      throw new Error('WhatsApp credentials not configured for this team');
-    }
 
     // Validate message content (allow empty if media is present)
     if ((!message || message.trim().length === 0) && !mediaUrl) {
@@ -150,6 +118,57 @@ Deno.serve(async (req) => {
       }
     } else {
       throw new Error('Either conversationId or phoneNumber required');
+    }
+
+    // Determine phone_number_id and access token
+    const PHONE_NUMBER_ID_1 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
+    const PHONE_NUMBER_ID_2 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID_2')!;
+    const ACCESS_TOKEN_1 = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
+    const ACCESS_TOKEN_2 = Deno.env.get('WHATSAPP_ACCESS_TOKEN_2')!;
+
+    // Check if conversation has phone_number_id stored
+    const { data: convWithPhone } = await supabase
+      .from('whatsapp_conversations')
+      .select('phone_number_id')
+      .eq('id', conversation.id)
+      .single();
+
+    if (convWithPhone?.phone_number_id) {
+      // Use the stored phone_number_id
+      phoneNumberId = convWithPhone.phone_number_id;
+      accessToken = phoneNumberId === PHONE_NUMBER_ID_1 ? ACCESS_TOKEN_1 : ACCESS_TOKEN_2;
+      console.log(`Using stored phone number: ${phoneNumberId === PHONE_NUMBER_ID_1 ? '1' : '2'}`);
+    } else {
+      // Determine from agent's manager
+      const { data: agentProfile } = await supabase
+        .from('profiles')
+        .select('manager_id')
+        .eq('id', actingAgentId)
+        .single();
+
+      if (agentProfile?.manager_id === PHILIMON_MANAGER_ID || actingAgentId === PHILIMON_MANAGER_ID) {
+        phoneNumberId = PHONE_NUMBER_ID_1;
+        accessToken = ACCESS_TOKEN_1;
+        console.log('Using phone number 1 for Philimon team');
+      } else if (agentProfile?.manager_id === OLIVIOUS_MANAGER_ID || actingAgentId === OLIVIOUS_MANAGER_ID) {
+        phoneNumberId = PHONE_NUMBER_ID_2;
+        accessToken = ACCESS_TOKEN_2;
+        console.log('Using phone number 2 for Olivious team');
+      } else {
+        // Default to first phone number
+        phoneNumberId = PHONE_NUMBER_ID_1;
+        accessToken = ACCESS_TOKEN_1;
+        console.log('Using default phone number 1');
+      }
+
+      // Update conversation with phone_number_id
+      await supabase
+        .from('whatsapp_conversations')
+        .update({
+          phone_number_id: phoneNumberId,
+          display_phone_number: phoneNumberId === PHONE_NUMBER_ID_1 ? '256792170575' : '256792170572'
+        })
+        .eq('id', conversation.id);
     }
 
     // Send message via WhatsApp Business API

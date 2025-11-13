@@ -54,6 +54,37 @@ Deno.serve(async (req) => {
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
     console.log(`[Start Conversation] User ${user.id} starting conversation with ${formattedPhone}`);
 
+    // Get user's profile to determine which phone number to use
+    const supabaseService = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    const { data: agentProfile } = await supabaseService
+      .from('profiles')
+      .select('manager_id')
+      .eq('id', user.id)
+      .single();
+
+    // Manager-based phone number mapping
+    const PHILIMON_MANAGER_ID = 'a99ff448-86f3-411a-91d1-d86d8a7572bc';
+    const OLIVIOUS_MANAGER_ID = '244ebc76-658d-43e7-903e-d7b13d2900e0';
+    
+    let phoneNumberId: string;
+    let displayPhoneNumber: string;
+    
+    if (agentProfile?.manager_id === PHILIMON_MANAGER_ID || user.id === PHILIMON_MANAGER_ID) {
+      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
+      displayPhoneNumber = '256792170575';
+    } else if (agentProfile?.manager_id === OLIVIOUS_MANAGER_ID || user.id === OLIVIOUS_MANAGER_ID) {
+      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID_2')!;
+      displayPhoneNumber = '256792170572';
+    } else {
+      // Default to first phone number
+      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
+      displayPhoneNumber = '256792170575';
+    }
+
     // Check if conversation already exists
     const { data: existing, error: checkError } = await supabase
       .from('whatsapp_conversations')
@@ -78,13 +109,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create new conversation
+    // Create new conversation with phone_number_id
     const { data: newConv, error: insertError } = await supabase
       .from('whatsapp_conversations')
       .insert({
         agent_id: user.id,
         contact_phone: formattedPhone,
         contact_name: formattedPhone,
+        phone_number_id: phoneNumberId,
+        display_phone_number: displayPhoneNumber,
       })
       .select()
       .single();

@@ -72,10 +72,14 @@ Deno.serve(async (req) => {
 
           console.log('Processing message:', { fromPhone, messageText, messageId });
 
+          // Get metadata from webhook
+          const phoneNumberId = value.metadata?.phone_number_id;
+          const displayPhoneNumber = value.metadata?.display_phone_number;
+
           // Check if conversation already exists (for ANY agent)
           const { data: existingConv } = await supabase
             .from('whatsapp_conversations')
-            .select('id, agent_id, unread_count')
+            .select('id, agent_id, unread_count, phone_number_id')
             .eq('contact_phone', fromPhone)
             .limit(1)
             .single();
@@ -89,14 +93,22 @@ Deno.serve(async (req) => {
             conversationId = existingConv.id;
             console.log('Routing to existing conversation:', { conversationId, agentId });
 
-            // Update the existing conversation
+            // Update the existing conversation, including phone_number_id if not set
+            const updateData: any = {
+              last_message_text: messageText,
+              last_message_at: timestamp,
+              unread_count: (existingConv.unread_count || 0) + 1,
+            };
+            
+            // Set phone_number_id if not already set
+            if (!existingConv.phone_number_id && phoneNumberId) {
+              updateData.phone_number_id = phoneNumberId;
+              updateData.display_phone_number = displayPhoneNumber;
+            }
+
             await supabase
               .from('whatsapp_conversations')
-              .update({
-                last_message_text: messageText,
-                last_message_at: timestamp,
-                unread_count: (existingConv.unread_count || 0) + 1,
-              })
+              .update(updateData)
               .eq('id', conversationId);
           } else {
             // New conversation - determine which team/agent to assign
@@ -131,7 +143,7 @@ Deno.serve(async (req) => {
             agentId = teamAgent.id;
             console.log('Assigning new conversation to agent:', agentId);
 
-            // Create new conversation
+            // Create new conversation with phone_number_id
             const contactName = value.contacts?.[0]?.profile?.name || fromPhone;
             const { data: newConv, error: convError } = await supabase
               .from('whatsapp_conversations')
@@ -142,6 +154,8 @@ Deno.serve(async (req) => {
                 last_message_text: messageText,
                 last_message_at: timestamp,
                 unread_count: 1,
+                phone_number_id: phoneNumberId,
+                display_phone_number: displayPhoneNumber,
               })
               .select('id')
               .single();
