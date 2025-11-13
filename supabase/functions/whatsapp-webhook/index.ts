@@ -68,21 +68,7 @@ Deno.serve(async (req) => {
 
           console.log('Processing message:', { fromPhone, messageText, messageId });
 
-          const phoneNumberId = value.metadata?.phone_number_id;
-          const targetManagerId = phoneNumberId === PHONE_NUMBER_ID_1 
-            ? PHILIMON_MANAGER_ID 
-            : phoneNumberId === PHONE_NUMBER_ID_2 
-            ? OLIVIOUS_MANAGER_ID 
-            : null;
-
-          if (!targetManagerId) {
-            console.error('Unknown phone_number_id:', phoneNumberId);
-            continue;
-          }
-
-          console.log(`Message received on phone ${phoneNumberId === PHONE_NUMBER_ID_1 ? '1' : '2'}`);
-
-          // Check existing conversation
+          // Check if conversation already exists (for ANY agent)
           const { data: existingConv } = await supabase
             .from('whatsapp_conversations')
             .select('id, agent_id, unread_count')
@@ -90,9 +76,41 @@ Deno.serve(async (req) => {
             .limit(1)
             .single();
 
-          let agentId = existingConv?.agent_id;
+          let conversationId: string;
+          let agentId: string;
 
-          if (!agentId) {
+          if (existingConv) {
+            // Conversation exists - update it
+            agentId = existingConv.agent_id;
+            conversationId = existingConv.id;
+            console.log('Routing to existing conversation:', { conversationId, agentId });
+
+            // Update the existing conversation
+            await supabase
+              .from('whatsapp_conversations')
+              .update({
+                last_message_text: messageText,
+                last_message_at: timestamp,
+                unread_count: (existingConv.unread_count || 0) + 1,
+              })
+              .eq('id', conversationId);
+          } else {
+            // New conversation - determine which team/agent to assign
+            const phoneNumberId = value.metadata?.phone_number_id;
+            const targetManagerId = phoneNumberId === PHONE_NUMBER_ID_1 
+              ? PHILIMON_MANAGER_ID 
+              : phoneNumberId === PHONE_NUMBER_ID_2 
+              ? OLIVIOUS_MANAGER_ID 
+              : null;
+
+            if (!targetManagerId) {
+              console.error('Unknown phone_number_id:', phoneNumberId);
+              continue;
+            }
+
+            console.log(`New conversation on phone ${phoneNumberId === PHONE_NUMBER_ID_1 ? '1' : '2'} - routing to team`);
+
+            // Find agent in this team
             const { data: teamAgent } = await supabase
               .from('profiles')
               .select('id')
@@ -105,40 +123,37 @@ Deno.serve(async (req) => {
               console.error('No agent found for manager:', targetManagerId);
               continue;
             }
+            
             agentId = teamAgent.id;
             console.log('Assigning new conversation to agent:', agentId);
-          } else {
-            console.log('Using existing conversation agent:', agentId);
-          }
 
-          // Upsert conversation
-          const contactName = value.contacts?.[0]?.profile?.name || fromPhone;
-          const { data: conversation, error: convError } = await supabase
-            .from('whatsapp_conversations')
-            .upsert({
-              agent_id: agentId,
-              contact_phone: fromPhone,
-              contact_name: contactName,
-              last_message_text: messageText,
-              last_message_at: timestamp,
-              unread_count: (existingConv?.unread_count || 0) + 1,
-            }, {
-              onConflict: 'agent_id,contact_phone',
-              ignoreDuplicates: false
-            })
-            .select('id')
-            .single();
+            // Create new conversation
+            const contactName = value.contacts?.[0]?.profile?.name || fromPhone;
+            const { data: newConv, error: convError } = await supabase
+              .from('whatsapp_conversations')
+              .insert({
+                agent_id: agentId,
+                contact_phone: fromPhone,
+                contact_name: contactName,
+                last_message_text: messageText,
+                last_message_at: timestamp,
+                unread_count: 1,
+              })
+              .select('id')
+              .single();
 
-          if (convError || !conversation) {
-            console.error('Error upserting conversation:', convError);
-            continue;
+            if (convError || !newConv) {
+              console.error('Error creating conversation:', convError);
+              continue;
+            }
+            conversationId = newConv.id;
           }
 
           // Insert message
           await supabase
             .from('whatsapp_messages')
             .insert({
-              conversation_id: conversation.id,
+              conversation_id: conversationId,
               whatsapp_message_id: messageId,
               sender_type: 'user',
               content: messageText,
