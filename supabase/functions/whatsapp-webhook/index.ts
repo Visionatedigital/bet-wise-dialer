@@ -68,37 +68,31 @@ Deno.serve(async (req) => {
 
           console.log('Processing message:', { fromPhone, messageText, messageId });
 
-          // Determine which manager's team this message is for based on phone number
           const phoneNumberId = value.metadata?.phone_number_id;
-          let targetManagerId: string;
-          
-          if (phoneNumberId === PHONE_NUMBER_ID_1) {
-            targetManagerId = PHILIMON_MANAGER_ID;
-            console.log('Message received on phone 1 - routing to Philimon team');
-          } else if (phoneNumberId === PHONE_NUMBER_ID_2) {
-            targetManagerId = OLIVIOUS_MANAGER_ID;
-            console.log('Message received on phone 2 - routing to Olivious team');
-          } else {
+          const targetManagerId = phoneNumberId === PHONE_NUMBER_ID_1 
+            ? PHILIMON_MANAGER_ID 
+            : phoneNumberId === PHONE_NUMBER_ID_2 
+            ? OLIVIOUS_MANAGER_ID 
+            : null;
+
+          if (!targetManagerId) {
             console.error('Unknown phone_number_id:', phoneNumberId);
             continue;
           }
 
-          // Check if conversation already exists for any agent in this team
+          console.log(`Message received on phone ${phoneNumberId === PHONE_NUMBER_ID_1 ? '1' : '2'}`);
+
+          // Check existing conversation
           const { data: existingConv } = await supabase
             .from('whatsapp_conversations')
-            .select('id, agent_id')
+            .select('id, agent_id, unread_count')
             .eq('contact_phone', fromPhone)
             .limit(1)
             .single();
 
-          let agentId: string;
+          let agentId = existingConv?.agent_id;
 
-          if (existingConv) {
-            // Use the agent who already has this conversation
-            agentId = existingConv.agent_id;
-            console.log('Using existing conversation agent:', agentId);
-          } else {
-            // Assign to the manager or first available agent in their team
+          if (!agentId) {
             const { data: teamAgent } = await supabase
               .from('profiles')
               .select('id')
@@ -111,66 +105,37 @@ Deno.serve(async (req) => {
               console.error('No agent found for manager:', targetManagerId);
               continue;
             }
-            
             agentId = teamAgent.id;
             console.log('Assigning new conversation to agent:', agentId);
+          } else {
+            console.log('Using existing conversation agent:', agentId);
           }
 
-          // Get or create conversation
-          let { data: conversation } = await supabase
+          // Upsert conversation
+          const contactName = value.contacts?.[0]?.profile?.name || fromPhone;
+          const { data: conversation, error: convError } = await supabase
             .from('whatsapp_conversations')
+            .upsert({
+              agent_id: agentId,
+              contact_phone: fromPhone,
+              contact_name: contactName,
+              last_message_text: messageText,
+              last_message_at: timestamp,
+              unread_count: (existingConv?.unread_count || 0) + 1,
+            }, {
+              onConflict: 'agent_id,contact_phone',
+              ignoreDuplicates: false
+            })
             .select('id')
-            .eq('agent_id', agentId)
-            .eq('contact_phone', fromPhone)
             .single();
 
-          if (!conversation) {
-            // Create new conversation
-            const contactName = value.contacts?.[0]?.profile?.name || fromPhone;
-            const { data: newConversation, error: convError } = await supabase
-              .from('whatsapp_conversations')
-              .insert({
-                agent_id: agentId,
-                contact_phone: fromPhone,
-                contact_name: contactName,
-                last_message_text: messageText,
-                last_message_at: timestamp,
-                unread_count: 1,
-              })
-              .select()
-              .single();
-
-            if (convError || !newConversation) {
-              console.error('Error creating conversation:', convError);
-              continue;
-            }
-            conversation = newConversation;
-          } else {
-            // Update existing conversation - increment unread count
-            const { data: currentConv } = await supabase
-              .from('whatsapp_conversations')
-              .select('unread_count')
-              .eq('id', conversation.id)
-              .single();
-            
-            await supabase
-              .from('whatsapp_conversations')
-              .update({
-                last_message_text: messageText,
-                last_message_at: timestamp,
-                unread_count: (currentConv?.unread_count || 0) + 1,
-              })
-              .eq('id', conversation.id);
-          }
-
-          // Ensure conversation exists before inserting message
-          if (!conversation) {
-            console.error('No conversation available');
+          if (convError || !conversation) {
+            console.error('Error upserting conversation:', convError);
             continue;
           }
 
           // Insert message
-          const { error: messageError } = await supabase
+          await supabase
             .from('whatsapp_messages')
             .insert({
               conversation_id: conversation.id,
@@ -180,10 +145,6 @@ Deno.serve(async (req) => {
               timestamp: timestamp,
               status: 'delivered',
             });
-
-          if (messageError) {
-            console.error('Error inserting message:', messageError);
-          }
         }
       }
 
