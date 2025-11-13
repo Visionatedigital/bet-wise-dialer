@@ -31,47 +31,32 @@ export function NewConversationDialog({ onConversationCreated }: NewConversation
 
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      console.log('[NewConversation] Starting conversation with:', phoneNumber);
+      
+      // Use edge function for proper POST request handling
+      const { data, error } = await supabase.functions.invoke('whatsapp-start-conversation', {
+        body: { phoneNumber },
+      });
 
-      // Format phone number (ensure it starts with +)
-      const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+      console.log('[NewConversation] Response:', { data, error });
 
-      // Check if conversation already exists
-      const { data: existing } = await supabase
-        .from('whatsapp_conversations')
-        .select('id')
-        .eq('agent_id', user.id)
-        .eq('contact_phone', formattedPhone)
-        .single();
-
-      if (existing) {
-        toast.info("Conversation already exists");
-        onConversationCreated(existing.id);
-        setOpen(false);
-        setPhoneNumber("");
+      if (error) {
+        console.error('[NewConversation] Error:', error);
+        toast.error("Failed to start conversation");
         return;
       }
 
-      // Create new conversation
-      const { data: newConv, error } = await supabase
-        .from('whatsapp_conversations')
-        .insert({
-          agent_id: user.id,
-          contact_phone: formattedPhone,
-          contact_name: formattedPhone,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast.success("New conversation started");
-      onConversationCreated(newConv.id);
+      if (data.isNew) {
+        toast.success("New conversation started");
+      } else {
+        toast.info("Conversation already exists");
+      }
+      
+      onConversationCreated(data.conversationId);
       setOpen(false);
       setPhoneNumber("");
     } catch (error) {
-      console.error('Error starting conversation:', error);
+      console.error('[NewConversation] Unexpected error:', error);
       toast.error("Failed to start conversation");
     } finally {
       setLoading(false);
