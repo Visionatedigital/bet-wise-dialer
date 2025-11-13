@@ -146,13 +146,19 @@ Deno.serve(async (req) => {
             }
             conversation = newConversation;
           } else {
-            // Update existing conversation
+            // Update existing conversation - increment unread count
+            const { data: currentConv } = await supabase
+              .from('whatsapp_conversations')
+              .select('unread_count')
+              .eq('id', conversation.id)
+              .single();
+            
             await supabase
               .from('whatsapp_conversations')
               .update({
                 last_message_text: messageText,
                 last_message_at: timestamp,
-                unread_count: supabase.rpc('increment', { x: 1 }),
+                unread_count: (currentConv?.unread_count || 0) + 1,
               })
               .eq('id', conversation.id);
           }
