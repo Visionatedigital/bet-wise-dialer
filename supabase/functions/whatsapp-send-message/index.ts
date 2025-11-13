@@ -15,7 +15,10 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const accessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
+    
+    // Manager-based phone number mapping
+    const PHILIMON_MANAGER_ID = 'a99ff448-86f3-411a-91d1-d86d8a7572bc';
+    const OLIVIOUS_MANAGER_ID = '244ebc76-658d-43e7-903e-d7b13d2900e0';
     
     // Get authorization header
     const authHeader = req.headers.get('Authorization') || '';
@@ -57,6 +60,41 @@ Deno.serve(async (req) => {
     }
 
     console.log('Send message request:', { conversationId, phoneNumber, message, actingAgentId, mediaUrl });
+
+    // Get agent's manager to determine which phone number to use
+    const { data: agentProfile, error: profileError } = await supabase
+      .from('profiles')
+      .select('manager_id')
+      .eq('id', actingAgentId)
+      .single();
+
+    if (profileError || !agentProfile) {
+      console.error('Agent profile not found:', profileError);
+      throw new Error('Agent profile not found');
+    }
+
+    // Determine which phone number and access token to use based on manager
+    let phoneNumberId: string;
+    let accessToken: string;
+    
+    if (agentProfile.manager_id === PHILIMON_MANAGER_ID || actingAgentId === PHILIMON_MANAGER_ID) {
+      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
+      accessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
+      console.log('Using phone number 1 for Philimon team');
+    } else if (agentProfile.manager_id === OLIVIOUS_MANAGER_ID || actingAgentId === OLIVIOUS_MANAGER_ID) {
+      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID_2')!;
+      accessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN_2')!;
+      console.log('Using phone number 2 for Olivious team');
+    } else {
+      // Default to first phone number for unassigned agents
+      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
+      accessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
+      console.log('Using default phone number 1');
+    }
+
+    if (!phoneNumberId || !accessToken) {
+      throw new Error('WhatsApp credentials not configured for this team');
+    }
 
     // Validate message content (allow empty if media is present)
     if ((!message || message.trim().length === 0) && !mediaUrl) {
@@ -111,18 +149,6 @@ Deno.serve(async (req) => {
       throw new Error('Either conversationId or phoneNumber required');
     }
 
-    // Get agent's WhatsApp configuration
-    const { data: agentConfig, error: configError } = await supabase
-      .from('agent_whatsapp_config')
-      .select('phone_number_id')
-      .eq('user_id', actingAgentId)
-      .eq('is_active', true)
-      .single();
-
-    if (configError || !agentConfig) {
-      throw new Error('Agent WhatsApp configuration not found');
-    }
-
     // Send message via WhatsApp Business API
     // Strip + from phone number to match Meta's format
     const cleanPhone = conversation.contact_phone.replace(/^\+/, '');
@@ -154,7 +180,7 @@ Deno.serve(async (req) => {
     }
     
     const whatsappResponse = await fetch(
-      `https://graph.facebook.com/v22.0/${agentConfig.phone_number_id}/messages`,
+      `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {

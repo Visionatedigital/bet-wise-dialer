@@ -16,6 +16,12 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const verifyToken = Deno.env.get('WHATSAPP_WEBHOOK_VERIFY_TOKEN')!;
     
+    // Manager-based phone number mapping
+    const PHILIMON_MANAGER_ID = 'a99ff448-86f3-411a-91d1-d86d8a7572bc';
+    const OLIVIOUS_MANAGER_ID = '244ebc76-658d-43e7-903e-d7b13d2900e0';
+    const PHONE_NUMBER_ID_1 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
+    const PHONE_NUMBER_ID_2 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID_2')!;
+    
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Handle webhook verification
@@ -62,25 +68,59 @@ Deno.serve(async (req) => {
 
           console.log('Processing message:', { fromPhone, messageText, messageId });
 
-          // Find agent configuration for this phone number
+          // Determine which manager's team this message is for based on phone number
           const phoneNumberId = value.metadata?.phone_number_id;
-          const { data: agentConfig } = await supabase
-            .from('agent_whatsapp_config')
-            .select('user_id')
-            .eq('phone_number_id', phoneNumberId)
-            .eq('is_active', true)
+          let targetManagerId: string;
+          
+          if (phoneNumberId === PHONE_NUMBER_ID_1) {
+            targetManagerId = PHILIMON_MANAGER_ID;
+            console.log('Message received on phone 1 - routing to Philimon team');
+          } else if (phoneNumberId === PHONE_NUMBER_ID_2) {
+            targetManagerId = OLIVIOUS_MANAGER_ID;
+            console.log('Message received on phone 2 - routing to Olivious team');
+          } else {
+            console.error('Unknown phone_number_id:', phoneNumberId);
+            continue;
+          }
+
+          // Check if conversation already exists for any agent in this team
+          const { data: existingConv } = await supabase
+            .from('whatsapp_conversations')
+            .select('id, agent_id')
+            .eq('contact_phone', fromPhone)
+            .limit(1)
             .single();
 
-          if (!agentConfig) {
-            console.error('No agent found for phone_number_id:', phoneNumberId);
-            continue;
+          let agentId: string;
+
+          if (existingConv) {
+            // Use the agent who already has this conversation
+            agentId = existingConv.agent_id;
+            console.log('Using existing conversation agent:', agentId);
+          } else {
+            // Assign to the manager or first available agent in their team
+            const { data: teamAgent } = await supabase
+              .from('profiles')
+              .select('id')
+              .or(`id.eq.${targetManagerId},manager_id.eq.${targetManagerId}`)
+              .eq('approved', true)
+              .limit(1)
+              .single();
+
+            if (!teamAgent) {
+              console.error('No agent found for manager:', targetManagerId);
+              continue;
+            }
+            
+            agentId = teamAgent.id;
+            console.log('Assigning new conversation to agent:', agentId);
           }
 
           // Get or create conversation
           let { data: conversation } = await supabase
             .from('whatsapp_conversations')
             .select('id')
-            .eq('agent_id', agentConfig.user_id)
+            .eq('agent_id', agentId)
             .eq('contact_phone', fromPhone)
             .single();
 
@@ -90,7 +130,7 @@ Deno.serve(async (req) => {
             const { data: newConversation, error: convError } = await supabase
               .from('whatsapp_conversations')
               .insert({
-                agent_id: agentConfig.user_id,
+                agent_id: agentId,
                 contact_phone: fromPhone,
                 contact_name: contactName,
                 last_message_text: messageText,
