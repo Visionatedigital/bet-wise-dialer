@@ -1,15 +1,15 @@
-import { useState } from "react";
+import { useState, useCallback, memo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ConversationList } from "@/components/whatsapp/ConversationList";
 import { MessageThread } from "@/components/whatsapp/MessageThread";
 import { Card } from "@/components/ui/card";
 
-export default function WhatsApp() {
+function WhatsApp() {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
 
-  const handleConversationDeleted = () => {
+  const handleConversationDeleted = useCallback(() => {
     setSelectedConversation(null);
-  };
+  }, []);
 
   return (
     <DashboardLayout>
@@ -28,3 +28,5 @@ export default function WhatsApp() {
     </DashboardLayout>
   );
 }
+
+export default memo(WhatsApp);

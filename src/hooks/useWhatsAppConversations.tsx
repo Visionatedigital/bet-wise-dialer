@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -16,25 +16,27 @@ export const useWhatsAppConversations = () => {
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchConversations = useCallback(async () => {
     if (!user) return;
+    
+    const { data, error } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('agent_id', user.id)
+      .order('last_message_at', { ascending: false, nullsFirst: false });
 
-    const fetchConversations = async () => {
-      const { data, error } = await supabase
-        .from('whatsapp_conversations')
-        .select('*')
-        .eq('agent_id', user.id)
-        .order('last_message_at', { ascending: false, nullsFirst: false });
+    if (error) {
+      console.error('Error fetching conversations:', error);
+    } else {
+      setConversations(data || []);
+    }
+    setLoading(false);
+  }, [user]);
 
-      if (error) {
-        console.error('Error fetching conversations:', error);
-      } else {
-        setConversations(data || []);
-      }
-      setLoading(false);
-    };
-
+  useEffect(() => {
     fetchConversations();
+
+    if (!user) return;
 
     // Subscribe to realtime updates
     const channel = supabase
@@ -47,16 +49,14 @@ export const useWhatsAppConversations = () => {
           table: 'whatsapp_conversations',
           filter: `agent_id=eq.${user.id}`,
         },
-        () => {
-          fetchConversations();
-        }
+        fetchConversations
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, fetchConversations]);
 
   return { conversations, loading };
 };
