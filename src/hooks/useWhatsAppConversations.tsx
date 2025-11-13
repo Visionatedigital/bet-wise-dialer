@@ -19,16 +19,19 @@ export const useWhatsAppConversations = () => {
   const fetchConversations = useCallback(async () => {
     if (!user) return;
     
-    const { data, error } = await supabase
-      .from('whatsapp_conversations')
-      .select('*')
-      .eq('agent_id', user.id)
-      .order('last_message_at', { ascending: false, nullsFirst: false });
+    try {
+      // Use Edge Function for server-side processing
+      const { data, error } = await supabase.functions.invoke('whatsapp-get-conversations');
 
-    if (error) {
+      if (error) {
+        console.error('Error fetching conversations:', error);
+        setLoading(false);
+        return;
+      }
+
+      setConversations(data?.conversations || []);
+    } catch (error) {
       console.error('Error fetching conversations:', error);
-    } else {
-      setConversations(data || []);
     }
     setLoading(false);
   }, [user]);
