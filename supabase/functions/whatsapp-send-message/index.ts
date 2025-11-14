@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     // Parse body early to support public fallback
     let body: any = {};
     try { body = await req.json(); } catch (_) {}
-    const { conversationId, phoneNumber, message, agentId, mediaUrl, mediaType } = body;
+    const { conversationId, phoneNumber, message, agentId, mediaUrl, mediaType, templateName, templateLanguage, templateParams } = body;
 
     let supabase;
     let actingAgentId: string | null = null;
@@ -120,6 +120,37 @@ Deno.serve(async (req) => {
       throw new Error('Either conversationId or phoneNumber required');
     }
 
+    // Check 24-hour customer care window based on last inbound user message
+    let requiresTemplate = false;
+    try {
+      const { data: lastInbound } = await supabase
+        .from('whatsapp_messages')
+        .select('timestamp')
+        .eq('conversation_id', conversation.id)
+        .eq('sender_type', 'user')
+        .order('timestamp', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (lastInbound?.timestamp) {
+        const lastInboundAt = new Date(lastInbound.timestamp as unknown as string).getTime();
+        requiresTemplate = (Date.now() - lastInboundAt) > 24 * 60 * 60 * 1000;
+      }
+    } catch (e) {
+      console.warn('Could not determine last inbound timestamp', e);
+    }
+
+    if (requiresTemplate && !templateName) {
+      return new Response(
+        JSON.stringify({
+          error: 'WHATSAPP_24H_WINDOW',
+          message: 'Customer last replied more than 24h ago. Send a WhatsApp template to re-engage.',
+          details: { conversationId: conversation.id }
+        }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Determine phone_number_id and access token
     const PHONE_NUMBER_ID_1 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
     const PHONE_NUMBER_ID_2 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID_2')!;
@@ -177,16 +208,29 @@ Deno.serve(async (req) => {
     
     let whatsappPayload: any = {
       messaging_product: 'whatsapp',
-      recipient_type: 'individual',
       to: cleanPhone,
     };
 
-    // If media is present, send as media message
-    if (mediaUrl && mediaType) {
+    // If a template is specified (or required), send as a template message
+    if (templateName) {
+      whatsappPayload.type = 'template';
+      whatsappPayload.template = {
+        name: templateName,
+        language: { code: templateLanguage || 'en' },
+        components: Array.isArray(templateParams) && templateParams.length > 0
+          ? [
+              {
+                type: 'body',
+                parameters: templateParams.map((p: string) => ({ type: 'text', text: String(p) }))
+              }
+            ]
+          : undefined,
+      };
+    } else if (mediaUrl && mediaType) {
+      // Media message
       const mediaTypeCategory = mediaType.startsWith('image/') ? 'image' : 
                                mediaType.startsWith('video/') ? 'video' :
                                mediaType.startsWith('audio/') ? 'audio' : 'document';
-      
       whatsappPayload.type = mediaTypeCategory;
       whatsappPayload[mediaTypeCategory] = {
         link: mediaUrl,
@@ -217,6 +261,17 @@ Deno.serve(async (req) => {
     console.log('WhatsApp API response:', whatsappData);
 
     if (!whatsappResponse.ok) {
+      const code = (whatsappData && (whatsappData.error?.code || whatsappData.errors?.[0]?.code)) || null;
+      if (code === 131047) {
+        return new Response(
+          JSON.stringify({
+            error: 'WHATSAPP_24H_WINDOW',
+            message: 'Customer last replied more than 24h ago. Send a WhatsApp template to re-engage.',
+            details: { conversationId: conversation.id }
+          }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       throw new Error(`WhatsApp API error: ${JSON.stringify(whatsappData)}`);
     }
 
@@ -229,7 +284,7 @@ Deno.serve(async (req) => {
         conversation_id: conversation.id,
         whatsapp_message_id: messageId,
         sender_type: 'agent',
-        content: message || '📎 Media',
+        content: templateName ? `Template: ${templateName}` : (message || '📎 Media'),
         media_url: mediaUrl || null,
         media_type: mediaType || null,
         timestamp: new Date().toISOString(),

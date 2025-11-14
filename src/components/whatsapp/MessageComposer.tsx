@@ -60,7 +60,17 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        const msg = (error as any)?.message || '';
+        const ctxBody = (error as any)?.context?.body;
+        const payload = (() => { try { return typeof ctxBody === 'string' ? JSON.parse(ctxBody) : ctxBody; } catch { return null; }})();
+        const code = (payload && (payload.error || payload.code)) || '';
+        if (msg.includes('409') || code === 'WHATSAPP_24H_WINDOW') {
+          toast.error('Customer last replied >24h ago. Please send an approved WhatsApp template to re-engage.');
+          return;
+        }
+        throw error;
+      }
 
       console.log("Message sent:", data);
       toast.success("Message sent!");
