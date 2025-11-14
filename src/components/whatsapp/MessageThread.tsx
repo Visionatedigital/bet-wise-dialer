@@ -142,6 +142,14 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
             );
 
             if (sendError) {
+              const msg = (sendError as any)?.message || '';
+              const ctxBody = (sendError as any)?.context?.body;
+              const payload = (() => { try { return typeof ctxBody === 'string' ? JSON.parse(ctxBody) : ctxBody; } catch { return null; }})();
+              const code = (payload && (payload.error || payload.code)) || '';
+              if (msg.includes('409') || code === 'WHATSAPP_24H_WINDOW') {
+                toast.error('24h window closed. Enable template sending to re-engage.');
+                return;
+              }
               console.error('[AI] Error sending message:', sendError);
               throw sendError;
             }
