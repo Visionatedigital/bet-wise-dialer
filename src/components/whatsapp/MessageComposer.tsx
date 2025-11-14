@@ -17,11 +17,12 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
   const [isSending, setIsSending] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [requiresTemplate, setRequiresTemplate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSend = async () => {
-    if ((!message.trim() && !selectedFile) || isSending || !user) return;
+  const handleSend = async (useTemplate = false) => {
+    if ((!message.trim() && !selectedFile && !useTemplate) || isSending || !user) return;
 
     setIsSending(true);
     try {
@@ -51,13 +52,21 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
         mediaType = selectedFile.type;
       }
 
+      const payload: any = {
+        conversationId,
+        message: message.trim() || (mediaUrl ? '📎 Media file' : undefined),
+        mediaUrl,
+        mediaType,
+      };
+
+      // Add template parameters if sending template
+      if (useTemplate) {
+        payload.templateName = 'test_template_1';
+        payload.templateLanguage = 'en';
+      }
+
       const { data, error } = await supabase.functions.invoke('whatsapp-send-message', {
-        body: {
-          conversationId,
-          message: message.trim() || '📎 Media file',
-          mediaUrl,
-          mediaType,
-        },
+        body: payload,
       });
 
       if (error) {
@@ -66,7 +75,8 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
         const payload = (() => { try { return typeof ctxBody === 'string' ? JSON.parse(ctxBody) : ctxBody; } catch { return null; }})();
         const code = (payload && (payload.error || payload.code)) || '';
         if (msg.includes('409') || code === 'WHATSAPP_24H_WINDOW') {
-          toast.error('Customer last replied >24h ago. Please send an approved WhatsApp template to re-engage.');
+          setRequiresTemplate(true);
+          toast.error('Customer has not replied in 24h. Click "Send Template" button below.');
           return;
         }
         throw error;
@@ -77,6 +87,7 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
       setMessage("");
       setSelectedFile(null);
       setPreviewUrl(null);
+      setRequiresTemplate(false);
     } catch (error) {
       console.error("Error sending message:", error);
       toast.error("Failed to send message");
@@ -206,8 +217,20 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
           </Button>
         </div>
 
+        {requiresTemplate && (
+          <Button
+            onClick={() => handleSend(true)}
+            disabled={isSending || disabled}
+            variant="secondary"
+            className="flex-shrink-0"
+          >
+            <Send className="h-5 w-5 mr-2" />
+            Send Template
+          </Button>
+        )}
+
         <Button
-          onClick={handleSend}
+          onClick={() => handleSend(false)}
           disabled={(!message.trim() && !selectedFile) || isSending || disabled}
           className="flex-shrink-0"
         >
