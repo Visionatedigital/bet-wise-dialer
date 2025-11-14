@@ -53,6 +53,24 @@ export function NewConversationDialog({ onConversationCreated }: NewConversation
       }
       
       onConversationCreated(data.conversationId);
+
+      // Auto-send approved template to initiate conversation
+      toast.info("Sending template to initiate chat...");
+      const { data: sendData, error: sendError } = await supabase.functions.invoke('whatsapp-send-message', {
+        body: {
+          conversationId: data.conversationId,
+          templateName: 'test_template_1',
+          templateLanguage: 'en',
+        },
+      });
+
+      if (sendError) {
+        console.error('[NewConversation] Template send error:', sendError);
+        toast.error("Failed to send template. You can still send manually.");
+      } else {
+        toast.success("Template message sent!");
+      }
+      
       setOpen(false);
       setPhoneNumber("");
     } catch (error) {
@@ -79,7 +97,7 @@ export function NewConversationDialog({ onConversationCreated }: NewConversation
           <DialogHeader>
             <DialogTitle>Start New Conversation</DialogTitle>
             <DialogDescription>
-              Enter the phone number to start a new WhatsApp conversation
+              Enter the phone number to start a new WhatsApp conversation. Well automatically send your approved template to initiate.
             </DialogDescription>
           </DialogHeader>
 
@@ -108,7 +126,7 @@ export function NewConversationDialog({ onConversationCreated }: NewConversation
               Cancel
             </Button>
             <Button onClick={handleStartConversation} disabled={loading}>
-              {loading ? "Starting..." : "Start Conversation"}
+              {loading ? "Starting..." : "Start & Send Template"}
             </Button>
           </DialogFooter>
         </DialogContent>
