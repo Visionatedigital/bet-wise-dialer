@@ -135,16 +135,20 @@ Deno.serve(async (req) => {
       if (lastInbound?.timestamp) {
         const lastInboundAt = new Date(lastInbound.timestamp as unknown as string).getTime();
         requiresTemplate = (Date.now() - lastInboundAt) > 24 * 60 * 60 * 1000;
+      } else {
+        // No inbound message from user = must use template (can't send free-form to new numbers)
+        requiresTemplate = true;
       }
     } catch (e) {
-      console.warn('Could not determine last inbound timestamp', e);
+      console.warn('Could not determine last inbound timestamp, requiring template', e);
+      requiresTemplate = true;
     }
 
     if (requiresTemplate && !templateName) {
       return new Response(
         JSON.stringify({
           error: 'WHATSAPP_24H_WINDOW',
-          message: 'Customer last replied more than 24h ago. Send a WhatsApp template to re-engage.',
+          message: 'Cannot send message: Customer has not replied yet or last reply was more than 24h ago. Send a WhatsApp template message to start/re-engage.',
           details: { conversationId: conversation.id }
         }),
         { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
