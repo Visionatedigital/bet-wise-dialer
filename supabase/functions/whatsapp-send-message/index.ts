@@ -235,11 +235,20 @@ Deno.serve(async (req) => {
       const mediaTypeCategory = mediaType.startsWith('image/') ? 'image' : 
                                mediaType.startsWith('video/') ? 'video' :
                                mediaType.startsWith('audio/') ? 'audio' : 'document';
+      
       whatsappPayload.type = mediaTypeCategory;
-      whatsappPayload[mediaTypeCategory] = {
-        link: mediaUrl,
-        caption: message || ''
-      };
+      
+      // Audio messages don't support captions in WhatsApp
+      if (mediaTypeCategory === 'audio') {
+        whatsappPayload.audio = {
+          link: mediaUrl
+        };
+      } else {
+        whatsappPayload[mediaTypeCategory] = {
+          link: mediaUrl,
+          caption: message || ''
+        };
+      }
     } else {
       // Text only message
       whatsappPayload.type = 'text';
@@ -285,13 +294,18 @@ Deno.serve(async (req) => {
     // Map template names to their actual content for display
     const templateDisplayContent = templateName === 'test_template_1' ? 'hello' : (templateName ? `Template: ${templateName}` : null);
     
+    // For audio messages, show voice message indicator; for other media with caption show both
+    const displayContent = templateDisplayContent || 
+                          (mediaType?.startsWith('audio/') ? '🎤 Voice message' : message) || 
+                          (mediaUrl ? '📎 Media' : '');
+    
     const { data: savedMessage, error: messageError } = await supabase
       .from('whatsapp_messages')
       .insert({
         conversation_id: conversation.id,
         whatsapp_message_id: messageId,
         sender_type: 'agent',
-        content: templateDisplayContent || message || '📎 Media',
+        content: displayContent,
         media_url: mediaUrl || null,
         media_type: mediaType || null,
         timestamp: new Date().toISOString(),

@@ -43,6 +43,7 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
 
       // Upload voice note to storage if provided
       if (voiceNote) {
+        console.log('[Voice Note] Uploading voice note, size:', voiceNote.size, 'type:', voiceNote.type);
         const fileName = `${user.id}/${Date.now()}.webm`;
         
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -53,7 +54,12 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
             contentType: 'audio/webm'
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('[Voice Note] Upload error:', uploadError);
+          throw uploadError;
+        }
+
+        console.log('[Voice Note] Upload successful:', uploadData);
 
         // Get public URL
         const { data: { publicUrl } } = supabase.storage
@@ -62,6 +68,7 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
 
         mediaUrl = publicUrl;
         mediaType = 'audio/webm';
+        console.log('[Voice Note] Media URL:', mediaUrl);
       }
       // Upload file to storage if selected
       else if (selectedFile) {
@@ -93,6 +100,8 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
         mediaType,
       };
 
+      console.log('[Send Message] Payload:', payload);
+
       // Add template parameters if sending template
       if (useTemplate) {
         payload.templateName = 'test_template_1';
@@ -104,6 +113,7 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
       });
 
       if (error) {
+        console.error('[Send Message] Error:', error);
         const msg = (error as any)?.message || '';
         const ctxBody = (error as any)?.context?.body;
         const payload = (() => { try { return typeof ctxBody === 'string' ? JSON.parse(ctxBody) : ctxBody; } catch { return null; }})();
@@ -120,7 +130,7 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
       }
 
       console.log("Message sent:", data);
-      toast.success(useTemplate ? "Template message sent!" : "Message sent!");
+      toast.success(useTemplate ? "Template message sent!" : voiceNote ? "Voice message sent!" : "Message sent!");
       setMessage("");
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -132,7 +142,7 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
       }
     } catch (error) {
       console.error("Error sending message:", error);
-      toast.error("Failed to send message");
+      toast.error("Failed to send message: " + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsSending(false);
     }
