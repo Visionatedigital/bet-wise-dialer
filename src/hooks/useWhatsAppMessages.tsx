@@ -42,19 +42,58 @@ export const useWhatsAppMessages = (conversationId: string | null) => {
 
     fetchMessages();
 
-    // Subscribe to realtime updates
+    // Subscribe to realtime updates for incremental changes
     const channel = supabase
       .channel('whatsapp_messages_changes')
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'whatsapp_messages',
           filter: `conversation_id=eq.${conversationId}`,
         },
-        () => {
-          fetchMessages();
+        (payload) => {
+          console.log('[WhatsApp] New message received:', payload.new);
+          setMessages((current) => {
+            // Check if message already exists (prevent duplicates)
+            if (current.some(m => m.id === payload.new.id)) {
+              return current;
+            }
+            return [...current, payload.new as WhatsAppMessage];
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'whatsapp_messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          console.log('[WhatsApp] Message updated:', payload.new);
+          setMessages((current) =>
+            current.map((msg) =>
+              msg.id === payload.new.id ? (payload.new as WhatsAppMessage) : msg
+            )
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'whatsapp_messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          console.log('[WhatsApp] Message deleted:', payload.old);
+          setMessages((current) =>
+            current.filter((msg) => msg.id !== payload.old.id)
+          );
         }
       )
       .subscribe();
