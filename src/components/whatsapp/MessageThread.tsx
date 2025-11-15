@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MessageComposer } from "./MessageComposer";
+import { AudioPlayer } from "./AudioPlayer";
 import { format } from "date-fns";
 import { Check, CheckCheck, MoreVertical, Bot, Trash2, Paperclip, AlertCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -390,7 +391,15 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
                       onClick={() => window.open(message.media_url!, '_blank')}
                     />
                   )}
-                  {message.media_url && !message.media_type?.startsWith('image/') && (
+                  {message.media_url && message.media_type?.startsWith('audio/') && (
+                    <div className="mb-2">
+                      <AudioPlayer 
+                        audioUrl={message.media_url} 
+                        isAgent={message.sender_type === 'agent'}
+                      />
+                    </div>
+                  )}
+                  {message.media_url && !message.media_type?.startsWith('image/') && !message.media_type?.startsWith('audio/') && (
                     <a 
                       href={message.media_url} 
                       target="_blank" 
