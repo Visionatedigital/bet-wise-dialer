@@ -66,11 +66,92 @@ Deno.serve(async (req) => {
           if (!fromPhone.startsWith('+')) {
             fromPhone = '+' + fromPhone;
           }
-          const messageText = message.text?.body || '';
+          
+          let messageText = message.text?.body || '';
+          let mediaUrl = null;
+          let mediaType = null;
+          
+          // Handle audio/voice messages
+          if (message.type === 'audio' && message.audio) {
+            const mediaId = message.audio.id;
+            const mimeType = message.audio.mime_type;
+            
+            console.log('Processing audio message:', { mediaId, mimeType });
+            
+            try {
+              // Get WhatsApp access token
+              const phoneNumberId = value.metadata?.phone_number_id;
+              const accessToken = phoneNumberId === PHONE_NUMBER_ID_1 
+                ? Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
+                : Deno.env.get('WHATSAPP_ACCESS_TOKEN_2')!;
+              
+              // Step 1: Get media URL from WhatsApp
+              const mediaInfoResponse = await fetch(
+                `https://graph.facebook.com/v22.0/${mediaId}`,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                  },
+                }
+              );
+              
+              const mediaInfo = await mediaInfoResponse.json();
+              console.log('Media info:', mediaInfo);
+              
+              if (!mediaInfo.url) {
+                throw new Error('No media URL in response');
+              }
+              
+              // Step 2: Download media file
+              const mediaDownloadResponse = await fetch(mediaInfo.url, {
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                },
+              });
+              
+              if (!mediaDownloadResponse.ok) {
+                throw new Error(`Failed to download media: ${mediaDownloadResponse.status}`);
+              }
+              
+              const mediaBlob = await mediaDownloadResponse.blob();
+              console.log('Downloaded media, size:', mediaBlob.size);
+              
+              // Step 3: Upload to Supabase storage
+              const fileExt = mimeType?.includes('ogg') ? 'ogg' : mimeType?.includes('mp4') ? 'm4a' : 'opus';
+              const fileName = `incoming/${Date.now()}-${mediaId}.${fileExt}`;
+              
+              const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('whatsapp-media')
+                .upload(fileName, mediaBlob, {
+                  contentType: mimeType || 'audio/ogg',
+                  cacheControl: '3600',
+                });
+              
+              if (uploadError) {
+                console.error('Error uploading to storage:', uploadError);
+                throw uploadError;
+              }
+              
+              // Get public URL
+              const { data: { publicUrl } } = supabase.storage
+                .from('whatsapp-media')
+                .getPublicUrl(fileName);
+              
+              mediaUrl = publicUrl;
+              mediaType = mimeType || 'audio/ogg';
+              messageText = '🎤 Voice message';
+              
+              console.log('Media uploaded:', { mediaUrl, mediaType });
+            } catch (error) {
+              console.error('Error processing audio:', error);
+              messageText = '🎤 Voice message (failed to download)';
+            }
+          }
+          
           const messageId = message.id;
           const timestamp = new Date(parseInt(message.timestamp) * 1000);
 
-          console.log('Processing message:', { fromPhone, messageText, messageId });
+          console.log('Processing message:', { fromPhone, messageText, messageId, mediaUrl });
 
           // Get metadata from webhook
           const phoneNumberId = value.metadata?.phone_number_id;
@@ -175,6 +256,8 @@ Deno.serve(async (req) => {
               whatsapp_message_id: messageId,
               sender_type: 'user',
               content: messageText,
+              media_url: mediaUrl,
+              media_type: mediaType,
               timestamp: timestamp,
               status: 'delivered',
             });
