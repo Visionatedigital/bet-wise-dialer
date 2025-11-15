@@ -37,12 +37,9 @@ export const useWhatsAppConversations = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
     fetchConversations();
+
+    if (!user) return;
 
     // Subscribe to realtime updates
     const channel = supabase
@@ -55,17 +52,14 @@ export const useWhatsAppConversations = () => {
           table: 'whatsapp_conversations',
           filter: `agent_id=eq.${user.id}`,
         },
-        () => {
-          // Re-fetch on any change
-          fetchConversations();
-        }
+        fetchConversations
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]); // Remove fetchConversations from dependencies
+  }, [user, fetchConversations]);
 
   return { conversations, loading };
 };

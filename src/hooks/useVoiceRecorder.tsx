@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback } from 'react';
-import MicRecorder from 'mic-recorder-to-mp3';
 
 interface UseVoiceRecorderReturn {
   isRecording: boolean;
@@ -16,18 +15,63 @@ export const useVoiceRecorder = (): UseVoiceRecorderReturn => {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   
-  const recorderRef = useRef<MicRecorder | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const startRecording = useCallback(async () => {
     try {
-      // Create new MP3 recorder instance
-      const recorder = new MicRecorder({ bitRate: 128 });
-      recorderRef.current = recorder;
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1, // Force mono for WhatsApp compatibility
+        } 
+      });
       
-      await recorder.start();
-      console.log('[Voice Recorder] Recording MP3 audio');
+      // Prefer ogg/opus for WhatsApp voice notes
+      let mimeType = 'audio/webm;codecs=opus'; // fallback
       
+      if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+        mimeType = 'audio/ogg;codecs=opus';
+        console.log('[Voice Recorder] Using OGG/Opus for native WhatsApp voice notes');
+      } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus';
+        console.log('[Voice Recorder] Using WebM/Opus (will upload to WhatsApp)');
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4';
+        console.log('[Voice Recorder] Using MP4 (will upload to WhatsApp)');
+      }
+      
+      console.log('[Voice Recorder] Selected mime type:', mimeType);
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        setAudioBlob(audioBlob);
+        
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Clear duration interval
+        if (durationIntervalRef.current) {
+          clearInterval(durationIntervalRef.current);
+          durationIntervalRef.current = null;
+        }
+      };
+      
+      mediaRecorder.start();
       setIsRecording(true);
       setRecordingDuration(0);
       
@@ -42,33 +86,16 @@ export const useVoiceRecorder = (): UseVoiceRecorderReturn => {
     }
   }, []);
 
-  const stopRecording = useCallback(async () => {
-    if (recorderRef.current && isRecording) {
-      try {
-        const [buffer, blob] = await recorderRef.current.stop().getMp3();
-        
-        // Create MP3 blob
-        const mp3Blob = new Blob(buffer, { type: 'audio/mpeg' });
-        setAudioBlob(mp3Blob);
-        console.log('[Voice Recorder] MP3 recorded, size:', mp3Blob.size);
-        
-        setIsRecording(false);
-        
-        // Clear duration interval
-        if (durationIntervalRef.current) {
-          clearInterval(durationIntervalRef.current);
-          durationIntervalRef.current = null;
-        }
-      } catch (error) {
-        console.error('Error stopping recording:', error);
-        setIsRecording(false);
-      }
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
     }
   }, [isRecording]);
 
   const cancelRecording = useCallback(() => {
-    if (recorderRef.current && isRecording) {
-      recorderRef.current.stop();
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
       setIsRecording(false);
       setAudioBlob(null);
       setRecordingDuration(0);
@@ -83,6 +110,7 @@ export const useVoiceRecorder = (): UseVoiceRecorderReturn => {
   const resetRecording = useCallback(() => {
     setAudioBlob(null);
     setRecordingDuration(0);
+    audioChunksRef.current = [];
   }, []);
 
   return {
