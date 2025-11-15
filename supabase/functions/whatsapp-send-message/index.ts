@@ -232,9 +232,12 @@ Deno.serve(async (req) => {
       };
     } else if (mediaUrl && mediaType) {
       // Media message
-      const mediaTypeCategory = mediaType.startsWith('image/') ? 'image' : 
-                               mediaType.startsWith('video/') ? 'video' :
-                               mediaType.startsWith('audio/') ? 'audio' : 'document';
+      const isWebm = /webm/i.test(mediaType) || /\.webm(\?.*)?$/i.test(mediaUrl);
+      const mediaTypeCategory = isWebm
+        ? 'document'
+        : mediaType.startsWith('image/') ? 'image' :
+          mediaType.startsWith('video/') ? 'video' :
+          mediaType.startsWith('audio/') ? 'audio' : 'document';
       
       whatsappPayload.type = mediaTypeCategory;
       
@@ -242,6 +245,12 @@ Deno.serve(async (req) => {
       if (mediaTypeCategory === 'audio') {
         whatsappPayload.audio = {
           link: mediaUrl
+        };
+      } else if (mediaTypeCategory === 'document') {
+        whatsappPayload.document = {
+          link: mediaUrl,
+          filename: 'voice-message.webm',
+          caption: message || ''
         };
       } else {
         whatsappPayload[mediaTypeCategory] = {
