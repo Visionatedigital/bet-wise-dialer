@@ -30,14 +30,14 @@ export const useVoiceRecorder = (): UseVoiceRecorderReturn => {
       });
       
       // Check supported mime types and prefer ogg/opus for WhatsApp compatibility
-      let mimeType = 'audio/webm;codecs=opus';
+      let mimeType = 'audio/ogg;codecs=opus';
       
       if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
         mimeType = 'audio/ogg;codecs=opus';
-      } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-        mimeType = 'audio/webm;codecs=opus';
       } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
         mimeType = 'audio/mp4';
+      } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus';
       }
       
       console.log('[Voice Recorder] Using mime type:', mimeType);
