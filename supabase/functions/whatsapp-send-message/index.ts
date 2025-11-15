@@ -64,10 +64,10 @@ Deno.serve(async (req) => {
     let phoneNumberId: string;
     let accessToken: string;
 
-    // Validate message content (allow empty if media is present)
-    if ((!message || message.trim().length === 0) && !mediaUrl) {
-      console.error('Empty message and no media provided');
-      throw new Error('Message content or media is required');
+    // Validate message content (allow empty if media or template is present)
+    if ((!message || message.trim().length === 0) && !mediaUrl && !templateName) {
+      console.error('Empty message, no media, and no template provided');
+      throw new Error('Message content, media, or template is required');
     }
 
     let conversation;

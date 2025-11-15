@@ -470,9 +470,11 @@ export type Database = {
           contact_name: string | null
           contact_phone: string
           created_at: string | null
+          display_phone_number: string | null
           id: string
           last_message_at: string | null
           last_message_text: string | null
+          phone_number_id: string | null
           unread_count: number | null
           updated_at: string | null
         }
@@ -481,9 +483,11 @@ export type Database = {
           contact_name?: string | null
           contact_phone: string
           created_at?: string | null
+          display_phone_number?: string | null
           id?: string
           last_message_at?: string | null
           last_message_text?: string | null
+          phone_number_id?: string | null
           unread_count?: number | null
           updated_at?: string | null
         }
@@ -492,9 +496,11 @@ export type Database = {
           contact_name?: string | null
           contact_phone?: string
           created_at?: string | null
+          display_phone_number?: string | null
           id?: string
           last_message_at?: string | null
           last_message_text?: string | null
+          phone_number_id?: string | null
           unread_count?: number | null
           updated_at?: string | null
         }
