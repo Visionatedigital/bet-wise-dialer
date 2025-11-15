@@ -18,10 +18,21 @@ export function ConversationList({ selectedConversation, onSelectConversation }:
   const [searchQuery, setSearchQuery] = useState("");
   const { conversations, loading } = useWhatsAppConversations();
 
-  const filteredConversations = conversations.filter(conv =>
-    (conv.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
-    conv.contact_phone.includes(searchQuery)
-  );
+  const filteredConversations = conversations
+    .filter(conv =>
+      (conv.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      conv.contact_phone.includes(searchQuery)
+    )
+    .sort((a, b) => {
+      // First priority: unread conversations at the top
+      if (a.unread_count > 0 && b.unread_count === 0) return -1;
+      if (a.unread_count === 0 && b.unread_count > 0) return 1;
+      
+      // Second priority: sort by most recent message
+      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return bTime - aTime; // Newest first
+    });
 
   if (loading) {
     return (
