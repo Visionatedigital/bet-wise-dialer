@@ -8,6 +8,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { cn } from "@/lib/utils";
 
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile } from '@ffmpeg/util';
+
 interface MessageComposerProps {
   conversationId: string;
   disabled?: boolean;
@@ -219,11 +222,31 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
     }
   };
 
-  const handleSendVoiceNote = () => {
-    if (audioBlob) {
-      handleSend(false, audioBlob);
+const handleSendVoiceNote = async () => {
+  if (!audioBlob) return;
+  let blobToSend = audioBlob;
+  // Convert unsupported WebM/Opus recordings to OGG/Opus for WhatsApp
+  if (audioBlob.type.includes('webm')) {
+    try {
+      toast.message('Converting voice note...', { description: 'Preparing OGG/Opus for WhatsApp' });
+      const ffmpeg = new FFmpeg();
+      await ffmpeg.load();
+      await ffmpeg.writeFile('input.webm', await fetchFile(audioBlob));
+      await ffmpeg.exec(['-i', 'input.webm', '-ac', '1', '-c:a', 'libopus', '-b:a', '32k', '-vn', 'output.ogg']);
+const data = await ffmpeg.readFile('output.ogg'); // Uint8Array from ffmpeg FS
+const uint8 = data as Uint8Array;
+// Create a plain ArrayBuffer to avoid SharedArrayBuffer typing issues
+const ab2 = new ArrayBuffer(uint8.length);
+new Uint8Array(ab2).set(uint8);
+blobToSend = new Blob([ab2], { type: 'audio/ogg; codecs=opus' });
+console.log('[Voice Note] Transcoded WebM->OGG. New size:', blobToSend.size);
+    } catch (err) {
+      console.error('[Voice Note] Transcode failed, sending original WebM:', err);
+      toast.error('Conversion failed. Sending original file (may not play in WhatsApp).');
     }
-  };
+  }
+  await handleSend(false, blobToSend);
+};
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
