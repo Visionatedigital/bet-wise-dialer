@@ -26,21 +26,25 @@ export const useVoiceRecorder = (): UseVoiceRecorderReturn => {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          channelCount: 1, // Force mono for WhatsApp compatibility
         } 
       });
       
-      // Check supported mime types and prefer ogg/opus for WhatsApp compatibility
-      let mimeType = 'audio/ogg;codecs=opus';
+      // Prefer ogg/opus for WhatsApp voice notes
+      let mimeType = 'audio/webm;codecs=opus'; // fallback
       
       if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
         mimeType = 'audio/ogg;codecs=opus';
-      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-        mimeType = 'audio/mp4';
+        console.log('[Voice Recorder] Using OGG/Opus for native WhatsApp voice notes');
       } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
         mimeType = 'audio/webm;codecs=opus';
+        console.log('[Voice Recorder] Using WebM/Opus (will upload to WhatsApp)');
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4';
+        console.log('[Voice Recorder] Using MP4 (will upload to WhatsApp)');
       }
       
-      console.log('[Voice Recorder] Using mime type:', mimeType);
+      console.log('[Voice Recorder] Selected mime type:', mimeType);
       
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
       
