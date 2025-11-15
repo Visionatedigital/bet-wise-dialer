@@ -45,17 +45,15 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
       if (voiceNote) {
         console.log('[Voice Note] Uploading voice note, size:', voiceNote.size, 'type:', voiceNote.type);
         
-        // Determine file extension based on mime type
+        // Determine file extension based on mime type - use actual type, don't fake it
         let fileExt = 'ogg';
-        let contentType = voiceNote.type;
         
         if (voiceNote.type.includes('ogg')) {
           fileExt = 'ogg';
-        } else if (voiceNote.type.includes('mp4')) {
+        } else if (voiceNote.type.includes('mp4') || voiceNote.type.includes('m4a')) {
           fileExt = 'm4a';
         } else if (voiceNote.type.includes('webm')) {
-          fileExt = 'opus';
-          contentType = 'audio/ogg; codecs=opus'; // WhatsApp accepts ogg
+          fileExt = 'webm';
         }
         
         const fileName = `${user.id}/${Date.now()}.${fileExt}`;
@@ -65,7 +63,7 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
           .upload(fileName, voiceNote, {
             cacheControl: '3600',
             upsert: false,
-            contentType: contentType
+            contentType: voiceNote.type // Use actual recorded mime type
           });
 
         if (uploadError) {
@@ -81,7 +79,7 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
           .getPublicUrl(fileName);
 
         mediaUrl = publicUrl;
-        mediaType = contentType;
+        mediaType = voiceNote.type; // Use actual recorded mime type
         console.log('[Voice Note] Media URL:', mediaUrl, 'Type:', mediaType);
       }
       // Upload file to storage if selected
