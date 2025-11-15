@@ -44,14 +44,28 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
       // Upload voice note to storage if provided
       if (voiceNote) {
         console.log('[Voice Note] Uploading voice note, size:', voiceNote.size, 'type:', voiceNote.type);
-        const fileName = `${user.id}/${Date.now()}.webm`;
+        
+        // Determine file extension based on mime type
+        let fileExt = 'ogg';
+        let contentType = voiceNote.type;
+        
+        if (voiceNote.type.includes('ogg')) {
+          fileExt = 'ogg';
+        } else if (voiceNote.type.includes('mp4')) {
+          fileExt = 'm4a';
+        } else if (voiceNote.type.includes('webm')) {
+          fileExt = 'opus';
+          contentType = 'audio/ogg; codecs=opus'; // WhatsApp accepts ogg
+        }
+        
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('whatsapp-media')
           .upload(fileName, voiceNote, {
             cacheControl: '3600',
             upsert: false,
-            contentType: 'audio/webm'
+            contentType: contentType
           });
 
         if (uploadError) {
@@ -67,8 +81,8 @@ export function MessageComposer({ conversationId, disabled = false }: MessageCom
           .getPublicUrl(fileName);
 
         mediaUrl = publicUrl;
-        mediaType = 'audio/webm';
-        console.log('[Voice Note] Media URL:', mediaUrl);
+        mediaType = contentType;
+        console.log('[Voice Note] Media URL:', mediaUrl, 'Type:', mediaType);
       }
       // Upload file to storage if selected
       else if (selectedFile) {
