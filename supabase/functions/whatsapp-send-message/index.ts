@@ -244,13 +244,30 @@ Deno.serve(async (req) => {
       
       // Audio messages don't support captions in WhatsApp
       if (mediaTypeCategory === 'audio') {
-        // Send by public URL as requested
-        const isVoiceNote = /(^audio\/(ogg|opus))|\.ogg(\?.*)?$|\.opus(\?.*)?$/i.test(mediaType) ||
-                             /\.ogg(\?.*)?$/i.test(mediaUrl) || /\.opus(\?.*)?$/i.test(mediaUrl);
+        // Send audio by link - ensure we use the exact MIME type WhatsApp expects
+        // For ogg files, use audio/ogg; codecs=opus for PTT
+        let finalMimeType = mediaType;
+        const isOgg = /ogg/i.test(mediaType) || /\.ogg(\?.*)?$/i.test(mediaUrl);
+        
+        if (isOgg && !mediaType.includes('codecs=opus')) {
+          finalMimeType = 'audio/ogg; codecs=opus';
+        }
+        
+        console.log('[WhatsApp Send] Sending audio:', { 
+          link: mediaUrl, 
+          originalType: mediaType,
+          finalType: finalMimeType,
+          isOgg
+        });
+        
         whatsappPayload.audio = {
-          link: mediaUrl,
-          ...(isVoiceNote && { ptt: true })
+          link: mediaUrl
         };
+        
+        // Only add PTT flag for OGG files
+        if (isOgg) {
+          whatsappPayload.audio.ptt = true;
+        }
       } else if (mediaTypeCategory === 'document') {
         whatsappPayload.document = {
           link: mediaUrl,
