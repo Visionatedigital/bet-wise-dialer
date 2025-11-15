@@ -282,13 +282,16 @@ Deno.serve(async (req) => {
     const messageId = whatsappData.messages?.[0]?.id;
 
     // Save message to database
+    // Map template names to their actual content for display
+    const templateDisplayContent = templateName === 'test_template_1' ? 'hello' : (templateName ? `Template: ${templateName}` : null);
+    
     const { data: savedMessage, error: messageError } = await supabase
       .from('whatsapp_messages')
       .insert({
         conversation_id: conversation.id,
         whatsapp_message_id: messageId,
         sender_type: 'agent',
-        content: templateName ? `Template: ${templateName}` : (message || '📎 Media'),
+        content: templateDisplayContent || message || '📎 Media',
         media_url: mediaUrl || null,
         media_type: mediaType || null,
         timestamp: new Date().toISOString(),
