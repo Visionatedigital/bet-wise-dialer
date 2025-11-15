@@ -73,16 +73,16 @@ export function ConversationList({ selectedConversation, onSelectConversation }:
                   </Avatar>
                   
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between gap-2 mb-1">
                       <span className={cn(
-                        "truncate",
+                        "truncate flex-1",
                         conversation.unread_count > 0 ? "font-semibold" : "font-medium"
                       )}>
                         {displayName}
                       </span>
                       {conversation.last_message_at && (
                         <span className={cn(
-                          "text-xs whitespace-nowrap ml-2",
+                          "text-xs whitespace-nowrap flex-shrink-0",
                           conversation.unread_count > 0 ? "text-primary font-semibold" : "text-muted-foreground"
                         )}>
                           {formatDistanceToNow(new Date(conversation.last_message_at), { addSuffix: true })}
@@ -90,16 +90,16 @@ export function ConversationList({ selectedConversation, onSelectConversation }:
                       )}
                     </div>
                     
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
                       <p className={cn(
-                        "text-sm truncate flex-1",
-                        conversation.unread_count > 0 ? "text-foreground font-medium" : "text-muted-foreground"
+                        "text-sm truncate",
+                        conversation.unread_count > 0 ? "text-foreground font-medium max-w-[180px]" : "text-muted-foreground flex-1"
                       )}>
                         {conversation.last_message_text || 'No messages yet'}
                       </p>
                       {conversation.unread_count > 0 && (
                         <Badge 
-                          className="ml-2 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-semibold"
+                          className="h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-semibold flex-shrink-0"
                         >
                           {conversation.unread_count}
                         </Badge>
