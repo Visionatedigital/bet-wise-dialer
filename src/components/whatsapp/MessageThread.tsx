@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MessageComposer } from "./MessageComposer";
 import { format } from "date-fns";
-import { Check, CheckCheck, MoreVertical, Bot, Trash2, Paperclip } from "lucide-react";
+import { Check, CheckCheck, MoreVertical, Bot, Trash2, Paperclip, AlertCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWhatsAppMessages } from "@/hooks/useWhatsAppMessages";
@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,9 +42,58 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
   const [isProcessing, setIsProcessing] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSendingTemplate, setIsSendingTemplate] = useState(false);
   const previousMessageCountRef = useRef(messages.length);
 
   const conversation = conversations.find(c => c.id === conversationId);
+
+  // Check if 24-hour window has passed
+  const check24HourWindow = () => {
+    if (!messages.length) return false;
+    
+    // Find the last message from agent
+    const lastAgentMessage = [...messages].reverse().find(m => m.sender_type === 'agent');
+    if (!lastAgentMessage) return false;
+    
+    // Check if there's any user message after the last agent message
+    const lastAgentMessageIndex = messages.findIndex(m => m.id === lastAgentMessage.id);
+    const hasUserResponseAfter = messages.slice(lastAgentMessageIndex + 1).some(m => m.sender_type === 'user');
+    
+    if (hasUserResponseAfter) return false;
+    
+    // Check if 24 hours have passed
+    const lastMessageTime = new Date(lastAgentMessage.timestamp).getTime();
+    const now = Date.now();
+    const hoursPassed = (now - lastMessageTime) / (1000 * 60 * 60);
+    
+    return hoursPassed >= 24;
+  };
+
+  const needs24HourTemplate = check24HourWindow();
+
+  // Handle sending follow-up template
+  const handleSendFollowUpTemplate = async () => {
+    if (!conversationId) return;
+
+    setIsSendingTemplate(true);
+    try {
+      const { error } = await supabase.functions.invoke('whatsapp-send-message', {
+        body: {
+          conversationId,
+          templateName: 'test_template_1',
+        },
+      });
+
+      if (error) throw error;
+      
+      toast.success('Follow-up message sent');
+    } catch (error) {
+      console.error('Error sending template:', error);
+      toast.error('Failed to send follow-up message');
+    } finally {
+      setIsSendingTemplate(false);
+    }
+  };
 
   // Load AI mode from localStorage
   useEffect(() => {
@@ -268,6 +318,27 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
+          {/* 24-hour window warning */}
+          {needs24HourTemplate && !isSendingTemplate && (
+            <Alert className="border-warning bg-warning/10">
+              <AlertCircle className="h-4 w-4 text-warning" />
+              <AlertDescription className="flex items-center justify-between gap-4">
+                <span className="text-sm">
+                  It's been over 24 hours since your last message. You need to send a template message to re-engage with this customer.
+                </span>
+                <Button
+                  size="sm"
+                  onClick={handleSendFollowUpTemplate}
+                  disabled={isSendingTemplate}
+                  className="shrink-0"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Send Follow-up
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
               <p>No messages yet. Start the conversation!</p>
