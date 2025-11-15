@@ -212,6 +212,7 @@ Deno.serve(async (req) => {
     
     let whatsappPayload: any = {
       messaging_product: 'whatsapp',
+      recipient_type: 'individual',
       to: cleanPhone,
     };
 
@@ -243,44 +244,13 @@ Deno.serve(async (req) => {
       
       // Audio messages don't support captions in WhatsApp
       if (mediaTypeCategory === 'audio') {
-        // Prefer uploading to WhatsApp Media API and sending by media ID
-        // Only flag voice notes (PTT) for ogg/opus formats
-        const isVoiceNote = /ogg|opus/i.test(mediaType) || /\.ogg(\?.*)?$/i.test(mediaUrl) || /\.opus(\?.*)?$/i.test(mediaUrl);
-        try {
-          // Download from storage
-          const mediaResp = await fetch(mediaUrl);
-          if (!mediaResp.ok) throw new Error(`Failed to download media from storage: ${mediaResp.status}`);
-          const arrayBuffer = await mediaResp.arrayBuffer();
-          const blob = new Blob([arrayBuffer], { type: mediaType });
-
-          // Upload to WhatsApp Media API
-          const form = new FormData();
-          form.append('file', blob, isVoiceNote ? 'voice.ogg' : 'audio.m4a');
-          form.append('type', mediaType);
-          form.append('messaging_product', 'whatsapp');
-          
-          const uploadResp = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/media`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-            body: form
-          });
-          const uploadData = await uploadResp.json();
-          console.log('WhatsApp media upload response:', uploadData);
-          if (!uploadResp.ok) {
-            throw new Error(`WhatsApp media upload failed: ${JSON.stringify(uploadData)}`);
-          }
-          const mediaId = uploadData.id;
-
-          whatsappPayload.audio = {
-            id: mediaId,
-            ...(isVoiceNote && { ptt: true })
-          };
-        } catch (e) {
-          console.warn('Falling back to sending audio by link due to upload error:', e);
-          whatsappPayload.audio = {
-            link: mediaUrl
-          };
-        }
+        // Send by public URL as requested
+        const isVoiceNote = /(^audio\/(ogg|opus))|\.ogg(\?.*)?$|\.opus(\?.*)?$/i.test(mediaType) ||
+                             /\.ogg(\?.*)?$/i.test(mediaUrl) || /\.opus(\?.*)?$/i.test(mediaUrl);
+        whatsappPayload.audio = {
+          link: mediaUrl,
+          ...(isVoiceNote && { ptt: true })
+        };
       } else if (mediaTypeCategory === 'document') {
         whatsappPayload.document = {
           link: mediaUrl,
