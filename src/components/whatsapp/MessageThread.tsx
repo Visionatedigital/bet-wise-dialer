@@ -229,11 +229,17 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
     handleIncomingMessage();
   }, [messages.length, conversationId, aiMode, isProcessing, messages, conversation]);
 
+  // Mark conversation as read when opened or when new messages arrive
   useEffect(() => {
-    if (conversationId && messages.length > 0) {
-      markAsRead();
+    if (conversationId) {
+      // Add a small delay to ensure the UI has rendered
+      const timer = setTimeout(() => {
+        markAsRead();
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
-  }, [conversationId, messages.length, markAsRead]);
+  }, [conversationId, messages.length]);
 
   if (!conversationId) {
     return (

@@ -106,10 +106,18 @@ export const useWhatsAppMessages = (conversationId: string | null) => {
   const markAsRead = async () => {
     if (!conversationId) return;
 
-    await supabase
+    console.log('[WhatsApp] Marking conversation as read:', conversationId);
+    
+    const { error } = await supabase
       .from('whatsapp_conversations')
       .update({ unread_count: 0 })
       .eq('id', conversationId);
+    
+    if (error) {
+      console.error('[WhatsApp] Error marking as read:', error);
+    } else {
+      console.log('[WhatsApp] Successfully marked as read');
+    }
   };
 
   return { messages, loading, markAsRead };
