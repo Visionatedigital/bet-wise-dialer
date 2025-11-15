@@ -36,6 +36,21 @@ interface MessageThreadProps {
   onConversationDeleted?: () => void;
 }
 
+// Extend status locally to support 'pending'
+type LocalStatus = 'sent' | 'delivered' | 'read' | 'failed' | 'pending';
+
+type LocalMessage = {
+  id: string;
+  conversation_id: string;
+  whatsapp_message_id: string | null;
+  sender_type: 'agent' | 'user';
+  content: string;
+  media_url: string | null;
+  media_type: string | null;
+  status: LocalStatus;
+  timestamp: string;
+};
+
 export function MessageThread({ conversationId, onConversationDeleted }: MessageThreadProps) {
   const { messages, loading, markAsRead } = useWhatsAppMessages(conversationId);
   const { conversations } = useWhatsAppConversations();
@@ -44,17 +59,18 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSendingTemplate, setIsSendingTemplate] = useState(false);
+  const [pendingMessages, setPendingMessages] = useState<LocalMessage[]>([]);
   const previousMessageCountRef = useRef(messages.length);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const conversation = conversations.find(c => c.id === conversationId);
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
+// Auto-scroll to bottom when new messages arrive
+useEffect(() => {
+  if (messages.length > 0 || pendingMessages.length > 0) {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }
+}, [messages, pendingMessages]);
 
   // Check if 24-hour window has passed
   const check24HourWindow = () => {
@@ -354,91 +370,110 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
             </Alert>
           )}
 
-          {messages.length === 0 ? (
+          {messages.length === 0 && pendingMessages.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
               <p>No messages yet. Start the conversation!</p>
             </div>
           ) : (
-            messages.map((message, index) => (
-              <div
-                key={message.id}
-                className={cn(
-                  "flex animate-fade-in",
-                  message.sender_type === 'agent' ? "justify-end" : "justify-start"
-                )}
-                style={{
-                  animationDelay: `${index * 0.05}s`,
-                  animationFillMode: 'both'
-                }}
-              >
+            (() => {
+              const displayed = [...messages, ...pendingMessages].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+              return displayed.map((message, index) => (
                 <div
+                  key={message.id}
                   className={cn(
-                    "max-w-[70%] rounded-lg p-3",
-                    message.sender_type === 'agent'
-                      ? "bg-primary text-primary-foreground animate-slide-in-from-right"
-                      : "bg-muted animate-slide-in-from-left"
+                    "flex animate-fade-in",
+                    message.sender_type === 'agent' ? "justify-end" : "justify-start"
                   )}
                   style={{
                     animationDelay: `${index * 0.05}s`,
                     animationFillMode: 'both'
                   }}
                 >
-                  {message.media_url && message.media_type?.startsWith('image/') && (
-                    <img 
-                      src={message.media_url} 
-                      alt="Shared media" 
-                      className="max-w-full rounded mb-2 cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => window.open(message.media_url!, '_blank')}
-                    />
-                  )}
-                  {message.media_url && message.media_type?.startsWith('audio/') && (
-                    <div className="mb-2">
-                      <AudioPlayer 
-                        audioUrl={message.media_url} 
-                        isAgent={message.sender_type === 'agent'}
-                      />
-                    </div>
-                  )}
-                  {message.media_url && !message.media_type?.startsWith('image/') && !message.media_type?.startsWith('audio/') && (
-                    <a 
-                      href={message.media_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm underline mb-2"
-                    >
-                      <Paperclip className="h-4 w-4" />
-                      View attachment
-                    </a>
-                  )}
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  <div className="flex items-center justify-end gap-1 mt-1">
-                    <span className="text-xs opacity-70">
-                      {format(new Date(message.timestamp), 'HH:mm')}
-                    </span>
-                    {message.sender_type === 'agent' && (
-                      <>
-                        {message.status === 'read' && (
-                          <CheckCheck className="h-4 w-4 text-blue-400" />
-                        )}
-                        {message.status === 'delivered' && (
-                          <CheckCheck className="h-4 w-4" />
-                        )}
-                        {message.status === 'sent' && (
-                          <Check className="h-4 w-4" />
-                        )}
-                      </>
+                  <div
+                    className={cn(
+                      "max-w-[70%] rounded-lg p-3",
+                      message.sender_type === 'agent'
+                        ? "bg-primary text-primary-foreground animate-slide-in-from-right"
+                        : "bg-muted animate-slide-in-from-left"
                     )}
+                    style={{
+                      animationDelay: `${index * 0.05}s`,
+                      animationFillMode: 'both'
+                    }}
+                  >
+                    {message.media_url && message.media_type?.startsWith('image/') && (
+                      <img 
+                        src={message.media_url} 
+                        alt="Shared media" 
+                        className="max-w-full rounded mb-2 cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => window.open(message.media_url!, '_blank')}
+                      />
+                    )}
+                    {message.media_url && message.media_type?.startsWith('audio/') && (
+                      <div className="mb-2">
+                        <AudioPlayer 
+                          audioUrl={message.media_url} 
+                          isAgent={message.sender_type === 'agent'}
+                        />
+                      </div>
+                    )}
+                    {message.media_url && !message.media_type?.startsWith('image/') && !message.media_type?.startsWith('audio/') && (
+                      <a 
+                        href={message.media_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm underline mb-2"
+                      >
+                        <Paperclip className="h-4 w-4" />
+                        View attachment
+                      </a>
+                    )}
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <div className="flex items-center justify-end gap-1 mt-1">
+                      <span className="text-xs opacity-70">
+                        {format(new Date(message.timestamp), 'HH:mm')}
+                      </span>
+                      {message.sender_type === 'agent' && (
+                        <>
+                          {(message as any).status === 'pending' && (
+                            <Send className="h-4 w-4 opacity-70 animate-pulse" />
+                          )}
+                          {message.status === 'failed' && (
+                            <AlertCircle className="h-4 w-4 text-destructive" />
+                          )}
+                          {message.status === 'read' && (
+                            <CheckCheck className="h-4 w-4 text-blue-400" />
+                          )}
+                          {message.status === 'delivered' && (
+                            <CheckCheck className="h-4 w-4" />
+                          )}
+                          {message.status === 'sent' && (
+                            <Check className="h-4 w-4" />
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              ));
+            })()
           )}
           <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
       {/* Composer */}
-      <MessageComposer conversationId={conversationId} disabled={aiMode} />
+      <MessageComposer 
+        conversationId={conversationId} 
+        disabled={aiMode}
+        onOptimisticStart={(msg) => setPendingMessages((prev) => [...prev, msg])}
+        onOptimisticResolve={(id, outcome) => {
+          setPendingMessages((prev) => {
+            if (outcome === 'success') return prev.filter(m => m.id !== id);
+            return prev.map(m => m.id === id ? { ...m, status: 'failed' } : m);
+          });
+        }}
+      />
     </div>
   );
 }
