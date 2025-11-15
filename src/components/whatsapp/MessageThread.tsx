@@ -44,8 +44,16 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSendingTemplate, setIsSendingTemplate] = useState(false);
   const previousMessageCountRef = useRef(messages.length);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const conversation = conversations.find(c => c.id === conversationId);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   // Check if 24-hour window has passed
   const check24HourWindow = () => {
@@ -410,6 +418,7 @@ export function MessageThread({ conversationId, onConversationDeleted }: Message
               </div>
             ))
           )}
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
