@@ -243,8 +243,12 @@ Deno.serve(async (req) => {
       
       // Audio messages don't support captions in WhatsApp
       if (mediaTypeCategory === 'audio') {
+        // Check if it's a voice note format (ogg, opus, etc.)
+        const isVoiceNote = /ogg|opus|m4a/i.test(mediaType) || /voice/i.test(mediaUrl);
+        
         whatsappPayload.audio = {
-          link: mediaUrl
+          link: mediaUrl,
+          ...(isVoiceNote && { ptt: true }) // Push-to-talk flag for voice notes
         };
       } else if (mediaTypeCategory === 'document') {
         whatsappPayload.document = {
