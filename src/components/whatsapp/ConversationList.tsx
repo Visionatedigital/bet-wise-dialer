@@ -74,20 +74,33 @@ export function ConversationList({ selectedConversation, onSelectConversation }:
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium truncate">{displayName}</span>
+                      <span className={cn(
+                        "truncate",
+                        conversation.unread_count > 0 ? "font-semibold" : "font-medium"
+                      )}>
+                        {displayName}
+                      </span>
                       {conversation.last_message_at && (
-                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                        <span className={cn(
+                          "text-xs whitespace-nowrap ml-2",
+                          conversation.unread_count > 0 ? "text-primary font-semibold" : "text-muted-foreground"
+                        )}>
                           {formatDistanceToNow(new Date(conversation.last_message_at), { addSuffix: true })}
                         </span>
                       )}
                     </div>
                     
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-muted-foreground truncate flex-1">
+                      <p className={cn(
+                        "text-sm truncate flex-1",
+                        conversation.unread_count > 0 ? "text-foreground font-medium" : "text-muted-foreground"
+                      )}>
                         {conversation.last_message_text || 'No messages yet'}
                       </p>
                       {conversation.unread_count > 0 && (
-                        <Badge variant="default" className="ml-2 h-5 min-w-5 flex items-center justify-center rounded-full">
+                        <Badge 
+                          className="ml-2 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-semibold"
+                        >
                           {conversation.unread_count}
                         </Badge>
                       )}
