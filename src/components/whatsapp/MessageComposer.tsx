@@ -8,9 +8,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { cn } from "@/lib/utils";
 
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile } from '@ffmpeg/util';
-
 interface MessageComposerProps {
   conversationId: string;
   disabled?: boolean;
@@ -242,46 +239,12 @@ const handleSendVoiceNote = async () => {
     timestamp: new Date().toISOString(),
   });
 
-  let blobToSend = audioBlob;
-  // 2) Convert unsupported WebM/Opus recordings to OGG/Opus for WhatsApp
-  if (audioBlob.type.includes('webm')) {
-    try {
-      toast.message('Converting voice note...', { description: 'Preparing OGG/Opus for WhatsApp' });
-
-      // Helper: conversion with timeout fallback
-      const withTimeout = async <T,>(p: Promise<T>, ms = 8000): Promise<T> => {
-        return await new Promise<T>((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error('conversion-timeout')), ms);
-          p.then((v) => { clearTimeout(timer); resolve(v); })
-           .catch((e) => { clearTimeout(timer); reject(e); });
-        });
-      };
-
-      const convert = async () => {
-        const ffmpeg = new FFmpeg();
-        await ffmpeg.load();
-        await ffmpeg.writeFile('input.webm', await fetchFile(audioBlob));
-        await ffmpeg.exec(['-i', 'input.webm', '-ac', '1', '-c:a', 'libopus', '-b:a', '32k', '-vn', 'output.ogg']);
-        const data = await ffmpeg.readFile('output.ogg'); // Uint8Array from ffmpeg FS
-        const uint8 = data as Uint8Array;
-        const ab2 = new ArrayBuffer(uint8.length);
-        new Uint8Array(ab2).set(uint8);
-        return new Blob([ab2], { type: 'audio/ogg; codecs=opus' });
-      };
-
-      blobToSend = await withTimeout(convert(), 8000);
-      console.log('[Voice Note] Transcoded WebM->OGG. New size:', blobToSend.size);
-    } catch (err) {
-      console.warn('[Voice Note] Conversion timeout/failed, sending original WebM:', err);
-      toast.message('Sending without conversion', { description: 'We will still deliver the voice note.' });
-    }
-  }
-
-  // 3) Send normally (upload + edge function)
+  // 2) Send directly (no conversion - backend will handle it)
   try {
-    await handleSend(false, blobToSend);
+    await handleSend(false, audioBlob);
     onOptimisticResolve?.(tempId, 'success');
   } catch (e) {
+    console.error('[Voice Note] Send failed:', e);
     onOptimisticResolve?.(tempId, 'failed');
   }
 };
