@@ -70,6 +70,7 @@ Deno.serve(async (req) => {
       throw new Error('Message content, media, or template is required');
     }
 
+    console.log('[Step 1] Validation passed, fetching conversation...');
     let conversation;
 
     if (conversationId) {
@@ -120,6 +121,8 @@ Deno.serve(async (req) => {
       throw new Error('Either conversationId or phoneNumber required');
     }
 
+    console.log('[Step 2] Conversation retrieved:', conversation.id);
+
     // Check 24-hour customer care window based on last inbound user message
     let requiresTemplate = false;
     try {
@@ -145,6 +148,7 @@ Deno.serve(async (req) => {
     }
 
     if (requiresTemplate && !templateName) {
+      console.log('[Step 3] 24h window closed, template required');
       return new Response(
         JSON.stringify({
           error: 'WHATSAPP_24H_WINDOW',
@@ -154,6 +158,8 @@ Deno.serve(async (req) => {
         { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log('[Step 3] 24h window check passed, template required:', requiresTemplate);
 
     // Determine phone_number_id and access token
     const PHONE_NUMBER_ID_1 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
@@ -205,6 +211,8 @@ Deno.serve(async (req) => {
         })
         .eq('id', conversation.id);
     }
+
+    console.log('[Step 4] Phone number configured:', { phoneNumberId: phoneNumberId === PHONE_NUMBER_ID_1 ? '1' : '2' });
 
     // Send message via WhatsApp Business API
     // Strip + from phone number to match Meta's format
@@ -301,8 +309,9 @@ Deno.serve(async (req) => {
       }
     );
 
+    console.log('[Step 5] WhatsApp API called, status:', whatsappResponse.status);
     const whatsappData = await whatsappResponse.json();
-    console.log('WhatsApp API response:', whatsappData);
+    console.log('[Step 5] WhatsApp API response:', whatsappData);
 
     if (!whatsappResponse.ok) {
       const code = (whatsappData && (whatsappData.error?.code || whatsappData.errors?.[0]?.code)) || null;
@@ -346,8 +355,11 @@ Deno.serve(async (req) => {
       .single();
 
     if (messageError) {
-      console.error('Error saving message:', messageError);
+      console.error('[Step 6] Error saving message:', messageError);
+      throw new Error(`Failed to save message: ${messageError.message}`);
     }
+
+    console.log('[Step 6] Message saved to database:', savedMessage?.id);
 
     // Update conversation
     await supabase
@@ -357,6 +369,8 @@ Deno.serve(async (req) => {
         last_message_at: new Date().toISOString(),
       })
       .eq('id', conversation.id);
+
+    console.log('[Step 7] Conversation updated, sending success response');
 
     return new Response(
       JSON.stringify({
