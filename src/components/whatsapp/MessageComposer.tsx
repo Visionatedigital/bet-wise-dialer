@@ -128,17 +128,17 @@ export function MessageComposer({ conversationId, disabled = false, onOptimistic
 
       if (error) {
         console.error('[Send Message] Error:', error);
-        const msg = (error as any)?.message || '';
-        const ctxBody = (error as any)?.context?.body;
-        const payload = (() => { try { return typeof ctxBody === 'string' ? JSON.parse(ctxBody) : ctxBody; } catch { return null; }})();
-        const code = (payload && (payload.error || payload.code)) || '';
-        if (msg.includes('409') || code === 'WHATSAPP_24H_WINDOW') {
-          // Automatically retry with template
-          if (!useTemplate) {
-            toast.info('Sending template message to initiate conversation...');
-            await handleSend(true);
-            return;
-          }
+        
+        // Parse error response - Supabase returns 409 errors in the error object
+        const errorStr = JSON.stringify(error);
+        const is24HourWindow = errorStr.includes('WHATSAPP_24H_WINDOW') || errorStr.includes('409');
+        
+        if (is24HourWindow && !useTemplate) {
+          // Automatically retry with template message
+          console.log('[Send Message] 24h window detected, retrying with template...');
+          toast.info('Sending template message to initiate conversation...');
+          await handleSend(true);
+          return;
         }
         throw error;
       }
