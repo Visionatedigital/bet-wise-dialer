@@ -127,19 +127,36 @@ export function MessageComposer({ conversationId, disabled = false, onOptimistic
       });
 
       if (error) {
-        console.error('[Send Message] Error:', error);
+        console.error('[Send Message] Full error object:', error);
+        console.error('[Send Message] Error type:', typeof error);
+        console.error('[Send Message] Error keys:', Object.keys(error));
         
-        // Parse error response - Supabase returns 409 errors in the error object
+        // Supabase returns the response body in error for non-2xx status
+        // Check multiple possible error structures
+        const errorData = (error as any);
         const errorStr = JSON.stringify(error);
-        const is24HourWindow = errorStr.includes('WHATSAPP_24H_WINDOW') || errorStr.includes('409');
+        const errorMessage = errorData?.message || '';
+        const errorCode = errorData?.error || errorData?.code || '';
+        
+        // Log what we found
+        console.log('[Send Message] Parsed error:', { errorMessage, errorCode });
+        
+        const is24HourWindow = 
+          errorMessage.includes('WHATSAPP_24H_WINDOW') || 
+          errorMessage.includes('409') ||
+          errorCode === 'WHATSAPP_24H_WINDOW' ||
+          errorStr.includes('24');
+        
+        console.log('[Send Message] Is 24h window?', is24HourWindow, 'useTemplate:', useTemplate);
         
         if (is24HourWindow && !useTemplate) {
           // Automatically retry with template message
-          console.log('[Send Message] 24h window detected, retrying with template...');
+          console.log('[Send Message] ✅ Retrying with template message...');
           toast.info('Sending template message to initiate conversation...');
           await handleSend(true);
           return;
         }
+        
         throw error;
       }
 
