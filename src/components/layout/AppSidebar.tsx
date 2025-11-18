@@ -53,7 +53,7 @@ const navigationItems = [
     title: "WhatsApp", 
     url: "/whatsapp", 
     icon: ({ className }: LucideProps) => (
-      <img src={WhatsAppLogo} alt="" className={className} style={{ filter: 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(86deg) brightness(118%) contrast(119%)' }} />
+      <img src={WhatsAppLogo} alt="" className={className} style={{ opacity: 0.7 }} />
     ),
     description: "WhatsApp messaging"
   },
