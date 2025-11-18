@@ -62,7 +62,8 @@ Deno.serve(async (req) => {
       if (value.messages) {
         for (const message of value.messages) {
           let fromPhone = message.from;
-          // Normalize phone number - add + prefix if missing
+          // Normalize phone number - remove spaces and add + prefix if missing
+          fromPhone = fromPhone.trim().replace(/\s+/g, '');
           if (!fromPhone.startsWith('+')) {
             fromPhone = '+' + fromPhone;
           }

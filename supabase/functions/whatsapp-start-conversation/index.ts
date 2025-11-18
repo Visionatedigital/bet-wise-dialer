@@ -50,8 +50,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Format phone number
-    const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+    // Format phone number - normalize to international format without spaces
+    let formattedPhone = phoneNumber.trim().replace(/\s+/g, ''); // Remove all spaces
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = '+' + formattedPhone;
+    }
     console.log(`[Start Conversation] User ${user.id} starting conversation with ${formattedPhone}`);
 
     // Get user's profile to determine which phone number to use
