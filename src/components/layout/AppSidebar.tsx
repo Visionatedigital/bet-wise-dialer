@@ -14,6 +14,8 @@ import {
   LucideProps
 } from "lucide-react";
 import WhatsAppLogo from "@/assets/whatsapp-logo.svg";
+import { Badge } from "@/components/ui/badge";
+import { useWhatsAppUnreadCount } from "@/hooks/useWhatsAppUnreadCount";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -95,6 +97,7 @@ export function AppSidebar() {
   const currentPath = location.pathname;
   const { signOut, user } = useAuth();
   const { isAdmin, isManagement } = useUserRole();
+  const unreadCount = useWhatsAppUnreadCount();
   
   const isCollapsed = state === "collapsed";
 
@@ -149,7 +152,16 @@ export function AppSidebar() {
                       title={isCollapsed ? item.description : undefined}
                     >
                       <item.icon className="h-4 w-4" />
-                      {!isCollapsed && <span>{item.title}</span>}
+                      {!isCollapsed && (
+                        <span className="flex items-center gap-2 flex-1">
+                          {item.title}
+                          {item.title === "WhatsApp" && unreadCount > 0 && (
+                            <Badge variant="destructive" className="h-5 min-w-5 flex items-center justify-center px-1.5 text-xs">
+                              {unreadCount}
+                            </Badge>
+                          )}
+                        </span>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
