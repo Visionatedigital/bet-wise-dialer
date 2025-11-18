@@ -11,8 +11,9 @@ import {
   Home,
   LogOut,
   CalendarClock,
-  MessageCircle
+  LucideProps
 } from "lucide-react";
+import WhatsAppLogo from "@/assets/whatsapp-logo.svg";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -51,7 +52,9 @@ const navigationItems = [
   { 
     title: "WhatsApp", 
     url: "/whatsapp", 
-    icon: MessageCircle,
+    icon: ({ className }: LucideProps) => (
+      <img src={WhatsAppLogo} alt="" className={className} style={{ filter: 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(86deg) brightness(118%) contrast(119%)' }} />
+    ),
     description: "WhatsApp messaging"
   },
   { 
