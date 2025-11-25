@@ -269,7 +269,9 @@ export function Softphone({
   };
 
   useEffect(() => {
-    // Cleanup on unmount
+    // Auto-initialize SIP client on mount
+    initializeSipClient();
+
     return () => {
       if (sipClientRef.current) {
         sipClientRef.current.unregister();
@@ -464,16 +466,16 @@ const handleCallEnd = () => {
       
       setCallStatus("ringing");
       
-      // Initialize SIP client if not already done
+      // Initialize SIP client if not already done or if previous init failed
       if (!sipClientRef.current) {
+        console.log('[Softphone] SIP not initialized, initializing now...');
         toast.loading('Connecting to call server...');
         const initialized = await initializeSipClient();
+        toast.dismiss();
         if (!initialized) {
           setCallStatus("idle");
-          toast.dismiss();
           return;
         }
-        toast.dismiss();
       }
 
       toast.loading('Calling customer...');
@@ -518,22 +520,30 @@ const handleCallEnd = () => {
 
   const initializeSipClient = async () => {
     try {
+      console.log('[Softphone] Initializing SIP client...');
       const { data, error } = await supabase.functions.invoke('get-sip-credentials');
       
-      if (error) throw error;
+      if (error) {
+        console.error('[Softphone] Failed to get SIP credentials:', error);
+        throw error;
+      }
       
       if (!data?.username || !data?.password) {
+        console.error('[Softphone] Missing SIP credentials in response');
         throw new Error('SIP credentials not available');
       }
 
+      console.log('[Softphone] Got credentials, initializing SIP client...');
       sipClientRef.current = new SipClient();
       await sipClientRef.current.initialize(data.username, data.password);
       
-      toast.success('Connected to call server');
+      console.log('[Softphone] ✅ SIP client ready');
+      toast.success('Call system ready');
       return true;
     } catch (error) {
-      console.error('Error initializing SIP client:', error);
-      toast.error('Failed to connect to call server');
+      console.error('[Softphone] SIP initialization failed:', error);
+      toast.error('Call system initialization failed - will retry on first call');
+      sipClientRef.current = null; // Reset so we can retry
       return false;
     }
   };
