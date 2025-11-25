@@ -76,18 +76,11 @@ useEffect(() => {
   const check24HourWindow = () => {
     if (!messages.length) return false;
     
-    // Find the last message from agent
-    const lastAgentMessage = [...messages].reverse().find(m => m.sender_type === 'agent');
-    if (!lastAgentMessage) return false;
+    // Get the very last message in the conversation (regardless of sender)
+    const lastMessage = messages[messages.length - 1];
     
-    // Check if there's any user message after the last agent message
-    const lastAgentMessageIndex = messages.findIndex(m => m.id === lastAgentMessage.id);
-    const hasUserResponseAfter = messages.slice(lastAgentMessageIndex + 1).some(m => m.sender_type === 'user');
-    
-    if (hasUserResponseAfter) return false;
-    
-    // Check if 24 hours have passed
-    const lastMessageTime = new Date(lastAgentMessage.timestamp).getTime();
+    // Check if 24 hours have passed since the last message
+    const lastMessageTime = new Date(lastMessage.timestamp).getTime();
     const now = Date.now();
     const hoursPassed = (now - lastMessageTime) / (1000 * 60 * 60);
     
