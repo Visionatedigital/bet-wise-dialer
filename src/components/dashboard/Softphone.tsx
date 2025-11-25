@@ -269,9 +269,7 @@ export function Softphone({
   };
 
   useEffect(() => {
-    // Auto-initialize SIP client on mount
-    initializeSipClient();
-
+    // Cleanup on unmount
     return () => {
       if (sipClientRef.current) {
         sipClientRef.current.unregister();
@@ -458,25 +456,26 @@ const handleCallEnd = () => {
         return;
       }
 
-      // SIP fallback (existing code)
+      // SIP path
       if (!numberToCall) {
         toast.error('No phone number to call');
         return;
       }
       
       setCallStatus("ringing");
-      toast.loading('Connecting to call server...');
       
       // Initialize SIP client if not already done
       if (!sipClientRef.current) {
+        toast.loading('Connecting to call server...');
         const initialized = await initializeSipClient();
         if (!initialized) {
           setCallStatus("idle");
+          toast.dismiss();
           return;
         }
+        toast.dismiss();
       }
 
-      toast.dismiss();
       toast.loading('Calling customer...');
       
       // Close dial pad if open
