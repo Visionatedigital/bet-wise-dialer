@@ -127,25 +127,21 @@ export function MessageComposer({ conversationId, disabled = false, onOptimistic
       });
 
       if (error) {
-        console.error('[Send Message] Full error object:', error);
-        console.error('[Send Message] Error type:', typeof error);
-        console.error('[Send Message] Error keys:', Object.keys(error));
+        console.error('[Send Message] Error:', error);
         
-        // Supabase returns the response body in error for non-2xx status
-        // Check multiple possible error structures
+        // Supabase Functions returns error in different format
+        // When edge function returns non-2xx, the response body is in error.context
         const errorData = (error as any);
-        const errorStr = JSON.stringify(error);
-        const errorMessage = errorData?.message || '';
-        const errorCode = errorData?.error || errorData?.code || '';
+        const contextError = errorData?.context?.error;
+        const contextMessage = errorData?.context?.message;
         
-        // Log what we found
-        console.log('[Send Message] Parsed error:', { errorMessage, errorCode });
+        console.log('[Send Message] Error context:', { contextError, contextMessage });
         
+        // Check if it's a 24-hour window error
         const is24HourWindow = 
-          errorMessage.includes('WHATSAPP_24H_WINDOW') || 
-          errorMessage.includes('409') ||
-          errorCode === 'WHATSAPP_24H_WINDOW' ||
-          errorStr.includes('24');
+          contextError === 'WHATSAPP_24H_WINDOW' ||
+          (contextMessage && contextMessage.includes('24h')) ||
+          (contextMessage && contextMessage.includes('template'));
         
         console.log('[Send Message] Is 24h window?', is24HourWindow, 'useTemplate:', useTemplate);
         
