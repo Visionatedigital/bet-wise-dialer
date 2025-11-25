@@ -52,7 +52,7 @@ export function Softphone({
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
   const [dialedNumber, setDialedNumber] = useState("");
   const [showDialPad, setShowDialPad] = useState(false);
-  const [connectionMode, setConnectionMode] = useState<ConnectionMode>('webrtc');
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>('sip');
   const [isWebRTCReady, setIsWebRTCReady] = useState(false);
   const [webrtcToken, setWebrtcToken] = useState<string | null>(null);
   const [showPostCallNotes, setShowPostCallNotes] = useState(false);
@@ -269,10 +269,8 @@ export function Softphone({
   };
 
   useEffect(() => {
-    // Auto-connect WebRTC on mount
-    if (connectionMode === 'webrtc') {
-      initializeWebRTC();
-    }
+    // Auto-initialize SIP client on mount
+    initializeSipClient();
 
     return () => {
       if (sipClientRef.current) {
