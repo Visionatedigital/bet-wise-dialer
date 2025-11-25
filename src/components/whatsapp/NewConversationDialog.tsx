@@ -55,7 +55,7 @@ export function NewConversationDialog({ onConversationCreated }: NewConversation
       onConversationCreated(data.conversationId);
 
       // Auto-send approved template to initiate conversation
-      toast.info("Sending template to initiate chat...");
+      console.log('[NewConversation] Sending template message...');
       const { data: sendData, error: sendError } = await supabase.functions.invoke('whatsapp-send-message', {
         body: {
           conversationId: data.conversationId,
@@ -66,10 +66,32 @@ export function NewConversationDialog({ onConversationCreated }: NewConversation
 
       if (sendError) {
         console.error('[NewConversation] Template send error:', sendError);
-        toast.error("Failed to send template. You can still send manually.");
-      } else {
-        toast.success("Template message sent!");
+        
+        // Parse the detailed error message
+        const errorMessage = sendError.message || 'Unknown error';
+        const errorDetails = (sendError as any).context?.body 
+          ? JSON.parse((sendError as any).context.body) 
+          : null;
+        
+        let userMessage = 'Failed to send template message';
+        
+        if (errorDetails?.error === 'WHATSAPP_24H_WINDOW') {
+          userMessage = errorDetails.message || 'Template required to start conversation';
+        } else if (errorMessage.includes('WhatsApp API error')) {
+          userMessage = 'WhatsApp API error - check template approval status';
+        } else if (errorMessage.includes('template')) {
+          userMessage = 'Template not found or not approved. Contact admin.';
+        } else {
+          userMessage = `Failed to send: ${errorMessage}`;
+        }
+        
+        toast.error(userMessage);
+        // Don't close dialog on failure so user can see the error
+        return;
       }
+
+      console.log('[NewConversation] Template sent successfully:', sendData);
+      toast.success("Conversation started with template message!");
       
       setOpen(false);
       setPhoneNumber("");
