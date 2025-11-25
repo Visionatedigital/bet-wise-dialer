@@ -311,21 +311,29 @@ Deno.serve(async (req) => {
 
     console.log('[Step 5] WhatsApp API called, status:', whatsappResponse.status);
     const whatsappData = await whatsappResponse.json();
-    console.log('[Step 5] WhatsApp API response:', whatsappData);
+    console.log('[Step 5] WhatsApp API response:', JSON.stringify(whatsappData, null, 2));
 
     if (!whatsappResponse.ok) {
-      const code = (whatsappData && (whatsappData.error?.code || whatsappData.errors?.[0]?.code)) || null;
+      console.error('[WhatsApp API Error] Full response:', JSON.stringify(whatsappData, null, 2));
+      const errorDetails = whatsappData.error || {};
+      const code = errorDetails.code || whatsappData.errors?.[0]?.code || null;
+      const message = errorDetails.message || whatsappData.errors?.[0]?.message || 'Unknown error';
+      
+      console.error('[WhatsApp API Error] Code:', code, 'Message:', message);
+      
       if (code === 131047) {
         return new Response(
           JSON.stringify({
             error: 'WHATSAPP_24H_WINDOW',
             message: 'Customer last replied more than 24h ago. Send a WhatsApp template to re-engage.',
-            details: { conversationId: conversation.id }
+            details: { conversationId: conversation.id, whatsappError: whatsappData }
           }),
           { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      throw new Error(`WhatsApp API error: ${JSON.stringify(whatsappData)}`);
+      
+      // Return detailed error for debugging
+      throw new Error(`WhatsApp API error [${code}]: ${message}`);
     }
 
     const messageId = whatsappData.messages?.[0]?.id;
