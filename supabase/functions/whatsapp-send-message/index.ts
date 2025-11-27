@@ -332,6 +332,17 @@ Deno.serve(async (req) => {
         );
       }
       
+      if (code === 135000) {
+        return new Response(
+          JSON.stringify({
+            error: 'TEMPLATE_ERROR',
+            message: 'Template not found or not approved. Verify the template exists and is approved in Meta Business Suite.',
+            details: { conversationId: conversation.id, whatsappError: whatsappData }
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       // Return detailed error for debugging
       throw new Error(`WhatsApp API error [${code}]: ${message}`);
     }
