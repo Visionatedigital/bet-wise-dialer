@@ -77,6 +77,8 @@ export function NewConversationDialog({ onConversationCreated }: NewConversation
         
         if (errorDetails?.error === 'WHATSAPP_24H_WINDOW') {
           userMessage = errorDetails.message || 'Template required to start conversation';
+        } else if (errorMessage.includes('[135000]')) {
+          userMessage = 'Template "test_template_1" not found or not approved in Meta Business Suite. Contact admin to approve the template.';
         } else if (errorMessage.includes('WhatsApp API error')) {
           userMessage = 'WhatsApp API error - check template approval status';
         } else if (errorMessage.includes('template')) {
