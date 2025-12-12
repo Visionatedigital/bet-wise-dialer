@@ -1,73 +1,169 @@
-# Welcome to your Lovable project
+# BetSure Dialer
 
-## Project info
+A professional call center application for BetSure agents to manage leads, make outbound calls, and track customer interactions.
 
-**URL**: https://lovable.dev/projects/4b9b5e59-eeb0-4772-bc45-f6fbf46df754
+## Features
 
-## How can I edit this code?
+- **Softphone/WebRTC Dialer** - Make calls directly from the browser via Africa's Talking
+- **Lead Management** - Import, segment, and assign leads to agents
+- **AI Coach** - Real-time call suggestions and pitch scripts
+- **WhatsApp Integration** - Message customers via WhatsApp Business API
+- **Campaign Management** - Create campaigns with target segments and goals
+- **Reports & Analytics** - AI-generated performance reports via OpenAI GPT-4
+- **Role-Based Access** - Admin, Manager, and Agent dashboards
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- **Frontend**: React 18 + TypeScript + Vite
+- **UI**: Shadcn/UI + TailwindCSS + Radix UI
+- **Backend**: Supabase (PostgreSQL + Edge Functions)
+- **Auth**: Supabase Auth with role-based RLS
+- **Telephony**: Africa's Talking Voice API + WebRTC
+- **AI**: OpenAI GPT-4 for reports + call analysis
+- **Desktop**: Tauri (for Windows & macOS builds)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/4b9b5e59-eeb0-4772-bc45-f6fbf46df754) and start prompting.
+## Quick Start
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js 18+ and npm
+- Rust (for desktop builds) - [Install Rust](https://rustup.rs/)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Installation
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+```bash
+# Clone the repository
 git clone <YOUR_GIT_URL>
+cd bet-wise-dialer
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Install dependencies
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+# Copy environment file and configure
+cp .env.example .env
+# Edit .env with your Supabase credentials
 ```
 
-**Edit a file directly in GitHub**
+### Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Create a `.env` file with the following:
 
-**Use GitHub Codespaces**
+```env
+# Required - Supabase Configuration
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+# Optional - App Configuration
+VITE_APP_NAME=BetSure Dialer
+VITE_APP_ENV=development
 
-## What technologies are used for this project?
+# Optional - Feature Flags
+VITE_ENABLE_WHATSAPP=true
+VITE_ENABLE_AI_COACH=true
+VITE_ENABLE_CALL_RECORDING=true
+```
 
-This project is built with:
+### Development
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```bash
+# Run web development server
+npm run dev
 
-## How can I deploy this project?
+# Run desktop app in development mode
+npm run tauri:dev
+# or
+npm run desktop
+```
 
-Simply open [Lovable](https://lovable.dev/projects/4b9b5e59-eeb0-4772-bc45-f6fbf46df754) and click on Share -> Publish.
+### Building
 
-## Can I connect a custom domain to my Lovable project?
+```bash
+# Build web app
+npm run build
 
-Yes, you can!
+# Build desktop app for current platform
+npm run tauri:build
+# or
+npm run desktop:build
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+# Build with debug symbols
+npm run tauri:build:debug
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Desktop App (Tauri)
+
+The application can run as a standalone desktop app on Windows and macOS using Tauri.
+
+### Building for Distribution
+
+#### macOS
+```bash
+npm run tauri:build
+# Output: src-tauri/target/release/bundle/dmg/BetSure Dialer_x.x.x_x64.dmg
+```
+
+#### Windows
+```bash
+npm run tauri:build
+# Output: src-tauri/target/release/bundle/nsis/BetSure Dialer_x.x.x_x64-setup.exe
+```
+
+### Desktop Features
+
+- Native window with system tray icon
+- Single instance enforcement (prevents multiple windows)
+- Native notifications for callbacks and alerts
+- Optimized release builds with LTO
+
+## Project Structure
+
+```
+bet-wise-dialer/
+├── src/                    # React frontend source
+│   ├── components/         # UI components
+│   ├── pages/              # Page components
+│   ├── hooks/              # Custom React hooks
+│   ├── contexts/           # React contexts
+│   ├── integrations/       # Supabase client
+│   └── utils/              # Utility functions
+├── src-tauri/              # Tauri desktop app
+│   ├── src/                # Rust source code
+│   ├── icons/              # App icons
+│   └── tauri.conf.json     # Tauri configuration
+├── supabase/               # Supabase configuration
+│   ├── functions/          # Edge Functions
+│   └── migrations/         # Database migrations
+└── public/                 # Static assets
+```
+
+## Supabase Configuration
+
+The following secrets need to be configured in your Supabase project dashboard:
+
+| Secret | Description |
+|--------|-------------|
+| `OPENAI_API_KEY` | OpenAI API key for AI reports |
+| `AFRICASTALKING_API_KEY` | Africa's Talking API key |
+| `AFRICASTALKING_USERNAME` | Africa's Talking username |
+| `AFRICASTALKING_SIP_USERNAME` | SIP username for WebRTC |
+| `AFRICASTALKING_SIP_PASSWORD` | SIP password for WebRTC |
+| `AFRICASTALKING_PHONE_NUMBER` | Caller ID phone number |
+
+## User Roles
+
+| Role | Access Level |
+|------|-------------|
+| **Admin** | Full system access, user approval, lead import |
+| **Manager** | Monitor agents, team reports, campaign management |
+| **Agent** | Make calls, manage leads, view personal KPIs |
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+Proprietary - © 2025 BetSure. All rights reserved.
