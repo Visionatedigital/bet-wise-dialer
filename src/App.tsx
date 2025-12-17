@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
+import { UpdateDialog } from "@/components/UpdateDialog";
 
 // Lazy load pages for better initial load performance
 const RoleBasedDashboard = lazy(() => import("@/components/RoleBasedDashboard").then(m => ({ default: m.RoleBasedDashboard })));
@@ -39,10 +40,33 @@ const queryClient = new QueryClient({
   },
 });
 
-// Component that initializes auto-update checking
+// Component that initializes auto-update checking and shows update dialog
 function AutoUpdateChecker({ children }: { children: React.ReactNode }) {
-  useAutoUpdate(); // This will check for updates on mount
-  return <>{children}</>;
+  const { 
+    currentVersion,
+    updateInfo, 
+    showUpdateDialog, 
+    setShowUpdateDialog,
+    downloadAndInstall,
+    dismissUpdate 
+  } = useAutoUpdate();
+
+  return (
+    <>
+      {children}
+      {updateInfo && (
+        <UpdateDialog
+          open={showUpdateDialog}
+          onOpenChange={setShowUpdateDialog}
+          currentVersion={currentVersion}
+          newVersion={updateInfo.version}
+          releaseNotes={updateInfo.releaseNotes}
+          onDownload={downloadAndInstall}
+          onDismiss={dismissUpdate}
+        />
+      )}
+    </>
+  );
 }
 
 const App = () => (

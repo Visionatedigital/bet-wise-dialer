@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "BetSure Dialer",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "identifier": "com.betsure.dialer",
   "plugins": {
     "updater": {
