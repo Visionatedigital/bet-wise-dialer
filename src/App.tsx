@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 
 // Lazy load pages for better initial load performance
 const RoleBasedDashboard = lazy(() => import("@/components/RoleBasedDashboard").then(m => ({ default: m.RoleBasedDashboard })));
@@ -38,14 +39,21 @@ const queryClient = new QueryClient({
   },
 });
 
+// Component that initializes auto-update checking
+function AutoUpdateChecker({ children }: { children: React.ReactNode }) {
+  useAutoUpdate(); // This will check for updates on mount
+  return <>{children}</>;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <ThemeProvider defaultTheme="light" storageKey="betsure-theme">
         <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
+          <AutoUpdateChecker>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
             <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
               <Routes>
               <Route path="/auth" element={<Auth />} />
@@ -134,6 +142,7 @@ const App = () => (
               </Routes>
             </Suspense>
           </BrowserRouter>
+          </AutoUpdateChecker>
         </TooltipProvider>
       </ThemeProvider>
     </AuthProvider>

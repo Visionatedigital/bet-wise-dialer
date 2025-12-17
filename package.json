@@ -25,7 +25,8 @@
     "supabase:db:reset": "supabase db reset",
     "supabase:functions:serve": "supabase functions serve",
     "use:local": "./scripts/use-local-supabase.sh",
-    "use:cloud": "./scripts/use-cloud-supabase.sh"
+    "use:cloud": "./scripts/use-cloud-supabase.sh",
+    "use:custom-server": "node -e \"console.log('Use PowerShell: .\\\\scripts\\\\use-custom-server.ps1 or Bash: ./scripts/use-custom-server.sh')\""
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -64,6 +65,8 @@
     "@supabase/supabase-js": "^2.58.0",
     "@tanstack/react-query": "^5.83.0",
     "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.9.0",
     "africastalking": "^0.7.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

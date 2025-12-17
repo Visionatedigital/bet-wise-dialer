@@ -20,6 +20,9 @@
     "shell:allow-open",
     "http:default",
     "process:default",
-    "opener:default"
+    "opener:default",
+    "updater:default",
+    "updater:allow-check",
+    "updater:allow-download-and-install"
   ]
 }

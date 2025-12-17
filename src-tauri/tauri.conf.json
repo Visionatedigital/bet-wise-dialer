@@ -1,11 +1,22 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "BetSure Dialer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.betsure.dialer",
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/Visionatedigital/bet-wise-dialer/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:8080",
+    "devUrl": "http://localhost:8083",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
@@ -29,7 +40,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://voice.africastalking.com https://*.africastalking.com wss://*.africastalking.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webrtc.africastalking.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; font-src 'self' data:; frame-src 'self' https:"
+      "csp": "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* http://127.0.0.1:* http://*:* https://api.openai.com https://voice.africastalking.com https://*.africastalking.com wss://*.africastalking.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webrtc.africastalking.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; font-src 'self' data:; frame-src 'self' https:"
     },
     "trayIcon": {
       "iconPath": "icons/32x32.png",
@@ -69,7 +80,9 @@
       "nsis": {
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
-        "installMode": "currentUser"
+        "installMode": "perMachine",
+        "startMenuFolder": "BetSure",
+        "compression": "lzma"
       }
     }
   }
