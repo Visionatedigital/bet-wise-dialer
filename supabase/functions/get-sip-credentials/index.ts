@@ -55,33 +55,60 @@ serve(async (req) => {
     }
 
     console.log('[SIP-Credentials] 📋 Manager ID:', profile?.manager_id || 'None');
+    console.log('[SIP-Credentials] 👤 User ID:', user.id);
 
-    // Determine which SIP credentials to use based on manager_id
-    // Split agents evenly across two SIP phones by using manager_id
+    // Determine which SIP credentials to use
+    // Load balance evenly across two SIP phones using user_id for consistent routing
     let SIP_USERNAME: string | undefined;
     let SIP_PASSWORD: string | undefined;
     let phoneNumber = 1;
 
-    if (profile?.manager_id) {
-      // Use the first character of manager_id UUID to determine which phone
-      // This provides a deterministic split: 0-7 = phone 1, 8-f = phone 2
-      const firstChar = profile.manager_id.toString().charAt(0).toLowerCase();
-      const usePhone2 = parseInt(firstChar, 16) >= 8;
+    // Use the user's own ID for load balancing (more reliable than manager_id)
+    // This ensures each user consistently uses the same SIP phone
+    const userId = user.id.toString();
+    
+    // Hash the user ID to get a number for load balancing
+    // Use multiple characters from the UUID for better distribution
+    const hashChars = userId.replace(/-/g, '').substring(0, 8);
+    const hashValue = parseInt(hashChars, 16);
+    const usePhone2 = hashValue % 2 === 1; // Odd = phone 2, Even = phone 1
 
-      if (usePhone2) {
-        SIP_USERNAME = Deno.env.get('AFRICASTALKING_SIP_USERNAME_2');
-        SIP_PASSWORD = Deno.env.get('AFRICASTALKING_SIP_PASSWORD_2');
+    console.log('[SIP-Credentials] 🔢 Hash value:', hashValue, '| Use Phone 2:', usePhone2);
+
+    // Check if both phones are configured
+    const phone1Username = Deno.env.get('AFRICASTALKING_SIP_USERNAME');
+    const phone1Password = Deno.env.get('AFRICASTALKING_SIP_PASSWORD');
+    const phone2Username = Deno.env.get('AFRICASTALKING_SIP_USERNAME_2');
+    const phone2Password = Deno.env.get('AFRICASTALKING_SIP_PASSWORD_2');
+
+    const hasPhone1 = phone1Username && phone1Password;
+    const hasPhone2 = phone2Username && phone2Password;
+
+    console.log('[SIP-Credentials] 📱 Phone 1 configured:', hasPhone1 ? 'Yes' : 'No');
+    console.log('[SIP-Credentials] 📱 Phone 2 configured:', hasPhone2 ? 'Yes' : 'No');
+
+    if (usePhone2 && hasPhone2) {
+      // Use phone 2
+      SIP_USERNAME = phone2Username;
+      SIP_PASSWORD = phone2Password;
         phoneNumber = 2;
-      } else {
-        SIP_USERNAME = Deno.env.get('AFRICASTALKING_SIP_USERNAME');
-        SIP_PASSWORD = Deno.env.get('AFRICASTALKING_SIP_PASSWORD');
+    } else if (!usePhone2 && hasPhone1) {
+      // Use phone 1
+      SIP_USERNAME = phone1Username;
+      SIP_PASSWORD = phone1Password;
         phoneNumber = 1;
-      }
-    } else {
-      // No manager assigned, use first phone as fallback
-      SIP_USERNAME = Deno.env.get('AFRICASTALKING_SIP_USERNAME');
-      SIP_PASSWORD = Deno.env.get('AFRICASTALKING_SIP_PASSWORD');
+    } else if (hasPhone1) {
+      // Fallback to phone 1 if phone 2 not configured
+      SIP_USERNAME = phone1Username;
+      SIP_PASSWORD = phone1Password;
       phoneNumber = 1;
+      console.log('[SIP-Credentials] ⚠️ Phone 2 not configured, falling back to Phone 1');
+    } else if (hasPhone2) {
+      // Fallback to phone 2 if phone 1 not configured
+      SIP_USERNAME = phone2Username;
+      SIP_PASSWORD = phone2Password;
+      phoneNumber = 2;
+      console.log('[SIP-Credentials] ⚠️ Phone 1 not configured, falling back to Phone 2');
     }
 
     if (!SIP_USERNAME || !SIP_PASSWORD) {

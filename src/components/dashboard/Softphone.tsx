@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Clock, Pause, Play, Grid3x3, Delete, TestTube, Plug, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Phone, PhoneOff, Mic, MicOff, Clock, Pause, Play, Grid3x3, Delete, TestTube, RefreshCw, ChevronLeft, ChevronRight, Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,17 +9,18 @@ import { useCallMetrics } from "@/hooks/useCallMetrics";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { SipClient } from "@/utils/SipClient";
-import { SessionState } from "sip.js";
 import { maskPhone } from "@/lib/formatters";
 import { PostCallNotesDialog } from "./PostCallNotesDialog";
 import { parseCallbackIntent } from "@/utils/parseCallbackIntent";
+import { SipClient } from "@/utils/SipClient";
+import { SessionState } from "sip.js";
 
 // @ts-ignore - AfricasTalking WebRTC SDK
 declare const Africastalking: any;
 
 type CallStatus = "idle" | "ringing" | "connected" | "hold" | "muted";
-type ConnectionMode = 'webrtc' | 'sip';
+type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+type ConnectionMode = 'sip' | 'webrtc';
 
 interface SoftphoneProps {
   currentLead?: {
@@ -52,7 +53,7 @@ export function Softphone({
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
   const [dialedNumber, setDialedNumber] = useState("");
   const [showDialPad, setShowDialPad] = useState(false);
-  const [connectionMode, setConnectionMode] = useState<ConnectionMode>('sip');
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>('webrtc');
   const [isWebRTCReady, setIsWebRTCReady] = useState(false);
   const [webrtcToken, setWebrtcToken] = useState<string | null>(null);
   const [showPostCallNotes, setShowPostCallNotes] = useState(false);
@@ -269,8 +270,10 @@ export function Softphone({
   };
 
   useEffect(() => {
-    // Auto-initialize SIP client on mount
-    initializeSipClient();
+    // Auto-initialize WebRTC client on mount
+    // Note: SIP WebSocket is not supported by Africa's Talking in browsers
+    // Use WebRTC SDK instead for browser-based calling
+    initializeWebRTC();
 
     return () => {
       if (sipClientRef.current) {
@@ -338,53 +341,46 @@ const handleCallEnd = () => {
         }
       }
 
-      // Get lead_id from phone number
-      let leadId = null;
-      const { data: leadData } = await supabase
-        .from('leads')
-        .select('id')
-        .eq('phone', pendingCallData.phoneNumber)
-        .single();
-      
-      if (leadData) {
-        leadId = leadData.id;
-      }
-
       // Determine call status based on duration
-      // If duration is 0, call wasn't answered (failed/no answer)
-      const callStatus = pendingCallData.duration > 0 ? 'completed' : 'failed';
+      // If duration is 0, call wasn't answered (no_answer)
+      // If duration > 0, call was connected
+      const callActivityStatus = pendingCallData.duration > 0 ? 'connected' : 'no_answer';
 
       // Save call activity with notes
       const callActivityData = await createCallActivity({
         phone_number: pendingCallData.phoneNumber,
         lead_name: pendingCallData.leadName,
         duration_seconds: pendingCallData.duration,
-        status: callStatus,
+        status: callActivityStatus,
         notes: notes,
         campaign_id: campaignId,
-        call_type: 'outbound'
+        call_type: 'outbound',
+        start_time: new Date().toISOString(),
+        end_time: new Date().toISOString()
       } as any);
 
       // Parse notes for callback intent
       const callbackIntent = parseCallbackIntent(notes);
       
-      if (callbackIntent.shouldCreateCallback && user && leadId) {
-        // Automatically create callback
-        await supabase.from('callbacks').insert([{
-          lead_id: leadId,
+      if (callbackIntent.shouldCreateCallback && user) {
+        // Automatically create callback - only use fields that exist in the schema
+        const { error: callbackError } = await supabase.from('callbacks').insert([{
           user_id: user.id,
-          call_activity_id: callActivityData?.id || null,
           scheduled_for: callbackIntent.callbackDate!.toISOString(),
-          priority: callbackIntent.priority,
           status: 'pending',
           notes: notes,
           lead_name: pendingCallData.leadName,
           phone_number: pendingCallData.phoneNumber
         }]);
 
-        toast.success("Call notes saved and callback scheduled", {
-          description: `Callback set for ${callbackIntent.callbackDate!.toLocaleDateString()}`
-        });
+        if (callbackError) {
+          console.error('Error creating callback:', callbackError);
+          toast.success("Call notes saved (callback scheduling failed)");
+        } else {
+          toast.success("Call notes saved and callback scheduled", {
+            description: `Callback set for ${callbackIntent.callbackDate!.toLocaleDateString()}`
+          });
+        }
       } else {
         toast.success("Call notes saved successfully");
       }
