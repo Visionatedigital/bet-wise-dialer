@@ -46,22 +46,62 @@ cp .env.example .env
 
 ### Environment Variables
 
-Create a `.env` file with the following:
+Create a `.env` file in the root directory. The application supports three database modes:
+
+#### Option 1: Supabase Cloud (Default)
 
 ```env
-# Required - Supabase Configuration
+VITE_DATABASE_MODE=supabase-cloud
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key-here
+```
 
-# Optional - App Configuration
+Or use the helper script:
+```bash
+npm run use:cloud
+```
+
+#### Option 2: Local Supabase
+
+```env
+VITE_DATABASE_MODE=supabase-local
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_ANON_KEY=your-local-anon-key
+```
+
+Setup local Supabase:
+```bash
+npm run supabase:setup
+npm run use:local
+```
+
+#### Option 3: Custom Server (Company-hosted PostgreSQL)
+
+```env
+VITE_DATABASE_MODE=custom-server
+VITE_CUSTOM_DB_URL=http://your-server:3000
+VITE_CUSTOM_DB_KEY=your-postgrest-anon-key
+VITE_CUSTOM_DB_SCHEMA=public
+```
+
+Use helper scripts:
+- **Windows (PowerShell):** `.\scripts\use-custom-server.ps1`
+- **Linux/Mac (Bash):** `./scripts/use-custom-server.sh`
+
+#### Additional Configuration
+
+```env
+# App Configuration
 VITE_APP_NAME=BetSure Dialer
 VITE_APP_ENV=development
 
-# Optional - Feature Flags
+# Feature Flags
 VITE_ENABLE_WHATSAPP=true
 VITE_ENABLE_AI_COACH=true
 VITE_ENABLE_CALL_RECORDING=true
 ```
+
+> **Note:** For detailed database configuration instructions, see [INSTALLATION.md](./INSTALLATION.md#database-configuration)
 
 ### Development
 
@@ -103,10 +143,24 @@ npm run tauri:build
 ```
 
 #### Windows
+
+**Prerequisites:**
+- Install NSIS (Nullsoft Scriptable Install System) from https://nsis.sourceforge.io/Download
+- Add NSIS to your PATH environment variable
+
+**Build:**
 ```bash
 npm run tauri:build
 # Output: src-tauri/target/release/bundle/nsis/BetSure Dialer_x.x.x_x64-setup.exe
 ```
+
+The installer includes:
+- Per-machine installation (requires admin)
+- Desktop and Start Menu shortcuts
+- Custom installation directory selection
+- Uninstaller
+
+> **Note:** For detailed Windows installer setup, see [INSTALLATION.md](./INSTALLATION.md#building-the-windows-installer)
 
 ### Desktop Features
 
@@ -136,7 +190,17 @@ bet-wise-dialer/
 └── public/                 # Static assets
 ```
 
-## Supabase Configuration
+## Database Configuration
+
+The application supports multiple database backends:
+
+- **Supabase Cloud**: Production-ready cloud database
+- **Local Supabase**: Development with local Docker instance
+- **Custom Server**: Company-hosted PostgreSQL via PostgREST API
+
+All Supabase logic is preserved and can be switched via environment variables. See [INSTALLATION.md](./INSTALLATION.md) for detailed setup instructions.
+
+## Supabase Configuration (Cloud/Local)
 
 The following secrets need to be configured in your Supabase project dashboard:
 

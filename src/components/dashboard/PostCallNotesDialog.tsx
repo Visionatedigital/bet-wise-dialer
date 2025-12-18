@@ -1,15 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Clock, AlertCircle } from "lucide-react";
+import { Clock, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { maskPhone } from "@/lib/formatters";
 
 interface PostCallNotesDialogProps {
   open: boolean;
-  onSave: (notes: string) => void;
+  onSave: (notes: string) => Promise<void> | void;
   leadName: string;
   phoneNumber: string;
   campaign: string;
@@ -25,6 +25,15 @@ export function PostCallNotesDialog({
   callDuration
 }: PostCallNotesDialogProps) {
   const [notes, setNotes] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Reset notes when dialog opens
+  useEffect(() => {
+    if (open) {
+      setNotes("");
+      setIsSaving(false);
+    }
+  }, [open]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -38,8 +47,27 @@ export function PostCallNotesDialog({
       return;
     }
 
-    await onSave(notes);
-    setNotes("");
+    if (isSaving) {
+      return; // Prevent double-clicks
+    }
+
+    setIsSaving(true);
+    try {
+      await onSave(notes);
+      setNotes("");
+      // Note: Dialog will be closed by parent component after successful save
+    } catch (error) {
+      console.error('Error saving call notes:', error);
+      toast.error("Failed to save call notes. Please try again.");
+      setIsSaving(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleSave();
+    }
   };
 
   return (
@@ -81,9 +109,11 @@ export function PostCallNotesDialog({
               placeholder='e.g., "Switched off", "Promised to deposit", "Not interested", etc.'
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              onKeyDown={handleKeyDown}
               rows={5}
               className="resize-none"
               autoFocus
+              disabled={isSaving}
             />
             <p className="text-xs text-muted-foreground">
               This information will be saved to the database for reporting
@@ -94,10 +124,20 @@ export function PostCallNotesDialog({
           <Button
             onClick={handleSave}
             className="w-full"
-            disabled={!notes.trim()}
+            disabled={!notes.trim() || isSaving}
           >
-            Save & Continue
+            {isSaving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save & Continue'
+            )}
           </Button>
+          <p className="text-xs text-center text-muted-foreground">
+            Press Ctrl+Enter (Cmd+Enter on Mac) to save quickly
+          </p>
         </div>
       </DialogContent>
     </Dialog>

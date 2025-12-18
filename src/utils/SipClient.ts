@@ -40,7 +40,10 @@ export class SipClient {
       if (!this.remoteAudio) {
         this.remoteAudio = document.createElement('audio');
         this.remoteAudio.autoplay = true;
+        this.remoteAudio.playsInline = true; // Important for mobile/Tauri compatibility
+        this.remoteAudio.setAttribute('playsinline', 'true');
         document.body.appendChild(this.remoteAudio);
+        console.log('[SIP] Audio element created and added to DOM');
       }
 
       // Parse username and domain from Africa's Talking format

@@ -53,9 +53,12 @@ export function Softphone({
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
   const [dialedNumber, setDialedNumber] = useState("");
   const [showDialPad, setShowDialPad] = useState(false);
-  const [connectionMode, setConnectionMode] = useState<ConnectionMode>('webrtc');
+  // Detect if running in Tauri (desktop) - use SIP, otherwise use WebRTC (browser)
+  const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>(isTauri ? 'sip' : 'webrtc');
   const [isWebRTCReady, setIsWebRTCReady] = useState(false);
   const [webrtcToken, setWebrtcToken] = useState<string | null>(null);
+  const [sipConnectionStatus, setSipConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [showPostCallNotes, setShowPostCallNotes] = useState(false);
   const [pendingCallData, setPendingCallData] = useState<{
     phoneNumber: string;
@@ -69,6 +72,13 @@ export function Softphone({
   const sipClientRef = useRef<SipClient | null>(null);
   const webrtcClientRef = useRef<any>(null);
   const callIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const sipStatusRef = useRef<ConnectionStatus>('disconnected');
+  const sipRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Keep ref in sync with state for background retry logic
+  useEffect(() => {
+    sipStatusRef.current = sipConnectionStatus;
+  }, [sipConnectionStatus]);
 
   // Initialize WebRTC client
   const initializeWebRTC = async () => {
@@ -117,16 +127,22 @@ export function Softphone({
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
         const { error: storeError } = await supabase
           .from('webrtc_tokens')
-          .upsert({
-            user_id: user?.id,
-            token: tokenData.token,
-            client_name: tokenData.clientName,
-            expires_at: expiresAt.toISOString()
-          });
+          .upsert(
+            {
+              user_id: user?.id,
+              token: tokenData.token,
+              client_name: tokenData.clientName,
+              expires_at: expiresAt.toISOString()
+            },
+            {
+              onConflict: 'user_id', // use unique user_id key for upsert
+            }
+          );
         
-        if (storeError) {
+        if (storeError && storeError.code !== '23505') {
+          // 23505 = unique violation; safe to ignore here because upsert semantics still hold
           console.error('[WebRTC-INIT] ⚠️ Failed to store token:', storeError);
-        } else {
+        } else if (!storeError) {
           console.log('[WebRTC-INIT] ✅ Token stored in database');
         }
       }
@@ -270,10 +286,33 @@ export function Softphone({
   };
 
   useEffect(() => {
-    // Auto-initialize WebRTC client on mount
-    // Note: SIP WebSocket is not supported by Africa's Talking in browsers
-    // Use WebRTC SDK instead for browser-based calling
-    initializeWebRTC();
+    // Auto-initialize based on environment
+    // In Tauri (desktop): Use SIP WebSocket (works better in desktop environment)
+    // In browser: Use WebRTC SDK (SIP WebSocket not supported by Africa's Talking in browsers)
+    console.log('[Softphone] Environment detection:', {
+      isTauri,
+      hasTauriWindow: typeof window !== 'undefined' && '__TAURI__' in window,
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+    });
+    
+    if (isTauri) {
+      console.log('[Softphone] ✅ Running in Tauri desktop - using SIP mode');
+      setSipConnectionStatus('connecting');
+      // Pre-initialize SIP client in Tauri for better UX
+      initializeSipClient()
+        .then(() => {
+          console.log('[Softphone] ✅ SIP client initialized successfully');
+          setSipConnectionStatus('connected');
+        })
+        .catch(err => {
+          console.error('[Softphone] ❌ SIP pre-initialization failed, will retry on first call:', err);
+          setSipConnectionStatus('error');
+          toast.error('SIP connection failed. Will retry on first call.');
+        });
+    } else {
+      console.log('[Softphone] ✅ Running in browser - initializing WebRTC');
+      initializeWebRTC();
+    }
 
     return () => {
       if (sipClientRef.current) {
@@ -285,8 +324,59 @@ export function Softphone({
       if (callIntervalRef.current) {
         clearInterval(callIntervalRef.current);
       }
+      if (sipRetryTimeoutRef.current) {
+        clearTimeout(sipRetryTimeoutRef.current);
+        sipRetryTimeoutRef.current = null;
+      }
     };
-  }, []);
+  }, [isTauri]);
+
+  // Background auto-retry loop for SIP connectivity in Tauri
+  useEffect(() => {
+    if (!isTauri) return;
+
+    // If we're already connected or in the process of connecting, do nothing
+    if (sipConnectionStatus === 'connected' || sipConnectionStatus === 'connecting') {
+      return;
+    }
+
+    // Schedule a retry only if one isn't already scheduled
+    if (!sipRetryTimeoutRef.current) {
+      const delayMs = 5000; // 5 seconds between attempts
+      console.log('[Softphone] 🔄 Scheduling SIP auto-retry in', delayMs, 'ms. Current status:', sipConnectionStatus);
+      sipRetryTimeoutRef.current = setTimeout(async () => {
+        sipRetryTimeoutRef.current = null;
+        // Double-check status before retrying
+        if (sipStatusRef.current === 'connected' || sipStatusRef.current === 'connecting') {
+          console.log('[Softphone] 🔄 Auto-retry skipped, SIP already connected/connecting');
+          return;
+        }
+
+        try {
+          console.log('[Softphone] 🔄 Auto-retrying SIP initialization...');
+          setSipConnectionStatus('connecting');
+          const ok = await initializeSipClient();
+          if (!ok) {
+            console.warn('[Softphone] ⚠️ SIP auto-retry did not connect');
+            setSipConnectionStatus('error');
+          } else {
+            console.log('[Softphone] ✅ SIP auto-retry connected successfully');
+          }
+        } catch (err) {
+          console.error('[Softphone] ❌ SIP auto-retry failed:', err);
+          setSipConnectionStatus('error');
+        }
+      }, delayMs);
+    }
+
+    // Cleanup: clear any pending timer when dependencies change/unmount
+    return () => {
+      if (sipRetryTimeoutRef.current) {
+        clearTimeout(sipRetryTimeoutRef.current);
+        sipRetryTimeoutRef.current = null;
+      }
+    };
+  }, [isTauri, sipConnectionStatus, initializeSipClient]);
 
 function normalizePhoneNumber(input: string) {
   const trimmed = (input || '').trim();
@@ -324,19 +414,27 @@ const handleCallEnd = () => {
   };
 
   const handleSaveCallNotes = async (notes: string) => {
-    if (!pendingCallData) return;
+    if (!pendingCallData) {
+      console.error('[Softphone] No pending call data to save');
+      toast.error("No call data to save");
+      return;
+    }
 
     try {
+      console.log('[Softphone] Saving call notes:', { notes, pendingCallData });
+      
       // Get campaign_id if available
       let campaignId = null;
       if (pendingCallData.campaign !== 'No Campaign') {
-        const { data: campaignData } = await supabase
+        const { data: campaignData, error: campaignError } = await supabase
           .from('campaigns')
           .select('id')
           .eq('name', pendingCallData.campaign)
           .single();
         
-        if (campaignData) {
+        if (campaignError) {
+          console.warn('[Softphone] Could not find campaign:', campaignError);
+        } else if (campaignData) {
           campaignId = campaignData.id;
         }
       }
@@ -347,7 +445,10 @@ const handleCallEnd = () => {
       const callActivityStatus = pendingCallData.duration > 0 ? 'connected' : 'no_answer';
 
       // Save call activity with notes
-      const callActivityData = await createCallActivity({
+      console.log('[Softphone] Attempting to save call activity...');
+      
+      // Add timeout to prevent hanging (30 seconds)
+      const savePromise = createCallActivity({
         phone_number: pendingCallData.phoneNumber,
         lead_name: pendingCallData.leadName,
         duration_seconds: pendingCallData.duration,
@@ -358,6 +459,14 @@ const handleCallEnd = () => {
         start_time: new Date().toISOString(),
         end_time: new Date().toISOString()
       } as any);
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Save operation timed out after 30 seconds')), 30000)
+      );
+      
+      const callActivityData = await Promise.race([savePromise, timeoutPromise]);
+
+      console.log('[Softphone] ✅ Call activity saved successfully:', callActivityData);
 
       // Parse notes for callback intent
       const callbackIntent = parseCallbackIntent(notes);
@@ -374,7 +483,7 @@ const handleCallEnd = () => {
         }]);
 
         if (callbackError) {
-          console.error('Error creating callback:', callbackError);
+          console.error('[Softphone] Error creating callback:', callbackError);
           toast.success("Call notes saved (callback scheduling failed)");
         } else {
           toast.success("Call notes saved and callback scheduled", {
@@ -385,11 +494,32 @@ const handleCallEnd = () => {
         toast.success("Call notes saved successfully");
       }
 
+      // Close dialog and clear pending data
       setShowPostCallNotes(false);
       setPendingCallData(null);
+      console.log('[Softphone] Call notes saved successfully, dialog closed');
     } catch (error) {
-      console.error('Error saving call notes:', error);
-      toast.error("Failed to save call notes");
+      console.error('[Softphone] ❌ Error saving call notes:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = "Failed to save call notes";
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          errorMessage = "Save operation timed out. Please try again.";
+        } else if (error.message.includes('duplicate') || error.message.includes('unique')) {
+          errorMessage = "This call may have already been saved.";
+        } else if (error.message.includes('permission') || error.message.includes('policy')) {
+          errorMessage = "Permission denied. Please check your access rights.";
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = "Network error. Please check your connection and try again.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast.error(errorMessage);
+      // Re-throw error so PostCallNotesDialog can handle it
+      throw error;
     }
   };
 
@@ -463,13 +593,15 @@ const handleCallEnd = () => {
       setCallStatus("ringing");
       
       // Initialize SIP client if not already done or if previous init failed
-      if (!sipClientRef.current) {
-        console.log('[Softphone] SIP not initialized, initializing now...');
+      if (!sipClientRef.current || sipConnectionStatus !== 'connected') {
+        console.log('[Softphone] SIP not initialized or connection lost, initializing now...');
         toast.loading('Connecting to call server...');
+        setSipConnectionStatus('connecting');
         const initialized = await initializeSipClient();
         toast.dismiss();
         if (!initialized) {
           setCallStatus("idle");
+          toast.error('Failed to connect to call server. Please try again.');
           return;
         }
       }
@@ -514,35 +646,47 @@ const handleCallEnd = () => {
     }
   };
 
-  const initializeSipClient = async () => {
+  async function initializeSipClient() {
     try {
-      console.log('[Softphone] Initializing SIP client...');
+      console.log('[Softphone] 🔄 Initializing SIP client...');
+      setSipConnectionStatus('connecting');
+      
       const { data, error } = await supabase.functions.invoke('get-sip-credentials');
       
       if (error) {
-        console.error('[Softphone] Failed to get SIP credentials:', error);
+        console.error('[Softphone] ❌ Failed to get SIP credentials:', error);
+        setSipConnectionStatus('error');
         throw error;
       }
       
       if (!data?.username || !data?.password) {
-        console.error('[Softphone] Missing SIP credentials in response');
+        console.error('[Softphone] ❌ Missing SIP credentials in response:', data);
+        setSipConnectionStatus('error');
         throw new Error('SIP credentials not available');
       }
 
-      console.log('[Softphone] Got credentials, initializing SIP client...');
+      console.log('[Softphone] ✅ Got credentials, initializing SIP client...');
       sipClientRef.current = new SipClient();
-      await sipClientRef.current.initialize(data.username, data.password);
+      const initialized = await sipClientRef.current.initialize(data.username, data.password);
       
-      console.log('[Softphone] ✅ SIP client ready');
-      toast.success('Call system ready');
-      return true;
+      if (initialized) {
+        console.log('[Softphone] ✅ SIP client ready and registered');
+        setSipConnectionStatus('connected');
+        toast.success('SIP phone connected');
+        return true;
+      } else {
+        console.error('[Softphone] ❌ SIP initialization returned false');
+        setSipConnectionStatus('error');
+        return false;
+      }
     } catch (error) {
-      console.error('[Softphone] SIP initialization failed:', error);
-      toast.error('Call system initialization failed - will retry on first call');
+      console.error('[Softphone] ❌ SIP initialization failed:', error);
+      setSipConnectionStatus('error');
+      toast.error('SIP connection failed - will retry on first call');
       sipClientRef.current = null; // Reset so we can retry
       return false;
     }
-  };
+  }
 
   const handleHangup = () => {
     if (connectionMode === 'webrtc' && webrtcClientRef.current) {
@@ -671,24 +815,33 @@ const handleCallEnd = () => {
           <div className="flex items-center gap-2">
             <Phone className="h-5 w-5" />
             Softphone
-            <Badge variant={isWebRTCReady ? "default" : "secondary"} className="text-xs">
-              {isWebRTCReady ? "Ready" : "Connecting..."}
+            <Badge variant={
+              connectionMode === 'sip' 
+                ? (sipConnectionStatus === 'connected' ? "default" : sipConnectionStatus === 'connecting' ? "secondary" : "destructive")
+                : (isWebRTCReady ? "default" : "secondary")
+            } className="text-xs">
+              {connectionMode === 'sip' 
+                ? (sipConnectionStatus === 'connected' ? "SIP Ready" : sipConnectionStatus === 'connecting' ? "Connecting..." : "SIP Error")
+                : (isWebRTCReady ? "Ready" : "Connecting...")
+              }
             </Badge>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (isWebRTCReady) {
-                disconnectWebRTC();
-              } else {
-                initializeWebRTC();
-              }
-            }}
-            className="h-8 w-8 p-0"
-          >
-            <Plug className={`h-4 w-4 ${isWebRTCReady ? 'text-success' : ''}`} />
-          </Button>
+          {connectionMode === 'webrtc' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (isWebRTCReady) {
+                  disconnectWebRTC();
+                } else {
+                  initializeWebRTC();
+                }
+              }}
+              className="h-8 w-8 p-0"
+            >
+              <Plug className={`h-4 w-4 ${isWebRTCReady ? 'text-success' : ''}`} />
+            </Button>
+          )}
         </CardTitle>
       </CardHeader>
 
@@ -753,7 +906,7 @@ const handleCallEnd = () => {
               <Button 
                 onClick={() => handleCall()}
                 className="h-12 w-12 rounded-full bg-success hover:bg-success/90"
-                disabled={!currentLead || !isWebRTCReady}
+                disabled={!currentLead || (connectionMode === 'webrtc' && !isWebRTCReady)}
               >
                 <Phone className="h-5 w-5" />
               </Button>

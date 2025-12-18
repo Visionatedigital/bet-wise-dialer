@@ -2,6 +2,9 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
+// Check if running in Tauri
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -95,12 +98,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('[Auth] Sign out successful');
       // Clear admin view mode on logout
       localStorage.removeItem('adminViewMode');
-      // Force full page redirect to auth page
-      window.location.replace('/auth');
+      
+      // In Tauri, use window.location for reliable navigation
+      // In browser, we could use React Router, but window.location is more reliable
+      if (isTauri) {
+        // For Tauri, we need to use window.location to ensure proper navigation
+        window.location.href = '/auth';
+      } else {
+        window.location.replace('/auth');
+      }
     } catch (error) {
       console.error('[Auth] Sign out failed:', error);
       // Even if there's an error, redirect to auth page
-      window.location.replace('/auth');
+      if (isTauri) {
+        window.location.href = '/auth';
+      } else {
+        window.location.replace('/auth');
+      }
     }
   };
 

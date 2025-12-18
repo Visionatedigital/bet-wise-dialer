@@ -35,12 +35,12 @@ export function UpdateDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Update Available!
+            New update available
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3">
               <p>
-                A new version of BetSure Dialer is available.
+                A new version of BetSure Dialer is available. Install now to get the latest fixes and improvements.
               </p>
               
               <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
@@ -68,14 +68,16 @@ export function UpdateDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={onDismiss}>
-            Later
+            Remind me later
           </AlertDialogCancel>
           <AlertDialogAction onClick={onDownload} className="gap-2">
             <Download className="h-4 w-4" />
-            Download Update
+            Install now
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
 }
+
+

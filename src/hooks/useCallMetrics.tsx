@@ -109,7 +109,9 @@ export const useCallMetrics = () => {
   };
 
   const createCallActivity = async (activity: Partial<CallActivity>) => {
-    if (!user) return;
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
 
     try {
       const { data, error } = await supabase
@@ -121,14 +123,20 @@ export const useCallMetrics = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[useCallMetrics] Database error creating call activity:', error);
+        throw error;
+      }
 
-      // Refresh metrics after creating activity
-      await fetchMetrics();
+      // Refresh metrics after creating activity (non-blocking)
+      // Don't await to prevent hanging - metrics will update in background
+      fetchMetrics().catch(err => {
+        console.warn('[useCallMetrics] Failed to refresh metrics (non-critical):', err);
+      });
       
       return data;
     } catch (err) {
-      console.error('Error creating call activity:', err);
+      console.error('[useCallMetrics] Error creating call activity:', err);
       throw err;
     }
   };
