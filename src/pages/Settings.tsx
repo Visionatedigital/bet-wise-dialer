@@ -24,10 +24,39 @@ import {
   Building,
   Phone,
   Mail,
-  Globe
+  Globe,
+  Download,
+  RefreshCw
 } from "lucide-react";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
+import { toast } from "sonner";
+import React from "react";
 
 const Settings = () => {
+  const { 
+    currentVersion, 
+    updateAvailable, 
+    updateInfo,
+    checkForUpdates,
+    downloadAndInstall,
+    setShowUpdateDialog
+  } = useAutoUpdate();
+  const [checking, setChecking] = React.useState(false);
+
+  const handleCheckForUpdates = async () => {
+    setChecking(true);
+    try {
+      await checkForUpdates(false);
+      // The checkForUpdates function will automatically set updateInfo and showUpdateDialog
+      // if an update is available
+    } catch (error) {
+      console.error('Error checking for updates:', error);
+      toast.error('Failed to check for updates. Please try again later.');
+    } finally {
+      setChecking(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -156,6 +185,57 @@ const Settings = () => {
                     <Save className="h-4 w-4 mr-2" />
                     Save Preferences
                   </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Download className="h-5 w-5" />
+                    Application Updates
+                  </CardTitle>
+                  <CardDescription>
+                    Check for and install the latest version of BetSure Dialer
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
+                    <div>
+                      <p className="font-medium">Current Version</p>
+                      <p className="text-sm text-muted-foreground">v{currentVersion}</p>
+                    </div>
+                    {updateAvailable && (
+                      <Badge variant="default" className="bg-green-500">
+                        Update Available: v{updateInfo?.version}
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handleCheckForUpdates}
+                      disabled={checking}
+                      className="flex-1"
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${checking ? 'animate-spin' : ''}`} />
+                      {checking ? 'Checking...' : 'Check for Updates'}
+                    </Button>
+                    {updateAvailable && updateInfo && (
+                      <Button 
+                        onClick={downloadAndInstall}
+                        variant="default"
+                        className="flex-1"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download Update
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <p className="text-xs text-muted-foreground">
+                    The app automatically checks for updates when you start it. 
+                    Click "Check for Updates" to manually check now.
+                  </p>
                 </CardContent>
               </Card>
             </div>

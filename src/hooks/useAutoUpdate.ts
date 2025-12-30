@@ -146,17 +146,22 @@ export function useAutoUpdate() {
   useEffect(() => {
     // Delay the check to let the app fully load
     const timer = setTimeout(() => {
-      const dismissedVersion = localStorage.getItem('dismissedUpdate');
-      checkForUpdates(true).then((hasUpdate) => {
-        if (hasUpdate && updateInfo && dismissedVersion === updateInfo.version) {
-          // User already dismissed this version, don't show dialog again
-          setShowUpdateDialog(false);
-        }
-      });
+      checkForUpdates(true);
     }, 3000);
 
     return () => clearTimeout(timer);
   }, []);
+
+  // Handle dismissed updates after updateInfo is set
+  useEffect(() => {
+    if (updateInfo) {
+      const dismissedVersion = localStorage.getItem('dismissedUpdate');
+      if (dismissedVersion === updateInfo.version) {
+        // User already dismissed this version, don't show dialog again
+        setShowUpdateDialog(false);
+      }
+    }
+  }, [updateInfo]);
 
   return {
     currentVersion: CURRENT_VERSION,
