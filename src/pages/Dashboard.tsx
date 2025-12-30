@@ -7,7 +7,8 @@ import { AgentKPIs } from "@/components/dashboard/AgentKPIs";
 import { CallHistoryModal } from "@/components/dashboard/CallHistoryModal";
 import { LivePitchScript } from "@/components/dashboard/LivePitchScript";
 import { CallSentimentOrb } from "@/components/dashboard/CallSentimentOrb";
-import { type Lead } from "@/data/sampleData";
+import { useRealtimeAI } from "@/hooks/useRealtimeAI";
+import { type Lead } from "@/types/lead";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -44,13 +45,23 @@ function DashboardContent() {
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [showCallHistory, setShowCallHistory] = useState(false);
+  const [isCallActive, setIsCallActive] = useState(false);
   
-  // Mock AI state (no realtime pipeline)
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [callSentiment, setCallSentiment] = useState<CallSentiment>('neutral');
   const suggestionTimerRef = useRef<NodeJS.Timeout | null>(null);
   const sentimentTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+
+  // Real-time AI coach (OpenAI Realtime)
+  const {
+    isConnected: isAIConnected,
+    isConnecting: isAIConnecting,
+    suggestions,
+    sentiment: callSentiment,
+    connect: connectAI,
+    disconnect: disconnectAI,
+    clearSuggestions,
+    sendContext: sendAISnippet,
+  } = useRealtimeAI();
 
   // Initialize AudioContext and set agent status to online
   useEffect(() => {
@@ -95,66 +106,31 @@ function DashboardContent() {
     loadCampaignScript();
   }, [currentLead?.segment]);
 
-  // Mock sentiment and suggestions with natural call flow
+  // Connect / disconnect AI coach based on call lifecycle (driven by Softphone)
   useEffect(() => {
-    // Clear timers when no call
-    if (!currentCallId) {
-      if (suggestionTimerRef.current) clearInterval(suggestionTimerRef.current);
-      if (sentimentTimerRef.current) clearInterval(sentimentTimerRef.current);
-      setCallSentiment('neutral');
-      setSuggestions([]);
-      return;
-    }
-
-    // Get the script sequence for this customer segment
-    const category = getCategoryFromSegment(currentLead?.segment || null);
-    const scriptSequence = getSequenceForCategory(category);
-    const callStartTime = Date.now();
-    const activeTimers: NodeJS.Timeout[] = [];
-
-    // Schedule each suggestion at its designated time
-    scriptSequence.forEach((suggestion) => {
-      const timer = setTimeout(() => {
-        setSuggestions(prev => [
-          {
-            type: suggestion.type,
-            confidence: suggestion.confidence,
-            title: suggestion.title,
-            message: suggestion.message,
-            timestamp: Date.now()
-          },
-          ...prev
-        ].slice(0, 5)); // Keep last 5 suggestions visible
-      }, suggestion.delay * 1000);
-      
-      activeTimers.push(timer);
-    });
-
-    // Sentiment cycles naturally through call phases
-    let sentimentPhase = 0;
-    const sentimentPhases: CallSentiment[] = ['neutral', 'neutral', 'positive', 'neutral', 'positive'];
-    
-    sentimentTimerRef.current = setInterval(() => {
-      const elapsed = (Date.now() - callStartTime) / 1000;
-      
-      // Change sentiment based on call progress
-      if (elapsed < 15) {
-        setCallSentiment('neutral'); // Greeting phase
-      } else if (elapsed < 35) {
-        setCallSentiment(sentimentPhases[sentimentPhase % sentimentPhases.length]);
-        sentimentPhase++;
-      } else if (elapsed < 50) {
-        setCallSentiment(Math.random() > 0.5 ? 'positive' : 'neutral'); // Active engagement
+    if (isCallActive) {
+      console.log('[Dashboard] Call active, connecting AI coach...');
+      connectAI()
+        .then(() => {
+          // Wait a bit for the connection to stabilize before sending initial context
+          setTimeout(() => {
+            const initialContext = `New call started with lead ${currentLead?.name || 'Unknown'} in campaign ${
+              currentLead?.campaign || 'No Campaign'
+            }. Monitor the conversation and provide real-time suggestions to help close the deal.`;
+            console.log('[Dashboard] Sending initial context to AI:', initialContext);
+            sendAISnippet(initialContext);
+          }, 1000);
+        })
+        .catch((err) => {
+          console.error('[Dashboard] Failed to connect AI coach:', err);
+          toast.error('Failed to connect AI coach. Suggestions may not be available.');
+        });
       } else {
-        setCallSentiment('positive'); // Closing phase
-      }
-    }, 3000);
-
-    return () => {
-      activeTimers.forEach(timer => clearTimeout(timer));
-      if (sentimentTimerRef.current) clearInterval(sentimentTimerRef.current);
-    };
-  }, [currentCallId, currentLead?.segment]);
+      console.log('[Dashboard] Call ended, disconnecting AI coach...');
+      clearSuggestions();
+      disconnectAI();
+    }
+  }, [isCallActive, currentLead?.name, currentLead?.campaign, connectAI, disconnectAI, clearSuggestions, sendAISnippet]);
 
   useEffect(() => {
     if (user) {
@@ -449,9 +425,9 @@ useEffect(() => {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Agent Dashboard</h1>
+          <h1 className="text-3xl font-black tracking-tight font-serif">Agent Dashboard</h1>
           <p className="text-muted-foreground">
-            Your workspace for managing calls and leads • {new Date().toLocaleDateString('en-UG', { 
+            Your workspace for managing calls and leads ??? {new Date().toLocaleDateString('en-UG', { 
               weekday: 'long', 
               year: 'numeric', 
               month: 'long', 
@@ -482,6 +458,8 @@ useEffect(() => {
             hasPreviousLead={currentLeadIndex > 0}
             currentLeadPosition={currentLeadIndex + 1}
             totalLeads={queueLeads.length}
+            onCallStart={() => setIsCallActive(true)}
+            onCallEnd={() => setIsCallActive(false)}
           />
           
           <QueueCard 
@@ -537,8 +515,9 @@ useEffect(() => {
                     leadName={currentLead?.name || ''}
                     campaign={currentLead?.campaign || 'Default'}
                     leadIntent={currentLead?.intent}
-                    isCallActive={currentCallId !== null}
+                    isCallActive={isCallActive}
                     audioContext={audioContext || undefined}
+                    onTranscriptForAI={sendAISnippet}
                   />
                 </TabsContent>
                 
@@ -643,10 +622,30 @@ useEffect(() => {
                 
                 {/* Real-time AI Tab */}
                 <TabsContent value="realtime" className="space-y-4 mt-4">
+                  {/* Connection Status */}
+                  {isCallActive && (
+                    <div className="flex items-center gap-2 text-sm mb-2">
+                      {isAIConnecting && (
+                        <Badge variant="outline" className="animate-pulse">
+                          Connecting AI...
+                        </Badge>
+                      )}
+                      {isAIConnected && (
+                        <Badge variant="default" className="bg-green-500">
+                          AI Connected
+                        </Badge>
+                      )}
+                      {!isAIConnected && !isAIConnecting && isCallActive && (
+                        <Badge variant="destructive">
+                          AI Disconnected
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                   {/* Sentiment Orb with Suggestions */}
                   <CallSentimentOrb 
                     sentiment={callSentiment}
-                    isActive={currentCallId !== null}
+                    isActive={isCallActive}
                     suggestions={suggestions}
                   />
                 </TabsContent>
@@ -725,3 +724,4 @@ export default function Dashboard() {
     </DashboardLayout>
   );
 }
+

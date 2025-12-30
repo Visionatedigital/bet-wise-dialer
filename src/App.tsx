@@ -23,6 +23,7 @@ const Monitor = lazy(() => import("./pages/Monitor"));
 const Performance = lazy(() => import("./pages/Performance"));
 const ManagementMonitor = lazy(() => import("./pages/ManagementMonitor"));
 const ManagementCampaigns = lazy(() => import("./pages/ManagementCampaigns"));
+const ManagementReports = lazy(() => import("./pages/ManagementReports"));
 const Integrations = lazy(() => import("./pages/Integrations"));
 const Callbacks = lazy(() => import("./pages/Callbacks"));
 const WhatsApp = lazy(() => import("./pages/WhatsApp"));
@@ -114,6 +115,11 @@ const App = () => (
               <Route path="/reports" element={
                 <ProtectedRoute>
                   <RoleBasedReports />
+                </ProtectedRoute>
+              } />
+              <Route path="/management-reports" element={
+                <ProtectedRoute>
+                  <ManagementReports />
                 </ProtectedRoute>
               } />
               <Route path="/campaigns" element={

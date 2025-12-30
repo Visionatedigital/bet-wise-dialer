@@ -53,13 +53,68 @@ export default function ManagementCampaigns() {
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // Fetch campaigns
+      const { data: campaignsData, error: campaignsError } = await supabase
         .from('campaigns')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setCampaigns((data as Campaign[]) || []);
+      if (campaignsError) throw campaignsError;
+      if (!campaignsData || campaignsData.length === 0) {
+        setCampaigns([]);
+        return;
+      }
+
+      const campaignIds = campaignsData.map(c => c.id);
+
+      // Fetch all leads counts in one query
+      const { data: leadsData } = await supabase
+        .from('leads')
+        .select('campaign_id')
+        .in('campaign_id', campaignIds);
+
+      // Fetch all call activities in one query
+      const { data: callsData } = await supabase
+        .from('call_activities')
+        .select('campaign_id, status, deposit_amount')
+        .in('campaign_id', campaignIds);
+
+      // Aggregate metrics by campaign
+      const leadsByCampaign: Record<string, number> = {};
+      const callsByCampaign: Record<string, number> = {};
+      const conversionsByCampaign: Record<string, number> = {};
+      const depositsByCampaign: Record<string, number> = {};
+
+      (leadsData || []).forEach(lead => {
+        if (lead.campaign_id) {
+          leadsByCampaign[lead.campaign_id] = (leadsByCampaign[lead.campaign_id] || 0) + 1;
+        }
+      });
+
+      (callsData || []).forEach(call => {
+        if (call.campaign_id) {
+          callsByCampaign[call.campaign_id] = (callsByCampaign[call.campaign_id] || 0) + 1;
+          
+          if (call.status === 'converted') {
+            conversionsByCampaign[call.campaign_id] = (conversionsByCampaign[call.campaign_id] || 0) + 1;
+          }
+          
+          const depositAmount = Number(call.deposit_amount) || 0;
+          depositsByCampaign[call.campaign_id] = (depositsByCampaign[call.campaign_id] || 0) + depositAmount;
+        }
+      });
+
+      // Combine campaign data with real metrics
+      const campaignsWithMetrics: Campaign[] = campaignsData.map((campaign) => ({
+        ...campaign,
+        total_leads: leadsByCampaign[campaign.id] || 0,
+        total_calls: callsByCampaign[campaign.id] || 0,
+        total_conversions: conversionsByCampaign[campaign.id] || 0,
+        total_deposits: depositsByCampaign[campaign.id] || 0,
+      }));
+
+      setCampaigns(campaignsWithMetrics);
     } catch (error) {
       console.error('Error fetching campaigns:', error);
       toast.error('Failed to load campaigns');

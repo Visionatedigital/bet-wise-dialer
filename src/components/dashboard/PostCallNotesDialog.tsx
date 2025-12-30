@@ -53,8 +53,8 @@ export function PostCallNotesDialog({
 
     setIsSaving(true);
     try {
-      await onSave(notes);
-      setNotes("");
+    await onSave(notes);
+    setNotes("");
       // Note: Dialog will be closed by parent component after successful save
     } catch (error) {
       console.error('Error saving call notes:', error);

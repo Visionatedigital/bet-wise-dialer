@@ -1,7 +1,7 @@
 import { TrendingUp, Phone, Target, Clock, DollarSign } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { formatUGX } from "@/data/sampleData";
+import { formatUGX } from "@/lib/formatters";
 import { useCallMetrics } from "@/hooks/useCallMetrics";
 
 interface KPICardProps {

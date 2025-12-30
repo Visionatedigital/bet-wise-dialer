@@ -42,6 +42,8 @@ import { useAgentAnalysis } from "@/hooks/useAgentAnalysis";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { ExportReportModal } from "@/components/dashboard/ExportReportModal";
+import { useAuth } from "@/contexts/AuthContext";
 
 const dateRanges = [
   { label: "Today", value: "today" },
@@ -222,9 +224,9 @@ Customer: Yes, let's do it.`;
             <p className="text-muted-foreground">Your personal performance insights & metrics</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
               <Download className="h-4 w-4 mr-2" />
-              Export
+              Generate Performance Report
             </Button>
           </div>
         </div>
@@ -933,6 +935,13 @@ Customer: Yes, let's do it.`;
           </TabsContent>
         </Tabs>
       </div>
+
+      <ExportReportModal 
+        open={exportOpen} 
+        onOpenChange={setExportOpen}
+        dateRange={selectedDateRange}
+        selectedAgent={user?.id || 'all'}
+      />
     </DashboardLayout>
   );
 }

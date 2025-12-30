@@ -11,6 +11,7 @@ interface LivePitchScriptProps {
   leadIntent?: string;
   isCallActive: boolean;
   audioContext?: AudioContext;
+  onTranscriptForAI?: (text: string) => void;
 }
 
 const complianceItems = [
@@ -25,7 +26,8 @@ export const LivePitchScript = ({
   campaign, 
   leadIntent,
   isCallActive,
-  audioContext
+  audioContext,
+  onTranscriptForAI,
 }: LivePitchScriptProps) => {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -39,12 +41,43 @@ export const LivePitchScript = ({
   });
 
   // Initialize speech tracking
+  const transcriptBufferRef = useRef<string[]>([]);
+  const transcriptTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
   const { fullTranscript, isConnected, sendAudioData } = useSpeechTracking({
     isCallActive,
     onTranscriptUpdate: (transcript) => {
       console.log('[LivePitchScript] Transcript update:', transcript);
+      if (onTranscriptForAI && transcript.trim()) {
+        // Buffer transcripts and send in batches every 2 seconds for better AI analysis
+        transcriptBufferRef.current.push(transcript);
+        
+        // Clear existing timer
+        if (transcriptTimerRef.current) {
+          clearTimeout(transcriptTimerRef.current);
+        }
+        
+        // Send buffered transcripts after 2 seconds of silence or immediately if buffer is large
+        transcriptTimerRef.current = setTimeout(() => {
+          if (transcriptBufferRef.current.length > 0) {
+            const combinedTranscript = transcriptBufferRef.current.join(' ');
+            console.log('[LivePitchScript] Sending buffered transcript to AI:', combinedTranscript);
+            onTranscriptForAI(combinedTranscript);
+            transcriptBufferRef.current = [];
+          }
+        }, 2000);
+      }
     }
   });
+  
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (transcriptTimerRef.current) {
+        clearTimeout(transcriptTimerRef.current);
+      }
+    };
+  }, []);
 
   // Setup audio capture when call is active
   useEffect(() => {

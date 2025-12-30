@@ -112,24 +112,59 @@ const UserManagement = () => {
 
 const handleRoleChange = async (userId: string, newRole: string) => {
     try {
-      // Remove existing roles
-      await supabase
+      // Validate role value
+      const validRoles = ['admin', 'management', 'agent', 'moderator', 'user'];
+      if (!validRoles.includes(newRole)) {
+        throw new Error(`Invalid role: ${newRole}. Must be one of: ${validRoles.join(', ')}`);
+      }
+
+      console.log(`[UserManagement] Updating role for user ${userId} to ${newRole}`);
+
+      // Remove existing roles (check for errors)
+      const { error: deleteError, data: deleteData } = await supabase
         .from('user_roles')
         .delete()
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select();
+
+      if (deleteError) {
+        console.error('[UserManagement] Error deleting existing roles:', deleteError);
+        throw new Error(`Failed to delete existing roles: ${deleteError.message || deleteError.code || 'Unknown error'}`);
+      }
+
+      console.log(`[UserManagement] Deleted ${deleteData?.length || 0} existing role(s)`);
 
       // Add new role
-      const { error } = await supabase
+      const { error: insertError, data: insertData } = await supabase
         .from('user_roles')
-        .insert([{ user_id: userId, role: newRole as any }]);
+        .insert([{ user_id: userId, role: newRole }])
+        .select();
 
-      if (error) throw error;
+      if (insertError) {
+        console.error('[UserManagement] Error inserting new role:', insertError);
+        
+        // Provide more specific error messages
+        let errorMsg = 'Failed to update role';
+        if (insertError.code === '23505') {
+          errorMsg = 'Role already exists for this user';
+        } else if (insertError.code === '23514') {
+          errorMsg = `Invalid role value: ${newRole}. Please check the role is valid.`;
+        } else if (insertError.message) {
+          errorMsg = insertError.message;
+        } else if (insertError.details) {
+          errorMsg = insertError.details;
+        }
+        
+        throw new Error(errorMsg);
+      }
 
-      toast.success('Role updated successfully');
+      console.log(`[UserManagement] Successfully inserted role:`, insertData);
+      toast.success(`Role updated to ${newRole} successfully`);
       fetchUsers();
-    } catch (error) {
-      console.error('Error updating role:', error);
-      toast.error('Failed to update role');
+    } catch (error: any) {
+      console.error('[UserManagement] Error updating role:', error);
+      const errorMessage = error?.message || error?.details || error?.hint || error?.code || 'Unknown error occurred';
+      toast.error(`Failed to update role: ${errorMessage}`);
     }
   };
 

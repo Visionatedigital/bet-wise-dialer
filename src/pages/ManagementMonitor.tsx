@@ -48,36 +48,55 @@ export default function ManagementMonitor() {
 
   React.useEffect(() => {
     const fetchMetrics = async () => {
+      // Skip fetching for 'daily' period since we use hook data
+      if (timePeriod === 'daily') {
+        setPeriodLeads({});
+        setPeriodCalls({});
+        return;
+      }
+
       const start = periodStart(timePeriod).toISOString();
       try {
         // Leads assigned per agent for the selected period
         const leadsQuery = supabase
           .from('leads')
           .select('user_id, assigned_at')
-          .not('user_id', 'is', null);
-        const { data: leadsData } = await (timePeriod === 'all'
+          .not('user_id', 'is', null)
+          .not('assigned_at', 'is', null);
+        
+        const { data: leadsData, error: leadsError } = await (timePeriod === 'all'
           ? leadsQuery
           : leadsQuery.gte('assigned_at', start));
 
+        if (leadsError) {
+          console.error('[Monitor] Error fetching leads:', leadsError);
+        } else {
         const lMap: Record<string, number> = {};
         (leadsData || []).forEach((r: any) => {
           if (r.user_id) lMap[r.user_id] = (lMap[r.user_id] || 0) + 1;
         });
         setPeriodLeads(lMap);
+        }
 
         // Calls per agent for the selected period
         const callsQuery = supabase
           .from('call_activities')
-          .select('user_id, start_time');
-        const { data: callsData } = await (timePeriod === 'all'
+          .select('user_id, start_time')
+          .not('start_time', 'is', null);
+        
+        const { data: callsData, error: callsError } = await (timePeriod === 'all'
           ? callsQuery
           : callsQuery.gte('start_time', start));
 
+        if (callsError) {
+          console.error('[Monitor] Error fetching calls:', callsError);
+        } else {
         const cMap: Record<string, number> = {};
         (callsData || []).forEach((r: any) => {
           if (r.user_id) cMap[r.user_id] = (cMap[r.user_id] || 0) + 1;
         });
         setPeriodCalls(cMap);
+        }
       } catch (e) {
         console.error('[Monitor] Failed to load period metrics', e);
       }
@@ -141,11 +160,15 @@ export default function ManagementMonitor() {
                       </div>
                       <div>
                         <div className="text-muted-foreground">Assigned ({timePeriod === 'daily' ? 'Today' : timePeriod === 'weekly' ? 'Week' : timePeriod === 'monthly' ? 'Month' : 'All'})</div>
-                        <div className="font-medium">{getFilteredLeads(a, timePeriod)}</div>
+                        <div className="font-medium">
+                          {timePeriod === 'daily' ? a.assignedLeads : getFilteredLeads(a, timePeriod)}
+                        </div>
                       </div>
                       <div>
                         <div className="text-muted-foreground">Calls ({timePeriod === 'daily' ? 'Today' : timePeriod === 'weekly' ? 'Week' : timePeriod === 'monthly' ? 'Month' : 'All'})</div>
-                        <div className="font-medium">{getFilteredCalls(a, timePeriod)}</div>
+                        <div className="font-medium">
+                          {timePeriod === 'daily' ? a.calls : getFilteredCalls(a, timePeriod)}
+                        </div>
                       </div>
                     </div>
                   </CardContent>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface FunnelData {
   dials: number;
@@ -19,7 +20,8 @@ interface Insight {
   category: string;
 }
 
-export function useFunnelAnalysis(dateRange: string, campaignId: string) {
+export function useFunnelAnalysis(dateRange: string, campaignId: string, managerId?: string | null) {
+  const { user } = useAuth();
   const [funnelData, setFunnelData] = useState<FunnelData | null>(null);
   const [insights, setInsights] = useState<Insight[] | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -32,14 +34,35 @@ export function useFunnelAnalysis(dateRange: string, campaignId: string) {
       setError(null);
 
       try {
+        // Determine manager ID if user is a manager
+        let managerFilter = managerId;
+        
+        if (!managerFilter && user) {
+          // Check if current user is a manager
+          const { data: userRoles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id);
+          
+          const roles = userRoles?.map(r => r.role) || [];
+          if (roles.includes('management') && !roles.includes('admin')) {
+            // User is a manager (not admin), so filter by their team
+            managerFilter = user.id;
+          }
+        }
+
         const { data, error: functionError } = await supabase.functions.invoke('analyze-funnel', {
-          body: { dateRange, campaignId }
+          body: { 
+            dateRange, 
+            campaignId,
+            managerId: managerFilter || null
+          }
         });
 
         if (functionError) throw functionError;
 
         setFunnelData(data.funnelData);
-        setInsights(data.insights);
+        setInsights(data.insights || []);
         setMessage(data.message);
       } catch (err) {
         console.error('Error fetching funnel analysis:', err);
@@ -50,7 +73,7 @@ export function useFunnelAnalysis(dateRange: string, campaignId: string) {
     };
 
     fetchAnalysis();
-  }, [dateRange, campaignId]);
+  }, [dateRange, campaignId, managerId, user]);
 
   return { funnelData, insights, message, loading, error };
 }

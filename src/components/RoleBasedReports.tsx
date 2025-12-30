@@ -1,45 +1,20 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useUserRole } from '@/hooks/useUserRole';
+import { useLocation } from 'react-router-dom';
 import Reports from '@/pages/Reports';
 import AdminReports from '@/pages/AdminReports';
 import ManagementReports from '@/pages/ManagementReports';
 
 export const RoleBasedReports = () => {
-  const { user } = useAuth();
-  const [role, setRole] = useState<'admin' | 'management' | 'agent' | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching user role:', error);
-          setRole('agent');
-        } else {
-          setRole(data.role as 'admin' | 'management' | 'agent');
-        }
-      } catch (error) {
-        console.error('Error:', error);
-        setRole('agent');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUserRole();
-  }, [user]);
+  const { role, loading, isAdmin, isManagement } = useUserRole();
+  const location = useLocation();
+  
+  // Check if user is in management view mode (for admins viewing as managers)
+  const adminViewMode = typeof window !== 'undefined' ? localStorage.getItem('adminViewMode') : null;
+  
+  // Check if coming from management routes (heuristic: check previous route or current context)
+  const isManagementContext = adminViewMode === 'management' || 
+                               location.pathname.includes('management') ||
+                               document.referrer.includes('management');
 
   if (loading) {
     return (
@@ -52,11 +27,21 @@ export const RoleBasedReports = () => {
     );
   }
 
-  if (role === 'admin') {
-    return <AdminReports />;
-  } else if (role === 'management') {
+  // Priority: management role OR admin in management view mode > admin > agent
+  // This ensures managers see their reports, and admins viewing as managers also see management reports
+  if (isManagement || (isAdmin && isManagementContext)) {
+    console.log('[RoleBasedReports] Rendering ManagementReports', {
+      isManagement,
+      isAdmin,
+      adminViewMode,
+      isManagementContext
+    });
     return <ManagementReports />;
+  } else if (isAdmin) {
+    console.log('[RoleBasedReports] Rendering AdminReports for admin user');
+    return <AdminReports />;
   } else {
+    console.log('[RoleBasedReports] Rendering Reports for agent user');
     return <Reports />;
   }
 };

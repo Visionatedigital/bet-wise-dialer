@@ -375,9 +375,7 @@ const ManagementReports = () => {
       } else if (fileType === 'csv') {
         // CSV files are stored as plain text in report_content
         const csvContent = report.report_content || '';
-        // Ensure proper UTF-8 encoding with BOM for Excel/Google Sheets
-        const csvWithBOM = '\ufeff' + csvContent;
-        const csvBlob = new Blob([csvWithBOM], { 
+        const csvBlob = new Blob(['\ufeff' + csvContent], { 
           type: 'text/csv;charset=utf-8;' 
         });
         saveAs(csvBlob, report.file_name || `report-${report.id}.csv`);

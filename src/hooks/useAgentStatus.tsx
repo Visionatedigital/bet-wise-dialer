@@ -52,7 +52,7 @@ export function useAgentStatus() {
 
   const updateStatus = useCallback(
     async (newStatus: AgentStatus) => {
-      if (!user) return;
+    if (!user) return;
 
       // Avoid spamming Supabase with identical status updates
       if (newStatus === status) {
@@ -60,21 +60,21 @@ export function useAgentStatus() {
         return;
       }
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          status: newStatus,
-          current_call_start: newStatus === 'on-call' ? new Date().toISOString() : null,
-          last_status_change: new Date().toISOString()
-        } as any)
-        .eq('id', user.id);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        status: newStatus,
+        current_call_start: newStatus === 'on-call' ? new Date().toISOString() : null,
+        last_status_change: new Date().toISOString()
+      } as any)
+      .eq('id', user.id);
 
-      if (!error) {
-        setStatus(newStatus);
-        console.log('[AgentStatus] Updated status to:', newStatus);
-      } else {
-        console.error('[AgentStatus] Failed to update status:', error);
-      }
+    if (!error) {
+      setStatus(newStatus);
+      console.log('[AgentStatus] Updated status to:', newStatus);
+    } else {
+      console.error('[AgentStatus] Failed to update status:', error);
+    }
     },
     [user, status]
   );

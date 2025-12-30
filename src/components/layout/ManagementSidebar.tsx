@@ -17,7 +17,7 @@ const managementMenuItems = [
   { title: "Performance", url: "/performance", icon: TrendingUp },
   { title: "Agent Monitoring", url: "/management-monitor", icon: Users },
   { title: "Campaigns", url: "/management-campaigns", icon: Target },
-  { title: "Reports", url: "/reports", icon: FileText },
+  { title: "Reports", url: "/management-reports", icon: FileText },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

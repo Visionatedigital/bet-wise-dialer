@@ -36,10 +36,34 @@ export function RecentCallActivities({ dateRange, selectedAgent }: RecentCallAct
     try {
       setLoading(true);
 
-      // Calculate date filter
-      const daysAgo = parseInt(dateRange);
+      // Calculate date filter - handle both numeric strings and named ranges
+      const daysMap: Record<string, number> = {
+        'today': 0,
+        'week': 7,
+        'month': 30,
+        'quarter': 90,
+        '7d': 7,
+        '30d': 30,
+        '90d': 90
+      };
+      
+      let daysAgo: number;
+      if (daysMap[dateRange] !== undefined) {
+        daysAgo = daysMap[dateRange];
+      } else {
+        const parsed = parseInt(dateRange);
+        daysAgo = isNaN(parsed) ? 7 : parsed; // Default to 7 days if invalid
+      }
+      
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - daysAgo);
+      
+      // Validate the date before using it
+      if (isNaN(startDate.getTime())) {
+        console.error('[RecentCallActivities] Invalid date calculated from dateRange:', dateRange);
+        toast.error('Invalid date range specified');
+        return;
+      }
 
       // Build the query
       let query = supabase
@@ -116,7 +140,16 @@ export function RecentCallActivities({ dateRange, selectedAgent }: RecentCallAct
   };
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    
     const date = new Date(dateString);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('[RecentCallActivities] Invalid date string:', dateString);
+      return 'Invalid Date';
+    }
+    
     return date.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',

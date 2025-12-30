@@ -33,7 +33,7 @@ serve(async (req) => {
       throw new Error('Not authenticated');
     }
 
-    const { dateRange, campaignId } = await req.json();
+    const { dateRange, campaignId, managerId } = await req.json();
 
     // Calculate date range
     let endDate = new Date();
@@ -62,13 +62,81 @@ serve(async (req) => {
         startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 1, 1);
         endDate = new Date(endDate.getFullYear(), endDate.getMonth(), 0);
         break;
+      case "week":
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case "quarter":
+        startDate.setDate(startDate.getDate() - 90);
+        break;
+    }
+
+    // Determine which users' data to fetch
+    let userIds: string[] = [];
+    
+    if (managerId) {
+      // Fetch team agents for this manager
+      const { data: teamAgents } = await supabaseClient
+        .from('profiles')
+        .select('id')
+        .eq('manager_id', managerId)
+        .eq('approved', true);
+      
+      userIds = teamAgents?.map(a => a.id) || [];
+      
+      if (userIds.length === 0) {
+        return new Response(
+          JSON.stringify({
+            insights: null,
+            message: "No agents assigned to your team. Assign agents to see team performance insights.",
+            funnelData: {
+              dials: 0,
+              connects: 0,
+              qualified: 0,
+              conversions: 0,
+              connectRate: "0",
+              qualificationRate: "0",
+              conversionRate: "0"
+            }
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      // Check if user is management/admin - if so, fetch all agents' data
+      const { data: userRoles } = await supabaseClient
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id);
+      
+      const roles = userRoles?.map(r => r.role) || [];
+      const isManagement = roles.includes('management') || roles.includes('admin');
+      
+      if (isManagement) {
+        // Fetch all approved agents
+        const { data: allAgents } = await supabaseClient
+          .from('profiles')
+          .select('id')
+          .eq('approved', true)
+          .in('id', 
+            (await supabaseClient
+              .from('user_roles')
+              .select('user_id')
+              .eq('role', 'agent')
+            ).data?.map(r => r.user_id) || []
+          );
+        
+        userIds = allAgents?.map(a => a.id) || [];
+      } else {
+        // Individual agent - only their own data
+        userIds = [user.id];
+      }
     }
 
     // Fetch call activities
     let query = supabaseClient
       .from('call_activities')
       .select('*')
-      .eq('user_id', user.id)
+      .in('user_id', userIds)
       .gte('start_time', startDate.toISOString())
       .lte('start_time', endDate.toISOString());
 
@@ -146,7 +214,7 @@ Time Period: ${dateRange}`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5-2025-08-07',
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

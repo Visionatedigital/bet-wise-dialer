@@ -105,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // For Tauri, we need to use window.location to ensure proper navigation
         window.location.href = '/auth';
       } else {
-        window.location.replace('/auth');
+      window.location.replace('/auth');
       }
     } catch (error) {
       console.error('[Auth] Sign out failed:', error);
@@ -113,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isTauri) {
         window.location.href = '/auth';
       } else {
-        window.location.replace('/auth');
+      window.location.replace('/auth');
       }
     }
   };

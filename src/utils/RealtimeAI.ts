@@ -75,7 +75,7 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
       this.ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          console.log('[RealtimeAI] Received event:', message.type, message);
+          console.log('[RealtimeAI] Received event:', message.type);
           
           // Handle different response event types
           if (message.type === 'response.output_item.added') {
@@ -83,30 +83,45 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
           } else if (message.type === 'response.content_part.added') {
             console.log('[RealtimeAI] Content part added');
           } else if (message.type === 'response.text.delta') {
-            this.handleTextDelta(message.delta);
+            const delta = message.delta || '';
+            if (delta) {
+              this.handleTextDelta(delta);
+            }
           } else if (message.type === 'response.output_item.done') {
             // Extract the complete text from the output item
             const text = message.item?.content?.[0]?.text || '';
-            if (text) {
+            if (text && text.trim().length > 0) {
               console.log('[RealtimeAI] Complete response:', text);
               this.handleTextComplete(text);
             }
           } else if (message.type === 'response.done') {
             // Fallback: extract text from the response
             const outputs = message.response?.output || [];
+            let foundText = false;
             outputs.forEach((output: any) => {
               output.content?.forEach((content: any) => {
-                if (content.type === 'text' && content.text) {
+                if (content.type === 'text' && content.text && content.text.trim().length > 0) {
                   console.log('[RealtimeAI] Response text:', content.text);
                   this.handleTextComplete(content.text);
+                  foundText = true;
                 }
               });
             });
+            if (!foundText && this.currentTextAccumulator.trim().length > 0) {
+              // Use accumulated text if no text found in response
+              console.log('[RealtimeAI] Using accumulated text:', this.currentTextAccumulator);
+              this.handleTextComplete(this.currentTextAccumulator);
+            }
           } else if (message.type === 'error') {
             console.error('[RealtimeAI] Error from OpenAI:', message.error);
+            this.onConnectionChange(false);
+          } else if (message.type === 'session.created') {
+            console.log('[RealtimeAI] Session created successfully');
+          } else if (message.type === 'session.updated') {
+            console.log('[RealtimeAI] Session updated successfully');
           }
         } catch (err) {
-          console.error('[RealtimeAI] Error parsing message:', err);
+          console.error('[RealtimeAI] Error parsing message:', err, event.data);
         }
       };
 
@@ -138,10 +153,16 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
     const fullText = text || this.currentTextAccumulator;
     this.currentTextAccumulator = '';
 
-    if (!fullText || fullText.length < 10) return;
+    if (!fullText || fullText.trim().length < 10) {
+      console.log('[RealtimeAI] Text too short, skipping:', fullText);
+      return;
+    }
+
+    console.log('[RealtimeAI] Processing complete text:', fullText.substring(0, 100) + '...');
 
     // Analyze sentiment
     const sentiment = this.analyzeSentiment(fullText);
+    console.log('[RealtimeAI] Analyzed sentiment:', sentiment);
     this.onSentimentChange(sentiment);
 
     // Parse the AI response and create appropriate suggestions
@@ -153,6 +174,7 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
       timestamp: Date.now()
     };
 
+    console.log('[RealtimeAI] Creating suggestion:', suggestion.title);
     this.onSuggestion(suggestion);
   }
 
@@ -204,16 +226,25 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
 
   sendContext(context: string) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[RealtimeAI] Cannot send context - not connected');
+      console.warn('[RealtimeAI] Cannot send context - not connected. WS state:', this.ws?.readyState);
       return;
     }
 
-    console.log('[RealtimeAI] Sending context:', context);
+    if (!context || context.trim().length === 0) {
+      console.warn('[RealtimeAI] Empty context, skipping');
+      return;
+    }
+
+    console.log('[RealtimeAI] Sending context:', context.substring(0, 100) + (context.length > 100 ? '...' : ''));
     
-    // Accumulate conversation context
+    // Accumulate conversation context (keep last 2000 chars to avoid token limits)
     this.conversationContext += '\n' + context;
+    if (this.conversationContext.length > 2000) {
+      this.conversationContext = this.conversationContext.slice(-2000);
+    }
     
     // Create a conversation item with user context and instructions to analyze sentiment
+    try {
     this.ws.send(JSON.stringify({
       type: 'conversation.item.create',
       item: {
@@ -221,7 +252,7 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
         role: 'user',
         content: [{
           type: 'input_text',
-          text: `Analyze this conversation context and provide actionable suggestions to help close the deal:\n\n${context}\n\nProvide specific tactics based on the customer's responses and sentiment.`
+            text: `The agent just said: "${context}"\n\nAnalyze this and provide a brief, actionable suggestion (1-2 sentences) to help the agent. Focus on:\n- Customer sentiment (positive/negative/critical)\n- Next best action to close the deal\n- Compliance reminders if needed\n\nKeep your response concise and actionable.`
         }]
       }
     }));
@@ -230,6 +261,11 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
     this.ws.send(JSON.stringify({
       type: 'response.create'
     }));
+      
+      console.log('[RealtimeAI] Context sent and response requested');
+    } catch (error) {
+      console.error('[RealtimeAI] Error sending context:', error);
+    }
   }
 
   disconnect() {

@@ -1,7 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,9 +13,51 @@ serve(async (req) => {
   }
 
   try {
-    const { callActivities, dateRange, verbosity, focusArea } = await req.json();
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openAIApiKey) {
+      return new Response(
+        JSON.stringify({ error: 'OPENAI_API_KEY is not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    if (!callActivities || callActivities.length === 0) {
+    // Verify authentication
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: req.headers.get('Authorization')! },
+        },
+      }
+    );
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) {
+      return new Response(
+        JSON.stringify({ error: 'Not authenticated' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { callActivities, dateRange, verbosity, focusArea, agentContext, teamMetrics } = await req.json();
+
+    // Validate input
+    if (!callActivities) {
+      return new Response(
+        JSON.stringify({ error: 'callActivities is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!Array.isArray(callActivities)) {
+      return new Response(
+        JSON.stringify({ error: 'callActivities must be an array' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (callActivities.length === 0) {
       return new Response(
         JSON.stringify({ report: "No call activities found for the selected period." }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -70,7 +111,43 @@ serve(async (req) => {
     ) / totalCalls;
 
     // Build data summary for AI
-    const dataSummary = `
+    let dataSummary = '';
+    
+    if (agentContext) {
+      // Agent-specific report
+      dataSummary = `
+Agent Performance Report for ${agentContext.agentName}:
+- Period: ${dateRange}
+- Agent Email: ${agentContext.email}
+
+Key Performance Indicators (KPIs):
+- Total Calls Made: ${agentContext.totalCalls} (Target: 60 calls/day)
+- Calls Per Hour: ${agentContext.callsPerHour || (agentContext.totalCalls / (8 * (dateRange === 'week' ? 7 : dateRange === 'month' ? 30 : dateRange === 'quarter' ? 90 : 1))).toFixed(1)} (Target: 7.5 calls/hour)
+- Connects: ${agentContext.connects} (Target: 40 connects/day)
+- Connect Rate: ${agentContext.connectRate}% (Target: 70%)
+- Conversions: ${agentContext.conversions} (Target: 12 conversions/day)
+- Conversion Rate (Conversation Rate): ${agentContext.conversionRate}% (Target: 25%)
+- Total Revenue Generated: UGX ${agentContext.totalRevenue.toLocaleString()}
+- Average Handle Time: ${Math.floor(agentContext.avgHandleTime / 60)}:${(agentContext.avgHandleTime % 60).toString().padStart(2, '0')} (Target: 3-5 minutes)
+
+Call Outcomes:
+${Object.entries(statusCounts).map(([status, count]) => 
+  `- ${status}: ${count} (${((count / totalCalls) * 100).toFixed(1)}%)`
+).join('\n')}
+
+Call Notes Analysis:
+${Object.entries(notesAnalysis).map(([pattern, count]) => 
+  `- ${pattern}: ${count} calls (${((count / totalCalls) * 100).toFixed(1)}%)`
+).join('\n')}
+
+Performance Assessment:
+- ${agentContext.totalCalls >= 60 ? '✓' : '⚠'} Call Volume: ${agentContext.totalCalls >= 60 ? 'Exceeded' : 'Below'} daily target (${agentContext.totalCalls}/60)
+- ${agentContext.connectRate >= 70 ? '✓' : '⚠'} Connect Rate: ${agentContext.connectRate >= 70 ? 'Excellent' : agentContext.connectRate >= 50 ? 'Moderate' : 'Needs Improvement'} (${agentContext.connectRate}% vs 70% target)
+- ${agentContext.conversionRate >= 25 ? '✓' : '⚠'} Conversion Rate: ${agentContext.conversionRate >= 25 ? 'Strong' : agentContext.conversionRate >= 15 ? 'Moderate' : 'Needs Coaching'} (${agentContext.conversionRate}% vs 25% target)
+`;
+    } else {
+      // Team-wide report
+      dataSummary = `
 Call Center Performance Data:
 - Period: ${dateRange}
 - Total Calls: ${totalCalls}
@@ -83,16 +160,21 @@ ${Object.entries(statusCounts).map(([status, count]) =>
 ).join('\n')}
 
 Key Metrics:
+- Total Calls: ${totalCalls}
+- Calls Per Hour: ${teamMetrics?.callsPerHour || ((totalCalls / (8 * (dateRange === 'week' ? 7 : dateRange === 'month' ? 30 : dateRange === 'quarter' ? 90 : 1))).toFixed(1))} (Target: 7.5 calls/hour)
+- Connects: ${connects}
+- Connect Rate: ${totalCalls > 0 ? ((connects / totalCalls) * 100).toFixed(1) : '0.0'}%
 - Conversions: ${conversions}
-- Conversion Rate: ${((conversions / totalCalls) * 100).toFixed(1)}%
+- Conversion Rate (Conversation Rate): ${connects > 0 ? ((conversions / connects) * 100).toFixed(1) : '0.0'}%
 - Total Deposits: UGX ${totalDeposits.toLocaleString()}
-- Average Call Duration: ${Math.round(avgDuration)} seconds
+- Average Handle Time: ${teamMetrics?.avgHandleTime ? `${Math.floor(teamMetrics.avgHandleTime / 60)}:${(teamMetrics.avgHandleTime % 60).toString().padStart(2, '0')}` : `${Math.round(avgDuration)} seconds`} (Target: 3-5 minutes)
 
 Call Notes Analysis:
 ${Object.entries(notesAnalysis).map(([pattern, count]) => 
   `- ${pattern}: ${count} calls (${((count / totalCalls) * 100).toFixed(1)}%)`
 ).join('\n')}
 `;
+    }
 
     // Build AI prompt based on verbosity and focus
     let systemPrompt = "You are a call center performance analyst. Analyze the data and provide actionable insights.";
@@ -117,7 +199,25 @@ ${Object.entries(notesAnalysis).map(([pattern, count]) =>
       focusInstruction = "Provide balanced analysis across conversion, efficiency, and quality metrics.";
     }
 
-    const userPrompt = `${dataSummary}
+    let userPrompt = '';
+    
+    if (agentContext) {
+      userPrompt = `${dataSummary}
+
+${verbosityInstruction}
+${focusInstruction}
+
+Please provide an agent-specific performance report with:
+1. Executive Summary - Overall performance assessment
+2. KPI Performance Analysis - Detailed breakdown of each KPI vs targets
+3. Strengths - What the agent is doing well
+4. Areas for Improvement - Specific metrics that need attention
+5. Actionable Coaching Recommendations - Concrete steps to improve performance
+6. Goal Setting - Suggested targets for next period
+
+Focus on providing personalized, constructive feedback that helps the agent understand their performance and how to improve. Be specific about which KPIs need attention and why.`;
+    } else {
+      userPrompt = `${dataSummary}
 
 ${verbosityInstruction}
 ${focusInstruction}
@@ -130,6 +230,7 @@ Please provide:
 5. Specific Actionable Recommendations
 
 Format the report in clear sections with bullet points where appropriate.`;
+    }
 
     // Call OpenAI
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

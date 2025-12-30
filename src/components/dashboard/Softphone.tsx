@@ -34,6 +34,9 @@ interface SoftphoneProps {
   hasPreviousLead?: boolean;
   currentLeadPosition?: number;
   totalLeads?: number;
+  // Optional hooks so the parent dashboard can react to call lifecycle (e.g. start/stop AI, update UI)
+  onCallStart?: () => void;
+  onCallEnd?: () => void;
 }
 
 export function Softphone({ 
@@ -43,7 +46,9 @@ export function Softphone({
   hasNextLead = false,
   hasPreviousLead = false,
   currentLeadPosition = 1,
-  totalLeads = 0
+  totalLeads = 0,
+  onCallStart,
+  onCallEnd,
 }: SoftphoneProps) {
   const [callStatus, setCallStatus] = useState<CallStatus>("idle");
   const [callDuration, setCallDuration] = useState(0);
@@ -84,11 +89,11 @@ export function Softphone({
   const initializeWebRTC = async () => {
     try {
       console.log('========================================');
-      console.log('[WebRTC-INIT] 🚀 Starting WebRTC initialization');
+      console.log('[WebRTC-INIT] ???? Starting WebRTC initialization');
       toast.info("Connecting to WebRTC...");
       
       // First, check if we have a valid token in the database
-      console.log('[WebRTC-INIT] 📂 Checking for existing token in database...');
+      console.log('[WebRTC-INIT] ???? Checking for existing token in database...');
       const { data: existingTokenData, error: tokenError } = await supabase
         .from('webrtc_tokens')
         .select('*')
@@ -98,7 +103,7 @@ export function Softphone({
       
       if (!tokenError && existingTokenData && new Date(existingTokenData.expires_at) > new Date()) {
         // Use existing valid token
-        console.log('[WebRTC-INIT] ✅ Found valid token in database');
+        console.log('[WebRTC-INIT] ??? Found valid token in database');
         console.log('[WebRTC-INIT] Token expires at:', existingTokenData.expires_at);
         tokenData = {
           token: existingTokenData.token,
@@ -107,20 +112,20 @@ export function Softphone({
         };
       } else {
         // Fetch new token
-        console.log('[WebRTC-INIT] 📡 Fetching new token from Supabase...');
+        console.log('[WebRTC-INIT] ???? Fetching new token from Supabase...');
         const { data, error } = await supabase.functions.invoke('get-webrtc-token');
         
         if (error) {
-          console.error('[WebRTC-INIT] ❌ Token request failed:', error);
+          console.error('[WebRTC-INIT] ??? Token request failed:', error);
           throw error;
         }
         
         if (!data.token) {
-          console.error('[WebRTC-INIT] ❌ No token in response:', data);
+          console.error('[WebRTC-INIT] ??? No token in response:', data);
           throw new Error('No token received');
         }
 
-        console.log('[WebRTC-INIT] ✅ New token received successfully');
+        console.log('[WebRTC-INIT] ??? New token received successfully');
         tokenData = data;
         
         // Store token in database
@@ -129,10 +134,10 @@ export function Softphone({
           .from('webrtc_tokens')
           .upsert(
             {
-              user_id: user?.id,
-              token: tokenData.token,
-              client_name: tokenData.clientName,
-              expires_at: expiresAt.toISOString()
+            user_id: user?.id,
+            token: tokenData.token,
+            client_name: tokenData.clientName,
+            expires_at: expiresAt.toISOString()
             },
             {
               onConflict: 'user_id', // use unique user_id key for upsert
@@ -141,9 +146,9 @@ export function Softphone({
         
         if (storeError && storeError.code !== '23505') {
           // 23505 = unique violation; safe to ignore here because upsert semantics still hold
-          console.error('[WebRTC-INIT] ⚠️ Failed to store token:', storeError);
+          console.error('[WebRTC-INIT] ?????? Failed to store token:', storeError);
         } else if (!storeError) {
-          console.log('[WebRTC-INIT] ✅ Token stored in database');
+          console.log('[WebRTC-INIT] ??? Token stored in database');
         }
       }
 
@@ -153,27 +158,27 @@ export function Softphone({
       setWebrtcToken(tokenData.token);
 
       // Initialize Africastalking client
-      console.log('[WebRTC-INIT] 🔍 Looking for Africastalking SDK...');
+      console.log('[WebRTC-INIT] ???? Looking for Africastalking SDK...');
       const AT = (window as any).Africastalking;
       if (typeof AT === 'undefined') {
-        console.error('[WebRTC-INIT] ❌ Africastalking SDK not found on window object');
+        console.error('[WebRTC-INIT] ??? Africastalking SDK not found on window object');
         console.log('[WebRTC-INIT] Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('afric')));
         throw new Error('Africastalking SDK not loaded');
       }
-      console.log('[WebRTC-INIT] ✅ SDK found:', typeof AT);
+      console.log('[WebRTC-INIT] ??? SDK found:', typeof AT);
 
-      console.log('[WebRTC-INIT] 🔧 Creating client instance...');
+      console.log('[WebRTC-INIT] ???? Creating client instance...');
       const client = new AT.Client(tokenData.token);
       webrtcClientRef.current = client;
-      console.log('[WebRTC-INIT] ✅ Client instance created');
+      console.log('[WebRTC-INIT] ??? Client instance created');
       console.log('[WebRTC-INIT] Client object:', client);
 
       // Set up event listeners
-      console.log('[WebRTC-INIT] 📝 Registering event listeners...');
+      console.log('[WebRTC-INIT] ???? Registering event listeners...');
       
       client.on('ready', () => {
         console.log('========================================');
-        console.log('[WebRTC-EVENT] 🟢 READY - Client is ready to make calls');
+        console.log('[WebRTC-EVENT] ???? READY - Client is ready to make calls');
         console.log('[WebRTC-EVENT] Timestamp:', new Date().toISOString());
         console.log('========================================');
         setIsWebRTCReady(true);
@@ -182,7 +187,7 @@ export function Softphone({
 
       client.on('notready', () => {
         console.log('========================================');
-        console.log('[WebRTC-EVENT] 🔴 NOT READY');
+        console.log('[WebRTC-EVENT] ???? NOT READY');
         console.log('========================================');
         setIsWebRTCReady(false);
         toast.error("WebRTC not ready");
@@ -190,7 +195,7 @@ export function Softphone({
 
       client.on('calling', (callInfo: any) => {
         console.log('========================================');
-        console.log('[WebRTC-EVENT] 📞 CALLING');
+        console.log('[WebRTC-EVENT] ???? CALLING');
         console.log('[WebRTC-EVENT] Call info:', callInfo);
         console.log('[WebRTC-EVENT] Info keys:', Object.keys(callInfo || {}));
         console.log('========================================');
@@ -200,7 +205,7 @@ export function Softphone({
 
       client.on('incomingcall', (params: any) => {
         console.log('========================================');
-        console.log('[WebRTC-EVENT] 📲 INCOMING CALL');
+        console.log('[WebRTC-EVENT] ???? INCOMING CALL');
         console.log('[WebRTC-EVENT] From:', params);
         console.log('========================================');
         toast.info(`Incoming call from ${params.from}`);
@@ -209,7 +214,7 @@ export function Softphone({
 
       client.on('callaccepted', (acceptInfo: any) => {
         console.log('========================================');
-        console.log('[WebRTC-EVENT] ✅ CALL ACCEPTED');
+        console.log('[WebRTC-EVENT] ??? CALL ACCEPTED');
         console.log('[WebRTC-EVENT] Accept info:', acceptInfo);
         console.log('========================================');
         setCallStatus('connected');
@@ -225,7 +230,7 @@ export function Softphone({
 
       client.on('hangup', (hangupCause: any) => {
         console.log('========================================');
-        console.log('[WebRTC-EVENT] 📴 CALL ENDED');
+        console.log('[WebRTC-EVENT] ???? CALL ENDED');
         console.log('[WebRTC-EVENT] Cause object:', hangupCause);
         console.log('[WebRTC-EVENT] Code:', hangupCause?.code);
         console.log('[WebRTC-EVENT] Reason:', hangupCause?.reason);
@@ -236,7 +241,7 @@ export function Softphone({
 
       client.on('offline', () => {
         console.log('========================================');
-        console.log('[WebRTC-EVENT] ⏸️ OFFLINE - Token expired');
+        console.log('[WebRTC-EVENT] ?????? OFFLINE - Token expired');
         console.log('========================================');
         setIsWebRTCReady(false);
         toast.warning("Session expired");
@@ -244,7 +249,7 @@ export function Softphone({
 
       client.on('closed', () => {
         console.log('========================================');
-        console.log('[WebRTC-EVENT] 🔌 CONNECTION CLOSED');
+        console.log('[WebRTC-EVENT] ???? CONNECTION CLOSED');
         console.log('========================================');
         setIsWebRTCReady(false);
         toast.error("Connection lost");
@@ -252,7 +257,7 @@ export function Softphone({
 
       client.on('error', (error: any) => {
         console.log('========================================');
-        console.error('[WebRTC-EVENT] ❌❌❌ ERROR ❌❌❌');
+        console.error('[WebRTC-EVENT] ????????? ERROR ?????????');
         console.error('[WebRTC-EVENT] Error object:', error);
         console.error('[WebRTC-EVENT] Error message:', error?.message);
         console.error('[WebRTC-EVENT] Error code:', error?.code);
@@ -260,13 +265,13 @@ export function Softphone({
         toast.error(`Call error: ${error.message || 'Unknown error'}`);
       });
 
-      console.log('[WebRTC-INIT] ✅ All event listeners registered');
+      console.log('[WebRTC-INIT] ??? All event listeners registered');
       console.log('[WebRTC-INIT] Waiting for "ready" event...');
       console.log('========================================');
 
     } catch (error) {
       console.log('========================================');
-      console.error('[WebRTC-INIT] ❌❌❌ INITIALIZATION FAILED ❌❌❌');
+      console.error('[WebRTC-INIT] ????????? INITIALIZATION FAILED ?????????');
       console.error('[WebRTC-INIT] Error:', error);
       console.error('[WebRTC-INIT] Error stack:', error instanceof Error ? error.stack : 'No stack');
       console.log('========================================');
@@ -296,22 +301,22 @@ export function Softphone({
     });
     
     if (isTauri) {
-      console.log('[Softphone] ✅ Running in Tauri desktop - using SIP mode');
+      console.log('[Softphone] ??? Running in Tauri desktop - using SIP mode');
       setSipConnectionStatus('connecting');
       // Pre-initialize SIP client in Tauri for better UX
       initializeSipClient()
         .then(() => {
-          console.log('[Softphone] ✅ SIP client initialized successfully');
+          console.log('[Softphone] ??? SIP client initialized successfully');
           setSipConnectionStatus('connected');
         })
         .catch(err => {
-          console.error('[Softphone] ❌ SIP pre-initialization failed, will retry on first call:', err);
+          console.error('[Softphone] ??? SIP pre-initialization failed, will retry on first call:', err);
           setSipConnectionStatus('error');
           toast.error('SIP connection failed. Will retry on first call.');
         });
     } else {
-      console.log('[Softphone] ✅ Running in browser - initializing WebRTC');
-      initializeWebRTC();
+      console.log('[Softphone] ??? Running in browser - initializing WebRTC');
+    initializeWebRTC();
     }
 
     return () => {
@@ -343,27 +348,27 @@ export function Softphone({
     // Schedule a retry only if one isn't already scheduled
     if (!sipRetryTimeoutRef.current) {
       const delayMs = 5000; // 5 seconds between attempts
-      console.log('[Softphone] 🔄 Scheduling SIP auto-retry in', delayMs, 'ms. Current status:', sipConnectionStatus);
+      console.log('[Softphone] ???? Scheduling SIP auto-retry in', delayMs, 'ms. Current status:', sipConnectionStatus);
       sipRetryTimeoutRef.current = setTimeout(async () => {
         sipRetryTimeoutRef.current = null;
         // Double-check status before retrying
         if (sipStatusRef.current === 'connected' || sipStatusRef.current === 'connecting') {
-          console.log('[Softphone] 🔄 Auto-retry skipped, SIP already connected/connecting');
+          console.log('[Softphone] ???? Auto-retry skipped, SIP already connected/connecting');
           return;
         }
 
         try {
-          console.log('[Softphone] 🔄 Auto-retrying SIP initialization...');
+          console.log('[Softphone] ???? Auto-retrying SIP initialization...');
           setSipConnectionStatus('connecting');
           const ok = await initializeSipClient();
           if (!ok) {
-            console.warn('[Softphone] ⚠️ SIP auto-retry did not connect');
+            console.warn('[Softphone] ?????? SIP auto-retry did not connect');
             setSipConnectionStatus('error');
           } else {
-            console.log('[Softphone] ✅ SIP auto-retry connected successfully');
+            console.log('[Softphone] ??? SIP auto-retry connected successfully');
           }
         } catch (err) {
-          console.error('[Softphone] ❌ SIP auto-retry failed:', err);
+          console.error('[Softphone] ??? SIP auto-retry failed:', err);
           setSipConnectionStatus('error');
         }
       }, delayMs);
@@ -411,6 +416,8 @@ const handleCallEnd = () => {
     setCallDuration(0);
     setCallStartTime(null);
     setCurrentCallId(null);
+    // Notify parent that call has ended
+    onCallEnd?.();
   };
 
   const handleSaveCallNotes = async (notes: string) => {
@@ -466,7 +473,7 @@ const handleCallEnd = () => {
       
       const callActivityData = await Promise.race([savePromise, timeoutPromise]);
 
-      console.log('[Softphone] ✅ Call activity saved successfully:', callActivityData);
+      console.log('[Softphone] ??? Call activity saved successfully:', callActivityData);
 
       // Parse notes for callback intent
       const callbackIntent = parseCallbackIntent(notes);
@@ -499,7 +506,7 @@ const handleCallEnd = () => {
       setPendingCallData(null);
       console.log('[Softphone] Call notes saved successfully, dialog closed');
     } catch (error) {
-      console.error('[Softphone] ❌ Error saving call notes:', error);
+      console.error('[Softphone] ??? Error saving call notes:', error);
       
       // Provide more specific error messages
       let errorMessage = "Failed to save call notes";
@@ -530,11 +537,11 @@ const handleCallEnd = () => {
       if (connectionMode === 'webrtc') {
         // Use WebRTC client
         console.log('========================================');
-        console.log('[WebRTC-CALL] 📞 INITIATING CALL');
+        console.log('[WebRTC-CALL] ???? INITIATING CALL');
         console.log('[WebRTC-CALL] Raw input number:', numberToCall);
         
         if (!webrtcClientRef.current || !isWebRTCReady) {
-          console.error('[WebRTC-CALL] ❌ Client not ready');
+          console.error('[WebRTC-CALL] ??? Client not ready');
           console.log('[WebRTC-CALL] Has client:', !!webrtcClientRef.current);
           console.log('[WebRTC-CALL] Is ready:', isWebRTCReady);
           console.log('========================================');
@@ -543,6 +550,8 @@ const handleCallEnd = () => {
         }
 
         const normalizedNumber = normalizePhoneNumber(numberToCall);
+        // Notify parent that a call is starting (for AI, UI, etc.)
+        onCallStart?.();
         console.log('[WebRTC-CALL] Normalized number:', normalizedNumber);
         console.log('[WebRTC-CALL] Client ready:', isWebRTCReady);
         console.log('[WebRTC-CALL] Token:', webrtcToken);
@@ -553,7 +562,7 @@ const handleCallEnd = () => {
         setShowDialPad(false);
         
         try {
-          console.log('[WebRTC-CALL] 🔄 Calling client.call() with:', normalizedNumber);
+          console.log('[WebRTC-CALL] ???? Calling client.call() with:', normalizedNumber);
           console.log('[WebRTC-CALL] Call parameters:', {
             phoneNumber: normalizedNumber,
             timestamp: new Date().toISOString()
@@ -561,7 +570,7 @@ const handleCallEnd = () => {
           
           const callResult = webrtcClientRef.current.call(normalizedNumber);
           
-          console.log('[WebRTC-CALL] ✅ Call method returned');
+          console.log('[WebRTC-CALL] ??? Call method returned');
           console.log('[WebRTC-CALL] Result:', callResult);
           console.log('[WebRTC-CALL] Result type:', typeof callResult);
           if (callResult) {
@@ -573,7 +582,7 @@ const handleCallEnd = () => {
           setDialedNumber("");
         } catch (error) {
           console.error('========================================');
-          console.error('[WebRTC-CALL] ❌❌❌ CALL FAILED ❌❌❌');
+          console.error('[WebRTC-CALL] ????????? CALL FAILED ?????????');
           console.error('[WebRTC-CALL] Error:', error);
           console.error('[WebRTC-CALL] Error message:', error instanceof Error ? error.message : 'Unknown');
           console.error('[WebRTC-CALL] Error stack:', error instanceof Error ? error.stack : 'No stack');
@@ -607,6 +616,8 @@ const handleCallEnd = () => {
       }
 
       toast.loading('Calling customer...');
+      // Notify parent that a call is starting
+      onCallStart?.();
       
       // Close dial pad if open
       setShowDialPad(false);
@@ -648,39 +659,39 @@ const handleCallEnd = () => {
 
   async function initializeSipClient() {
     try {
-      console.log('[Softphone] 🔄 Initializing SIP client...');
+      console.log('[Softphone] ???? Initializing SIP client...');
       setSipConnectionStatus('connecting');
       
       const { data, error } = await supabase.functions.invoke('get-sip-credentials');
       
       if (error) {
-        console.error('[Softphone] ❌ Failed to get SIP credentials:', error);
+        console.error('[Softphone] ??? Failed to get SIP credentials:', error);
         setSipConnectionStatus('error');
         throw error;
       }
       
       if (!data?.username || !data?.password) {
-        console.error('[Softphone] ❌ Missing SIP credentials in response:', data);
+        console.error('[Softphone] ??? Missing SIP credentials in response:', data);
         setSipConnectionStatus('error');
         throw new Error('SIP credentials not available');
       }
 
-      console.log('[Softphone] ✅ Got credentials, initializing SIP client...');
+      console.log('[Softphone] ??? Got credentials, initializing SIP client...');
       sipClientRef.current = new SipClient();
       const initialized = await sipClientRef.current.initialize(data.username, data.password);
       
       if (initialized) {
-        console.log('[Softphone] ✅ SIP client ready and registered');
+        console.log('[Softphone] ??? SIP client ready and registered');
         setSipConnectionStatus('connected');
         toast.success('SIP phone connected');
-        return true;
+      return true;
       } else {
-        console.error('[Softphone] ❌ SIP initialization returned false');
+        console.error('[Softphone] ??? SIP initialization returned false');
         setSipConnectionStatus('error');
         return false;
       }
     } catch (error) {
-      console.error('[Softphone] ❌ SIP initialization failed:', error);
+      console.error('[Softphone] ??? SIP initialization failed:', error);
       setSipConnectionStatus('error');
       toast.error('SIP connection failed - will retry on first call');
       sipClientRef.current = null; // Reset so we can retry
@@ -827,20 +838,20 @@ const handleCallEnd = () => {
             </Badge>
           </div>
           {connectionMode === 'webrtc' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                if (isWebRTCReady) {
-                  disconnectWebRTC();
-                } else {
-                  initializeWebRTC();
-                }
-              }}
-              className="h-8 w-8 p-0"
-            >
-              <Plug className={`h-4 w-4 ${isWebRTCReady ? 'text-success' : ''}`} />
-            </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (isWebRTCReady) {
+                disconnectWebRTC();
+              } else {
+                initializeWebRTC();
+              }
+            }}
+            className="h-8 w-8 p-0"
+          >
+            <Plug className={`h-4 w-4 ${isWebRTCReady ? 'text-success' : ''}`} />
+          </Button>
           )}
         </CardTitle>
       </CardHeader>
@@ -1026,10 +1037,22 @@ const handleCallEnd = () => {
           <div className="pt-2 border-t">
             <div className="text-xs text-muted-foreground mb-2">Quick Actions</div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                disabled
+                title="Transfer coming soon"
+              >
                 Transfer
               </Button>
-              <Button variant="outline" size="sm" className="flex-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                disabled
+                title="Conference coming soon"
+              >
                 Conference
               </Button>
             </div>
@@ -1056,3 +1079,4 @@ const handleCallEnd = () => {
     </Card>
   );
 }
+

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { Lead } from "@/data/sampleData";
+import type { Lead } from "@/types/lead";
 import { useAuth } from "@/contexts/AuthContext";
 import { maskPhone } from "@/lib/formatters";
 

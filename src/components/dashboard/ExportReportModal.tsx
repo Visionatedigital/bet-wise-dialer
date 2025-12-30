@@ -14,7 +14,6 @@ import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
-import { shouldUseMockData, mockTeamAgentsData, mockDailyPerformanceData } from "@/utils/mockData";
 
 interface ExportReportModalProps {
   open: boolean;
@@ -49,23 +48,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
   // Fetch available agents when modal opens (for managers/admins)
   useEffect(() => {
     if (open && (isManagement || isAdmin)) {
-      if (shouldUseMockData()) {
-        // Use mock agents
-        const mockAgents: AgentOption[] = mockTeamAgentsData.map(a => ({
-          id: a.id,
-          name: a.name,
-          email: a.email
-        }));
-        setAvailableAgents(mockAgents);
-        setLoadingAgents(false);
-        
-        // If initial selected agent is not in the list, default to "all"
-        if (initialSelectedAgent !== 'all' && !mockAgents.find(a => a.id === initialSelectedAgent)) {
-          setSelectedAgent('all');
-        }
-      } else {
-        fetchAvailableAgents();
-      }
+      fetchAvailableAgents();
     } else if (open && user) {
       // For regular agents, just set their own ID
       setAvailableAgents([{
@@ -119,8 +102,6 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
   const handleGenerateReport = async () => {
     setIsGenerating(true);
     try {
-      const isMockMode = shouldUseMockData();
-      
       // Calculate date range
       const daysMap: Record<string, number> = {
         'today': 0,
@@ -144,119 +125,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
       let profiles: any[] = [];
       let campaigns: any[] = [];
 
-      if (isMockMode) {
-        // Generate mock call activities based on selected agent and date range
-        const selectedMockAgent = selectedAgent !== 'all' 
-          ? mockTeamAgentsData.find(a => a.id === selectedAgent)
-          : null;
-
-        // Get daily performance data for the date range
-        const daysToInclude = Math.min(daysAgo, mockDailyPerformanceData.length);
-        const relevantDailyData = mockDailyPerformanceData.slice(-daysToInclude);
-
-        // Generate call activities from mock data
-        callActivities = [];
-        let callId = 1;
-
-        if (selectedMockAgent) {
-          // For specific agent, use their performance data
-          const totalCalls = selectedMockAgent.calls;
-          const totalConnects = selectedMockAgent.connects;
-          const totalConversions = selectedMockAgent.conversions;
-          const avgRevenuePerConversion = selectedMockAgent.revenue / selectedMockAgent.conversions;
-
-          // Distribute calls across the date range
-          const callsPerDay = Math.ceil(totalCalls / daysToInclude);
-          const connectsPerDay = Math.ceil(totalConnects / daysToInclude);
-          const conversionsPerDay = Math.ceil(totalConversions / daysToInclude);
-
-          relevantDailyData.forEach((dayData, dayIndex) => {
-            const dayDate = new Date();
-            dayDate.setDate(dayDate.getDate() - (daysToInclude - dayIndex - 1));
-            
-            // Generate calls for this day
-            const dayCalls = Math.min(callsPerDay, totalCalls - callActivities.length);
-            const dayConnects = Math.min(connectsPerDay, totalConnects - callActivities.filter(c => c.status === 'connected' || c.status === 'converted').length);
-            const dayConversions = Math.min(conversionsPerDay, totalConversions - callActivities.filter(c => c.status === 'converted').length);
-
-            for (let i = 0; i < dayCalls; i++) {
-              const isConnect = i < dayConnects;
-              const isConversion = isConnect && i < dayConversions;
-              
-              callActivities.push({
-                id: `mock-call-${callId++}`,
-                phone_number: `+2567${Math.floor(Math.random() * 10000000).toString().padStart(7, '0')}`,
-                lead_name: `Lead ${callId}`,
-                duration_seconds: isConnect ? Math.floor(Math.random() * 300) + 60 : Math.floor(Math.random() * 30),
-                notes: isConversion ? 'Successfully converted. Customer made deposit.' : (isConnect ? 'Connected but not converted' : 'No answer'),
-                created_at: dayDate.toISOString(),
-                status: isConversion ? 'converted' : (isConnect ? 'connected' : 'no_answer'),
-                deposit_amount: isConversion ? avgRevenuePerConversion : 0,
-                user_id: selectedMockAgent.id,
-                campaign_id: 'mock-campaign-1'
-              });
-            }
-          });
-        } else {
-          // For "all agents", aggregate data from all mock agents
-          relevantDailyData.forEach((dayData, dayIndex) => {
-            const dayDate = new Date();
-            dayDate.setDate(dayDate.getDate() - (daysToInclude - dayIndex - 1));
-            
-            // Distribute calls across agents
-            const callsPerAgent = Math.ceil(dayData.calls / mockTeamAgentsData.length);
-            
-            mockTeamAgentsData.forEach((agent, agentIndex) => {
-              const agentCalls = Math.min(callsPerAgent, dayData.calls - (agentIndex * callsPerAgent));
-              const agentConnects = Math.ceil(agentCalls * (agent.connectRate / 100));
-              const agentConversions = Math.ceil(agentConnects * (agent.conversionRate / 100));
-              const avgRevenuePerConversion = agent.revenue / agent.conversions;
-
-              for (let i = 0; i < agentCalls; i++) {
-                const isConnect = i < agentConnects;
-                const isConversion = isConnect && i < agentConversions;
-                
-                callActivities.push({
-                  id: `mock-call-${callId++}`,
-                  phone_number: `+2567${Math.floor(Math.random() * 10000000).toString().padStart(7, '0')}`,
-                  lead_name: `Lead ${callId}`,
-                  duration_seconds: isConnect ? Math.floor(Math.random() * 300) + 60 : Math.floor(Math.random() * 30),
-                  notes: isConversion ? 'Successfully converted. Customer made deposit.' : (isConnect ? 'Connected but not converted' : 'No answer'),
-                  created_at: dayDate.toISOString(),
-                  status: isConversion ? 'converted' : (isConnect ? 'connected' : 'no_answer'),
-                  deposit_amount: isConversion ? avgRevenuePerConversion : 0,
-                  user_id: agent.id,
-                  campaign_id: 'mock-campaign-1'
-                });
-              }
-            });
-          });
-        }
-
-        // Create mock profiles
-        if (selectedMockAgent) {
-          profiles = [{
-            id: selectedMockAgent.id,
-            full_name: selectedMockAgent.name,
-            email: selectedMockAgent.email
-          }];
-        } else {
-          profiles = mockTeamAgentsData.map(a => ({
-            id: a.id,
-            full_name: a.name,
-            email: a.email
-          }));
-        }
-
-        // Create mock campaigns
-        campaigns = [{
-          id: 'mock-campaign-1',
-          name: 'VIP Campaign'
-        }];
-
-        console.log(`[ExportReportModal] Generated ${callActivities.length} mock call activities for ${selectedAgent !== 'all' ? selectedMockAgent?.name : 'all agents'}`);
-      } else {
-        // Fetch real call activities with filters
+      // Fetch real call activities with filters
       let query = supabase
         .from('call_activities')
         .select(`
@@ -278,53 +147,39 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           .order('created_at', { ascending: false })
           .limit(1000); // Limit to prevent payload size issues
 
-        // Only apply user_id filter when we have a real UUID.
-        // Mock agents use IDs like "agent-2" which are NOT valid UUIDs and will cause Supabase to return 400.
       if (selectedAgent !== 'all') {
-          const isUuid =
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-              selectedAgent
-            );
-          if (isUuid) {
         query = query.eq('user_id', selectedAgent);
-          } else {
-            console.warn(
-              '[ExportReportModal] Skipping user_id filter because selectedAgent is not a valid UUID:',
-              selectedAgent
-            );
-          }
-        }
-
-        const { data: fetchedCalls, error: fetchError } = await query;
-        if (fetchError) {
-          console.error('Error fetching call activities:', fetchError);
-          throw new Error(`Failed to fetch call data: ${fetchError.message || 'Unknown error'}`);
-        }
-
-        if (!fetchedCalls || fetchedCalls.length === 0) {
-          toast.error('No call activities found for the selected period');
-          return;
-        }
-
-        // Filter out calls without required data (at minimum need user_id)
-        callActivities = fetchedCalls.filter(call => call.user_id);
-
-        // Fetch agent names separately
-        const userIds = [...new Set(callActivities.map(c => c.user_id).filter(Boolean))];
-        const { data: fetchedProfiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .in('id', userIds);
-        profiles = fetchedProfiles || [];
-
-        // Fetch campaign names separately
-        const campaignIds = [...new Set(callActivities.map(c => c.campaign_id).filter(Boolean))];
-        const { data: fetchedCampaigns } = await supabase
-          .from('campaigns')
-          .select('id, name')
-          .in('id', campaignIds);
-        campaigns = fetchedCampaigns || [];
       }
+
+      const { data: fetchedCalls, error: fetchError } = await query;
+      if (fetchError) {
+        console.error('Error fetching call activities:', fetchError);
+        throw new Error(`Failed to fetch call data: ${fetchError.message || 'Unknown error'}`);
+      }
+
+      if (!fetchedCalls || fetchedCalls.length === 0) {
+        toast.error('No call activities found for the selected period');
+        return;
+      }
+
+      // Filter out calls without required data (at minimum need user_id)
+      callActivities = fetchedCalls.filter(call => call.user_id);
+
+      // Fetch agent names separately
+      const userIds = [...new Set(callActivities.map(c => c.user_id).filter(Boolean))];
+      const { data: fetchedProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', userIds);
+      profiles = fetchedProfiles || [];
+
+      // Fetch campaign names separately
+      const campaignIds = [...new Set(callActivities.map(c => c.campaign_id).filter(Boolean))];
+      const { data: fetchedCampaigns } = await supabase
+        .from('campaigns')
+        .select('id, name')
+        .in('id', campaignIds);
+      campaigns = fetchedCampaigns || [];
 
       // Enrich call activities with agent and campaign names
       const enrichedCallActivities = callActivities.map(call => ({
@@ -775,8 +630,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
       let blob: Blob;
       let fileName: string;
 
-      // Handle Excel Report (structured data only) - but allow CSV if selected
-      if (reportType === 'excel' && fileType !== 'csv') {
+      // Handle Excel Report (structured data only)
+      if (reportType === 'excel') {
         // Generate Excel spreadsheet with structured data using ExcelJS for better compatibility
         // Use minimal metadata for maximum Google Drive compatibility
         const excelWorkbook = new ExcelJS.Workbook();
@@ -990,7 +845,6 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         reportText = JSON.stringify(excelData);
       } else if (fileType === 'csv') {
         // Generate CSV file - best compatibility with Google Sheets
-        console.log('[CSV] Generating CSV file...');
         const csvRows: string[] = [];
         
         // Add summary section
@@ -1039,33 +893,39 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           const callDate = new Date(call.start_time);
           const dateStr = callDate.toLocaleDateString();
           const timeStr = callDate.toLocaleTimeString();
-          const agentName = (call.profiles?.full_name || 'Unknown Agent').replace(/,/g, ';');
-          const phoneNumber = (call.phone_number || 'N/A').replace(/,/g, ';');
-          const leadName = (call.lead_name || 'Unknown Lead').replace(/,/g, ';');
-          const status = (call.status || 'unknown').replace(/,/g, ';');
+          const agentName = call.profiles?.full_name || 'Unknown Agent';
+          const phoneNumber = call.phone_number || 'N/A';
+          const leadName = call.lead_name || 'Unknown Lead';
+          const status = call.status || 'unknown';
           const duration = call.duration_seconds 
             ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}` 
             : '0:00';
-          const remarks = (call.notes || 'No remarks').replace(/,/g, ';').replace(/"/g, '""');
+          const remarks = (call.notes || 'No remarks').replace(/,/g, ';'); // Replace commas in notes to avoid CSV issues
           
-          // Simple CSV row - no complex escaping needed since we replaced commas
-          csvRows.push(`${dateStr},${timeStr},${agentName},${phoneNumber},${leadName},${status},${duration},"${remarks}"`);
+          // Escape fields that contain commas or quotes
+          const escapeCsvField = (field: string) => {
+            if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+              return `"${field.replace(/"/g, '""')}"`;
+            }
+            return field;
+          };
+          
+          csvRows.push([
+            escapeCsvField(dateStr),
+            escapeCsvField(timeStr),
+            escapeCsvField(agentName),
+            escapeCsvField(phoneNumber),
+            escapeCsvField(leadName),
+            escapeCsvField(status),
+            escapeCsvField(duration),
+            escapeCsvField(remarks)
+          ].join(','));
         });
         
-        // Create CSV content with proper line endings
-        const csvContent = csvRows.join('\r\n');
-        console.log('[CSV] CSV content length:', csvContent.length, 'characters');
-        console.log('[CSV] First 200 chars:', csvContent.substring(0, 200));
-        
-        // Create blob WITHOUT BOM first to test, then add BOM if needed
-        // Some systems don't handle BOM well
-        const csvBlob = new Blob([csvContent], { 
-          type: 'text/csv;charset=utf-8' 
-        });
-        
-        console.log('[CSV] Blob created:', {
-          size: csvBlob.size,
-          type: csvBlob.type
+        // Create CSV blob with UTF-8 BOM for Excel/Google Sheets compatibility
+        const csvContent = csvRows.join('\n');
+        const csvBlob = new Blob(['\ufeff' + csvContent], { 
+          type: 'text/csv;charset=utf-8;' 
         });
         
         blob = csvBlob;
@@ -1358,8 +1218,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             : `Team Performance Report - ${dateRange.charAt(0).toUpperCase() + dateRange.slice(1)}`;
           
           // Determine file type from reportType and fileType
-          // Excel reports default to xlsx, but respect CSV if selected
-          const actualFileType: 'docx' | 'xlsx' | 'pdf' | 'csv' = reportType === 'excel' && fileType !== 'csv' ? 'xlsx' : fileType;
+          // Excel reports are always xlsx, summary reports use the selected fileType
+          const actualFileType: 'docx' | 'xlsx' | 'pdf' = reportType === 'excel' ? 'xlsx' : fileType;
           
           // Ensure reportText is valid (for Excel reports, it's JSON string)
           const reportContent = reportText || (reportType === 'excel' ? '{}' : 'Report content not available');
@@ -1437,28 +1297,10 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             }
           } else {
             console.log('Report saved to database successfully');
-            
-            // For CSV files, also trigger immediate download for better user experience
-            if (actualFileType === 'csv' && blob) {
-              try {
-                saveAs(blob, fileName);
-                toast.success(`CSV report generated and downloaded!`, {
-                  description: `File: ${fileName}`,
-                  duration: 5000
-                });
-              } catch (downloadError) {
-                console.error('Error downloading CSV file:', downloadError);
-                toast.success(`Report generated successfully! View it in the Reports tab.`, {
-                  description: `Format: ${actualFileType.toUpperCase()}`,
-                  duration: 5000
-                });
-              }
-            } else {
-              toast.success(`Report generated successfully! View it in the Reports tab.`, {
-                description: `Format: ${(reportType === 'excel' && fileType !== 'csv' ? 'xlsx' : fileType).toUpperCase()}`,
-                duration: 5000
-              });
-            }
+            toast.success(`Report generated successfully! View it in the Reports tab.`, {
+              description: `Format: ${(reportType === 'excel' ? 'xlsx' : fileType).toUpperCase()}`,
+              duration: 5000
+            });
             onOpenChange(false); // Close the modal
           }
         }
@@ -1502,10 +1344,9 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             <Label htmlFor="report-type">Report Type</Label>
             <Select value={reportType} onValueChange={(value: "summary" | "excel") => {
               setReportType(value);
-              // Allow CSV to be selected even for Excel reports
-              // if (value === 'excel' && fileType !== 'csv') {
-              //   setFileType('xlsx');
-              // }
+              if (value === 'excel') {
+                setFileType('xlsx'); // Excel reports are always .xlsx
+              }
             }}>
               <SelectTrigger id="report-type">
                 <SelectValue />
@@ -1527,8 +1368,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             </Select>
             <p className="text-xs text-muted-foreground">
               {reportType === 'summary' 
-                ? 'AI-powered analysis with insights and recommendations (Word/PDF/CSV)'
-                : 'Structured data report with detailed metrics and call logs (Excel/CSV)'}
+                ? 'AI-powered analysis with insights and recommendations (Word/PDF)'
+                : 'Structured data report with detailed metrics and call logs (Excel only)'}
             </p>
           </div>
 
@@ -1573,8 +1414,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             </div>
           )}
 
-          {/* File Type Selection (available for both Summary and Excel reports) */}
-          {(reportType === 'summary' || reportType === 'excel') && (
+          {/* File Type Selection (only for Summary Reports) */}
+          {reportType === 'summary' && (
             <div className="space-y-2">
               <Label htmlFor="file-type">File Format</Label>
               <Select value={fileType} onValueChange={(value: "docx" | "xlsx" | "pdf" | "csv") => setFileType(value)}>
@@ -1588,36 +1429,22 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
                       <span>CSV File (.csv) - Best for Google Sheets</span>
                     </div>
                   </SelectItem>
-                  {reportType === 'summary' && (
-                    <>
-                      <SelectItem value="docx">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          <span>Word Document (.docx)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="pdf">
-                        <div className="flex items-center gap-2">
-                          <File className="h-4 w-4" />
-                          <span>PDF Document (.pdf)</span>
-                        </div>
-                      </SelectItem>
-                    </>
-                  )}
-                  {reportType === 'excel' && (
-                    <SelectItem value="xlsx">
-                      <div className="flex items-center gap-2">
-                        <FileSpreadsheet className="h-4 w-4" />
-                        <span>Excel File (.xlsx)</span>
-                      </div>
-                    </SelectItem>
-                  )}
+                  <SelectItem value="docx">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      <span>Word Document (.docx)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="pdf">
+                    <div className="flex items-center gap-2">
+                      <File className="h-4 w-4" />
+                      <span>PDF Document (.pdf)</span>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {reportType === 'summary' 
-                  ? "Choose the format for your summary report. You'll be able to preview before downloading."
-                  : 'Choose the format for your structured data report. CSV is recommended for Google Sheets compatibility.'}
+                Choose the format for your summary report. You'll be able to preview before downloading.
               </p>
             </div>
           )}
