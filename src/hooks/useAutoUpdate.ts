@@ -107,6 +107,12 @@ export function useAutoUpdate() {
       return;
     }
 
+    // Mark this update as accepted/dismissed so popup doesn't show again
+    if (updateInfo?.version) {
+      localStorage.setItem('dismissedUpdate', updateInfo.version);
+      setShowUpdateDialog(false);
+    }
+
     try {
       // Check if running in Tauri
       if (typeof window !== 'undefined' && '__TAURI__' in window) {
