@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 // Current app version - update this when releasing new versions
-const CURRENT_VERSION = '1.0.3';
+const CURRENT_VERSION = '1.0.4';
 const GITHUB_RELEASES_URL = 'https://api.github.com/repos/Visionatedigital/bet-wise-dialer/releases/latest';
 const DOWNLOAD_URL = 'https://github.com/Visionatedigital/bet-wise-dialer/releases/latest';
 
