@@ -57,7 +57,7 @@ const AdminDashboard = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch agent monitor data from secure function
       const { data: monitorData, error: monitorError } = await supabase.rpc('get_agent_monitor_data', {
         manager_filter: null
@@ -115,7 +115,8 @@ const AdminDashboard = () => {
         .from('leads')
         .select('*')
         .is('user_id', null)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(10000);
 
       const formattedLeads = (leads || []).map(lead => ({
         id: lead.id,
@@ -148,7 +149,7 @@ const AdminDashboard = () => {
     }
 
     // Filter leads by segment
-    const filteredLeads = unassignedLeads.filter(lead => 
+    const filteredLeads = unassignedLeads.filter(lead =>
       selectedSegment === 'all' || lead.segment === selectedSegment
     );
 
@@ -168,7 +169,7 @@ const AdminDashboard = () => {
     try {
       const { error } = await supabase
         .from('leads')
-        .update({ 
+        .update({
           user_id: selectedAgent,
           assigned_at: new Date().toISOString()
         })
@@ -207,7 +208,7 @@ const AdminDashboard = () => {
     try {
       const { error } = await supabase
         .from('leads')
-        .update({ 
+        .update({
           user_id: null,
           assigned_at: null
         })
@@ -289,7 +290,7 @@ const AdminDashboard = () => {
                         <TableRow key={agent.id}>
                           <TableCell className="font-medium">{agent.full_name}</TableCell>
                           <TableCell>
-                            <Badge 
+                            <Badge
                               variant={agent.status === 'online' ? 'default' : 'secondary'}
                               className={agent.status === 'online' ? 'bg-green-500' : ''}
                             >
@@ -297,7 +298,7 @@ const AdminDashboard = () => {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Select 
+                            <Select
                               value={agent.managerId || 'unassign'}
                               onValueChange={(value) => handleManagerAssignment(agent.id, value)}
                             >
@@ -397,8 +398,8 @@ const AdminDashboard = () => {
 
                 <div className="space-y-2">
                   <Label>Select Segment</Label>
-                  <Select 
-                    value={selectedSegment} 
+                  <Select
+                    value={selectedSegment}
                     onValueChange={setSelectedSegment}
                   >
                     <SelectTrigger>
@@ -415,7 +416,7 @@ const AdminDashboard = () => {
 
                 <div className="space-y-2">
                   <Label>Number of Leads to Assign</Label>
-                  <Input 
+                  <Input
                     type="number"
                     min="1"
                     placeholder="e.g., 150"
@@ -423,13 +424,13 @@ const AdminDashboard = () => {
                     onChange={(e) => setNumberOfLeads(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {unassignedLeads.filter(lead => 
+                    {unassignedLeads.filter(lead =>
                       selectedSegment === 'all' || lead.segment === selectedSegment
                     ).length} unassigned leads available in this segment
                   </p>
                 </div>
 
-                <Button 
+                <Button
                   onClick={handleAssignLeads}
                   disabled={!selectedAgent || !numberOfLeads || loading}
                   className="w-full"
@@ -446,7 +447,7 @@ const AdminDashboard = () => {
                   </div>
                 </div>
 
-                <Button 
+                <Button
                   onClick={() => setShowAgentImportModal(true)}
                   disabled={!selectedAgent || loading}
                   variant="outline"
@@ -461,7 +462,7 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      <ImportLeadsModal 
+      <ImportLeadsModal
         open={showImportModal}
         onOpenChange={setShowImportModal}
         onImportComplete={fetchData}

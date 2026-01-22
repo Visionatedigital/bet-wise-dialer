@@ -27,7 +27,7 @@ export function DashboardSelectionDialog({ open, onSelect }: DashboardSelectionD
     },
     {
       id: 'management' as const,
-      title: 'Management Dashboard',
+      title: 'Manager Hub',
       description: 'View team performance, analytics, and reports',
       icon: LayoutDashboard,
     },

@@ -44,6 +44,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ExportReportModal } from "@/components/dashboard/ExportReportModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 
 const dateRanges = [
   { label: "Today", value: "today" },
@@ -65,7 +66,7 @@ const callTranscripts = [
     sentiment: "positive",
     outcome: "converted",
     aiScore: 4.2,
-    transcript: "Agent: Good afternoon, this is Sarah from Betsure. How are you today Robert?\nCustomer: I'm fine, thanks. What's this about?\nAgent: I'm calling about our exclusive summer promotion. You've been selected for our VIP betting package...\nCustomer: That sounds interesting. Tell me more about the bonus.\nAgent: Great! You'll get a 100% match bonus up to 500,000 UGX on your first deposit...",
+    transcript: "Agent: Good afternoon, this is Sarah from Bangbet. How are you today Robert?\nCustomer: I'm fine, thanks. What's this about?\nAgent: I'm calling about our exclusive summer promotion. You've been selected for our VIP betting package...\nCustomer: That sounds interesting. Tell me more about the bonus.\nAgent: Great! You'll get a 100% match bonus up to 500,000 UGX on your first deposit...",
     keyMoments: [
       { time: "0:15", type: "objection", text: "Customer asked about credibility" },
       { time: "1:30", type: "interest", text: "Customer showed interest in bonus structure" },
@@ -86,7 +87,7 @@ const callTranscripts = [
     sentiment: "neutral",
     outcome: "callback",
     aiScore: 3.8,
-    transcript: "Agent: Hello Mary, this is John from Betsure. I hope you're having a good day?\nCustomer: Yes, hello. Is this about betting again?\nAgent: Yes, we've noticed you haven't been active recently and wanted to offer you a special welcome back bonus...\nCustomer: I've been busy with work. Can you call me back next week?\nAgent: Of course! When would be a good time for you?",
+    transcript: "Agent: Hello Mary, this is John from Bangbet. I hope you're having a good day?\nCustomer: Yes, hello. Is this about betting again?\nAgent: Yes, we've noticed you haven't been active recently and wanted to offer you a special welcome back bonus...\nCustomer: I've been busy with work. Can you call me back next week?\nAgent: Of course! When would be a good time for you?",
     keyMoments: [
       { time: "0:30", type: "objection", text: "Customer seemed hesitant about betting" },
       { time: "2:15", type: "information", text: "Customer mentioned being busy with work" },
@@ -101,6 +102,8 @@ const callTranscripts = [
 ];
 
 export default function Reports() {
+  const { user } = useAuth();
+  const { isManagement, isAdmin } = useUserRole();
   const [selectedDateRange, setSelectedDateRange] = useState("30d");
   const [selectedCampaign, setSelectedCampaign] = useState("all");
   const [date, setDate] = useState<Date | undefined>(new Date());
@@ -111,43 +114,120 @@ export default function Reports() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isTranscribed, setIsTranscribed] = useState(false);
   const [agentViewMode, setAgentViewMode] = useState<"grid" | "list">("grid");
+  const [exportOpen, setExportOpen] = useState(false);
   
+  // Always show individual statistics on Reports page (not team stats)
   const { campaigns, metrics, dailyPerformance, loading } = usePerformanceData(
     selectedDateRange,
-    selectedCampaign
+    selectedCampaign,
+    true // forceIndividual = true to always show individual stats
   );
 
+  // For agents (non-managers, non-admins), pass their own user ID to show only their own data
+  // For managers, pass their user ID to show their team's data  
+  // For admins, pass null to show all data (but analyze-funnel requires managerId, so we'll handle this differently)
+  // Note: analyze-funnel requires a managerId, so for agents we pass their own ID
+  const managerIdForFunnel = isAdmin ? null : user?.id;
+  
   const { funnelData, insights, message, loading: funnelLoading } = useFunnelAnalysis(
     selectedDateRange,
-    selectedCampaign
+    selectedCampaign,
+    managerIdForFunnel || undefined
   );
 
   const { calls, loading: callsLoading } = useRecentCalls();
 
-  const { agents, insights: agentInsights, loading: agentsLoading, message: agentMessage } = useAgentAnalysis(selectedDateRange);
+  // Only fetch agent analysis for managers/admins, not for regular agents
+  const { agents, insights: agentInsights, loading: agentsLoading, message: agentMessage } = useAgentAnalysis(
+    (isManagement || isAdmin) ? selectedDateRange : '30d'
+  );
 
   const handleTranscribeCall = async (callId: string) => {
     setIsTranscribing(true);
     setIsTranscribed(false);
     
     try {
-      // Simulate transcript generation (in production, this would come from audio transcription)
-      const simulatedTranscript = `Agent: Good afternoon, this is calling from Betsure. How are you today?
-Customer: I'm fine, thanks. What's this about?
-Agent: I'm calling about our exclusive sports betting promotion. You've been selected for our VIP betting package.
-Customer: That sounds interesting. Tell me more about the bonus.
-Agent: Great! You'll get a 100% match bonus up to 500,000 UGX on your first deposit.
-Customer: Okay, that's quite good. How do I get started?
-Agent: I can help you set up your account right now. Do you have a moment?
-Customer: Yes, let's do it.`;
+      // Fetch the actual call data from database
+      const { data: callData, error: callError } = await supabase
+        .from('call_activities')
+        .select('*')
+        .eq('id', callId)
+        .single();
 
-      setTranscriptText(simulatedTranscript);
+      if (callError) {
+        throw new Error(`Failed to fetch call data: ${callError.message}`);
+      }
 
-      // Call the edge function to analyze with GPT-5
+      if (!callData) {
+        throw new Error('Call not found');
+      }
+
+      let transcript = '';
+      let transcriptSource = '';
+
+      // Priority 1: Use stored transcript if available (real-time capture)
+      if (callData.transcript && callData.transcript.trim()) {
+        transcript = callData.transcript.trim();
+        transcriptSource = 'real-time';
+        console.log('[Reports] Using real-time transcript, length:', transcript.length);
+      }
+      // Priority 2: Check if there's a recording URL - transcribe it
+      else if (callData.recording_url) {
+        // TODO: In the future, transcribe the audio file using OpenAI Whisper
+        // For now, use notes if available, or show a message
+        transcriptSource = 'recording';
+        toast.info('Audio transcription from recording is coming soon. Using call notes for now.');
+        
+        // Fallback to notes if available
+        if (callData.notes && callData.notes.trim()) {
+          // Clean notes (remove session IDs if present)
+          const cleanNotes = callData.notes
+            .replace(/session:ATVId_[a-f0-9]+/gi, '')
+            .replace(/ATVId_[a-f0-9]+/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          if (cleanNotes && cleanNotes.length > 10) {
+            transcript = `Call Notes:\n${cleanNotes}`;
+            transcriptSource = 'notes';
+          }
+        }
+      }
+      // Priority 3: Use notes if no transcript or recording available
+      else if (callData.notes && callData.notes.trim()) {
+        // Clean notes (remove session IDs if present)
+        const cleanNotes = callData.notes
+          .replace(/session:ATVId_[a-f0-9]+/gi, '')
+          .replace(/ATVId_[a-f0-9]+/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        if (cleanNotes && cleanNotes.length > 10) {
+          transcript = `Call Notes:\n${cleanNotes}`;
+          transcriptSource = 'notes';
+        }
+      }
+
+      // If no transcript available, show appropriate message
+      if (!transcript || transcript.length < 10) {
+        const message = callData.recording_url 
+          ? 'Call recording available but transcription not yet implemented. Please check back later.'
+          : 'No call notes or recording available for this call.';
+        
+        toast.warning(message);
+        setTranscriptText(message);
+        setIsTranscribing(false);
+        return;
+      }
+
+      setTranscriptText(transcript);
+
+      // Call the edge function to analyze the transcript
       const { data, error } = await supabase.functions.invoke('transcribe-call', {
         body: { 
           callId,
-          transcript: simulatedTranscript 
+          transcript: transcript,
+          source: transcriptSource // Pass source info for context
         }
       });
 
@@ -156,10 +236,15 @@ Customer: Yes, let's do it.`;
       setKeyMoments(data.keyMoments || []);
       setSuggestions(data.suggestions || []);
       setIsTranscribed(true);
-      toast.success('Transcript generated successfully!');
+      
+      const sourceMessage = transcriptSource === 'notes' 
+        ? 'Analysis generated from call notes'
+        : 'Analysis generated from call recording';
+      toast.success(`Transcript analyzed successfully! ${sourceMessage}`);
     } catch (error) {
       console.error('Error transcribing call:', error);
-      toast.error('Failed to generate transcript');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate transcript';
+      toast.error(errorMessage);
     } finally {
       setIsTranscribing(false);
     }
@@ -290,11 +375,13 @@ Customer: Yes, let's do it.`;
         </Card>
 
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className={`grid w-full ${(isManagement || isAdmin) ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
             <TabsTrigger value="transcripts">Transcripts</TabsTrigger>
-            <TabsTrigger value="agents">Agents</TabsTrigger>
+            {(isManagement || isAdmin) && (
+              <TabsTrigger value="agents">Agents</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -723,7 +810,8 @@ Customer: Yes, let's do it.`;
             </div>
           </TabsContent>
 
-          <TabsContent value="agents" className="space-y-6">
+          {(isManagement || isAdmin) && (
+            <TabsContent value="agents" className="space-y-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 {agentInsights.length > 0 && (
@@ -933,6 +1021,7 @@ Customer: Yes, let's do it.`;
               </>
             )}
           </TabsContent>
+          )}
         </Tabs>
       </div>
 

@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { 
-  Phone, 
-  Users, 
-  Target, 
-  BarChart3, 
-  Settings, 
+import {
+  Phone,
+  Target,
+  BarChart3,
+  Settings,
   Monitor,
   Plug,
   Home,
   LogOut,
-  CalendarClock,
+  CheckSquare,
   LucideProps
 } from "lucide-react";
 import WhatsAppLogo from "@/assets/whatsapp-logo.svg";
@@ -33,59 +32,53 @@ import {
 } from "@/components/ui/sidebar";
 
 const navigationItems = [
-  { 
-    title: "Dashboard", 
-    url: "/", 
+  {
+    title: "Dashboard",
+    url: "/",
     icon: Home,
     description: "Agent workspace & queue"
   },
-  { 
-    title: "Leads", 
-    url: "/leads", 
-    icon: Users,
-    description: "Manage contacts & prospects"
+  {
+    title: "Kanban",
+    url: "/kanban",
+    icon: CheckSquare,
+    description: "Lead management board"
   },
-  { 
-    title: "Callbacks", 
-    url: "/callbacks", 
-    icon: CalendarClock,
-    description: "Smart callback board"
-  },
-  { 
-    title: "WhatsApp", 
-    url: "/whatsapp", 
+  {
+    title: "WhatsApp",
+    url: "/whatsapp",
     icon: ({ className }: LucideProps) => (
       <img src={WhatsAppLogo} alt="" className={className} style={{ filter: 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(86deg) brightness(118%) contrast(119%)' }} />
     ),
     description: "WhatsApp messaging"
   },
-  { 
-    title: "Campaigns", 
-    url: "/campaigns", 
+  {
+    title: "Campaigns",
+    url: "/campaigns",
     icon: Target,
     description: "Campaign performance"
   },
-  { 
-    title: "Monitor", 
-    url: "/monitor", 
+  {
+    title: "Monitor",
+    url: "/monitor",
     icon: Monitor,
     description: "Live call monitoring"
   },
-  { 
-    title: "Performance", 
-    url: "/reports", 
+  {
+    title: "Performance",
+    url: "/reports",
     icon: BarChart3,
     description: "Performance & analytics"
   },
-  { 
-    title: "Integrations", 
-    url: "/integrations", 
+  {
+    title: "Integrations",
+    url: "/integrations",
     icon: Plug,
     description: "Connect external systems"
   },
-  { 
-    title: "Settings", 
-    url: "/settings", 
+  {
+    title: "Settings",
+    url: "/settings",
     icon: Settings,
     description: "System configuration"
   },
@@ -98,7 +91,7 @@ export function AppSidebar() {
   const { signOut, user } = useAuth();
   const { isAdmin, isManagement } = useUserRole();
   const unreadCount = useWhatsAppUnreadCount();
-  
+
   const isCollapsed = state === "collapsed";
 
   // Filter navigation items based on role
@@ -112,8 +105,8 @@ export function AppSidebar() {
 
   const isActive = (path: string) => currentPath === path;
   const getNavClasses = ({ isActive }: { isActive: boolean }) =>
-    isActive 
-      ? "bg-sidebar-accent text-sidebar-primary font-medium" 
+    isActive
+      ? "bg-sidebar-accent text-sidebar-primary font-medium"
       : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground";
 
   return (
@@ -127,7 +120,7 @@ export function AppSidebar() {
           </div>
           {!isCollapsed && (
             <div>
-              <h1 className="text-lg font-semibold text-sidebar-foreground">Betsure</h1>
+              <h1 className="text-lg font-semibold text-sidebar-foreground">Bangbet</h1>
               <p className="text-xs text-sidebar-foreground/60">Telemarketing</p>
             </div>
           )}
@@ -139,15 +132,15 @@ export function AppSidebar() {
           <SidebarGroupLabel className="text-sidebar-foreground/70">
             Navigation
           </SidebarGroupLabel>
-          
+
           <SidebarGroupContent>
             <SidebarMenu>
               {filteredNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink 
-                      to={item.url} 
-                      end 
+                    <NavLink
+                      to={item.url}
+                      end
                       className={getNavClasses}
                       title={isCollapsed ? item.description : undefined}
                     >
@@ -166,10 +159,10 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              
+
               {/* User Profile and Logout */}
               <SidebarMenuItem>
-                <SidebarMenuButton 
+                <SidebarMenuButton
                   onClick={signOut}
                   className="text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                   title={isCollapsed ? "Sign out" : undefined}

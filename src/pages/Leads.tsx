@@ -17,6 +17,7 @@ import { type Lead } from "@/types/lead";
 import { formatUGX, formatKampalaTime } from "@/lib/formatters";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSoftphone } from "@/contexts/SoftphoneContext";
 import { toast } from "sonner";
 import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
 import { EditLeadModal } from "@/components/leads/EditLeadModal";
@@ -24,6 +25,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 
 export default function Leads() {
   const { user } = useAuth();
+  const { startCall } = useSoftphone();
   const { isAdmin, isManagement } = useUserRole();
   const [searchTerm, setSearchTerm] = useState("");
   const [segmentFilter, setSegmentFilter] = useState<string>("all");
@@ -62,7 +64,8 @@ export default function Leads() {
           *,
           campaigns(name)
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(0, 99999);
 
       if (error) throw error;
 
@@ -71,7 +74,7 @@ export default function Leads() {
         name: lead.name,
         phone: lead.phone,
         segment: lead.segment as "dormant" | "semi-active" | "vip",
-        lastActivity: lead.last_contact_at 
+        lastActivity: lead.last_contact_at
           ? formatKampalaTime(lead.last_contact_at)
           : lead.last_activity || "Never",
         lastDepositUgx: Number(lead.last_deposit_ugx) || 0,
@@ -99,7 +102,7 @@ export default function Leads() {
 
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         lead.phone.includes(searchTerm);
+      lead.phone.includes(searchTerm);
     const matchesSegment = segmentFilter === "all" || lead.segment === segmentFilter;
     const matchesCampaign = campaignFilter === "all" || lead.campaign === campaignFilter;
     return matchesSearch && matchesSegment && matchesCampaign;
@@ -268,7 +271,7 @@ export default function Leads() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             {selectedLeads.length > 0 && (
               <div className="flex items-center gap-2 pt-4 border-t border-border">
                 <span className="text-sm text-muted-foreground">
@@ -284,10 +287,10 @@ export default function Leads() {
                 </Button>
                 <Button variant="outline" size="sm">
                   <UserMinus className="h-4 w-4 mr-2" />
-                  Mark DNC
+                  Mark Unreachable
                 </Button>
-                <Button 
-                  variant="destructive" 
+                <Button
+                  variant="destructive"
                   size="sm"
                   onClick={() => setBulkDeleteDialogOpen(true)}
                 >
@@ -297,7 +300,7 @@ export default function Leads() {
               </div>
             )}
           </CardHeader>
-          
+
           <CardContent className="p-0">
             <Table>
               <TableHeader>
@@ -335,8 +338,8 @@ export default function Leads() {
                     </TableCell>
                   </TableRow>
                 ) : filteredLeads.map((lead) => (
-                  <TableRow 
-                    key={lead.id} 
+                  <TableRow
+                    key={lead.id}
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => {
                       setLeadToEdit(lead);
@@ -373,7 +376,7 @@ export default function Leads() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <div className="w-12 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className="h-full bg-primary transition-all"
                             style={{ width: `${lead.score}%` }}
                           />
@@ -406,8 +409,8 @@ export default function Leads() {
                       <div className="flex items-center gap-1">
                         <Sheet>
                           <SheetTrigger asChild>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -465,7 +468,26 @@ export default function Leads() {
                               </div>
 
                               <div className="flex gap-2">
-                                <Button size="sm" className="flex-1">
+                                <Button
+                                  size="sm"
+                                  className="flex-1"
+                                  onClick={() => {
+                                    if (selectedLead) {
+                                      startCall({
+                                        id: selectedLead.id,
+                                        name: selectedLead.name,
+                                        phone: selectedLead.phone,
+                                        campaign: selectedLead.campaign || "No Campaign",
+                                        segment: selectedLead.segment,
+                                        intent: selectedLead.intent || undefined,
+                                        lastActivity: selectedLead.lastActivity || undefined,
+                                        lastDeposit: selectedLead.lastDepositUgx || 0,
+                                        tags: selectedLead.tags || [],
+                                        score: selectedLead.score || 0
+                                      });
+                                    }
+                                  }}
+                                >
                                   <Phone className="h-4 w-4 mr-2" />
                                   Call Now
                                 </Button>
@@ -485,7 +507,7 @@ export default function Leads() {
                                   <TabsTrigger value="account">Account</TabsTrigger>
                                   <TabsTrigger value="notes">Notes</TabsTrigger>
                                 </TabsList>
-                                
+
                                 <TabsContent value="timeline" className="space-y-4">
                                   <div className="space-y-4">
                                     {loadingCalls ? (
@@ -528,7 +550,7 @@ export default function Leads() {
                                     ))}
                                   </div>
                                 </TabsContent>
-                                
+
                                 <TabsContent value="account" className="space-y-4">
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
@@ -552,9 +574,9 @@ export default function Leads() {
                                       <div className="mt-1 text-sm">{selectedLead?.ownerUserId}</div>
                                     </div>
                                   </div>
-                                  
+
                                   <Separator />
-                                  
+
                                   <div>
                                     <label className="text-sm font-medium">Tags</label>
                                     <div className="mt-2 flex flex-wrap gap-2">
@@ -567,7 +589,7 @@ export default function Leads() {
                                     </div>
                                   </div>
                                 </TabsContent>
-                                
+
                                 <TabsContent value="notes" className="space-y-4">
                                   <div className="text-sm text-muted-foreground">
                                     Lead notes and attachments will appear here.
@@ -577,8 +599,8 @@ export default function Leads() {
                             </div>
                           </SheetContent>
                         </Sheet>
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -598,7 +620,7 @@ export default function Leads() {
         </Card>
       </div>
 
-      <ImportLeadsModal 
+      <ImportLeadsModal
         open={importModalOpen}
         onOpenChange={setImportModalOpen}
         onImportComplete={fetchLeads}

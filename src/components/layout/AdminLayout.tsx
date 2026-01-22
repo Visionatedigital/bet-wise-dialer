@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Moon, Sun, Bell, LayoutDashboard, Users } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +21,7 @@ interface AdminLayoutProps {
 export function AdminLayout({ children }: AdminLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
+  const { currentVersion } = useAutoUpdate();
 
   const switchDashboard = (mode: 'agent' | 'management' | 'admin') => {
     localStorage.setItem('adminViewMode', mode);
@@ -73,6 +75,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5 text-sm font-medium">{userEmail}</div>
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">Administrator</div>
+                    <div className="px-2 py-1 text-xs text-muted-foreground border-t mt-1 pt-1">
+                      Version v{currentVersion}
+                    </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => switchDashboard('agent')}>
                       <Users className="mr-2 h-4 w-4" />
@@ -96,8 +101,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
           <footer className="border-t bg-muted/30 px-6 py-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Admin Panel v1.0</span>
-              <span>Betsure Uganda • Admin Dashboard</span>
+              <span>Admin Panel</span>
+              <div className="flex items-center gap-4">
+                <span>Bangbet Uganda • Admin Dashboard</span>
+                <span className="font-mono">v{currentVersion}</span>
+              </div>
             </div>
           </footer>
         </div>

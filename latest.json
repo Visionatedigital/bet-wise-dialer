@@ -1,0 +1,11 @@
+{
+  "version": "1.0.4",
+  "notes": "Fixed agent lead filtering - agents now only see their assigned leads. Improved password reset flow. Added admin user creation scripts.",
+  "pub_date": "2025-01-23T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "",
+      "url": "https://github.com/Visionatedigital/bet-wise-dialer/releases/download/v1.0.4/BetSure.Dialer_1.0.4_x64-setup.exe"
+    }
+  }
+}

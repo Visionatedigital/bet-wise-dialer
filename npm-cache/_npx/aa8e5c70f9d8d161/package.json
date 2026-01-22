@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "supabase": "^2.72.2"
+  },
+  "_npx": {
+    "packages": [
+      "supabase"
+    ]
+  }
+}

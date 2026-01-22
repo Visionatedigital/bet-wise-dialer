@@ -73,32 +73,168 @@ export const useCallMetrics = () => {
         throw yesterdayError;
       }
 
-      setTodayMetrics(todayData || {
-        id: '',
-        user_id: user.id,
-        date: today,
-        calls_made: 0,
-        connects: 0,
-        total_handle_time_seconds: 0,
-        conversions: 0,
-        total_deposit_value: 0,
-        callbacks_due: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+      // Calculate deduplicated calls_made for today
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const { data: todayCalls } = await supabase
+        .from('call_activities')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('start_time', todayStart.toISOString())
+        .lte('start_time', todayEnd.toISOString())
+        .range(0, 99999);
+
+      // Deduplication function: Groups calls by phone_number and removes duplicates within 10 minutes
+      const deduplicateCalls = (calls: any[]): any[] => {
+        if (!calls || calls.length === 0) return [];
+        
+        const callGroups = new Map<string, any[]>();
+        
+        calls.forEach((call) => {
+          const key = `${call.user_id}_${call.phone_number || 'unknown'}`;
+          if (!callGroups.has(key)) {
+            callGroups.set(key, []);
+          }
+          callGroups.get(key)!.push(call);
+        });
+
+        const deduplicated: any[] = [];
+        const DEDUP_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
+        callGroups.forEach((group) => {
+          if (group.length === 1) {
+            deduplicated.push(group[0]);
+            return;
+          }
+
+          group.sort((a, b) => {
+            const timeA = new Date(a.start_time || a.created_at).getTime();
+            const timeB = new Date(b.start_time || b.created_at).getTime();
+            return timeA - timeB;
+          });
+
+          let lastKeptCall: any = null;
+          
+          group.forEach((call) => {
+            const callTime = new Date(call.start_time || call.created_at).getTime();
+            
+            if (!lastKeptCall) {
+              lastKeptCall = call;
+              deduplicated.push(call);
+            } else {
+              const lastKeptTime = new Date(lastKeptCall.start_time || lastKeptCall.created_at).getTime();
+              const timeDiff = callTime - lastKeptTime;
+              
+              if (timeDiff > DEDUP_WINDOW_MS) {
+                lastKeptCall = call;
+                deduplicated.push(call);
+              } else {
+                const shouldReplace = 
+                  (call.status === 'converted' && lastKeptCall.status !== 'converted') ||
+                  (call.status === 'converted' && lastKeptCall.status === 'converted' && 
+                   (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
+                  (call.status === 'connected' && lastKeptCall.status !== 'converted' && 
+                   (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
+                  (call.status === lastKeptCall.status && 
+                   (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
+                  (call.status === lastKeptCall.status && 
+                   (Number(call.duration_seconds) || 0) === (Number(lastKeptCall.duration_seconds) || 0) &&
+                   callTime > lastKeptTime);
+                
+                if (shouldReplace) {
+                  const index = deduplicated.indexOf(lastKeptCall);
+                  if (index > -1) {
+                    deduplicated.splice(index, 1);
+                  }
+                  lastKeptCall = call;
+                  deduplicated.push(call);
+                }
+              }
+            }
+          });
+        });
+
+        return deduplicated;
+      };
+
+      const deduplicatedTodayCalls = deduplicateCalls(todayCalls || []);
+      const todayCallsMade = deduplicatedTodayCalls.length;
+      
+      // Calculate connects from deduplicated calls: unique phone numbers that actually connected
+      // A call is considered "connected" if:
+      // 1. Status is 'converted' (definitely answered)
+      // 2. Status is 'connected' AND duration_seconds > 0 (actually rang and was answered)
+      const todayConnects = deduplicatedTodayCalls.filter(call => {
+        if (call.status === 'converted') return true;
+        if (call.status === 'connected') {
+          return (Number(call.duration_seconds) || 0) > 0;
+        }
+        return false;
+      }).length;
+
+      // Calculate deduplicated calls_made for yesterday
+      const yesterdayStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      yesterdayStart.setHours(0, 0, 0, 0);
+      const yesterdayEnd = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      yesterdayEnd.setHours(23, 59, 59, 999);
+
+      const { data: yesterdayCalls } = await supabase
+        .from('call_activities')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('start_time', yesterdayStart.toISOString())
+        .lte('start_time', yesterdayEnd.toISOString())
+        .range(0, 99999);
+
+      const deduplicatedYesterdayCalls = deduplicateCalls(yesterdayCalls || []);
+      const yesterdayCallsMade = deduplicatedYesterdayCalls.length;
+      
+      // Calculate connects from deduplicated calls for yesterday
+      const yesterdayConnects = deduplicatedYesterdayCalls.filter(call => {
+        if (call.status === 'converted') return true;
+        if (call.status === 'connected') {
+          return (Number(call.duration_seconds) || 0) > 0;
+        }
+        return false;
+      }).length;
+
+      setTodayMetrics({
+        ...(todayData || {
+          id: '',
+          user_id: user.id,
+          date: today,
+          calls_made: 0,
+          connects: 0,
+          total_handle_time_seconds: 0,
+          conversions: 0,
+          total_deposit_value: 0,
+          callbacks_due: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }),
+        calls_made: todayCallsMade, // Override with deduplicated count
+        connects: todayConnects // Override with deduplicated connects count
       });
 
-      setYesterdayMetrics(yesterdayData || {
-        id: '',
-        user_id: user.id,
-        date: yesterday,
-        calls_made: 0,
-        connects: 0,
-        total_handle_time_seconds: 0,
-        conversions: 0,
-        total_deposit_value: 0,
-        callbacks_due: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+      setYesterdayMetrics({
+        ...(yesterdayData || {
+          id: '',
+          user_id: user.id,
+          date: yesterday,
+          calls_made: 0,
+          connects: 0,
+          total_handle_time_seconds: 0,
+          conversions: 0,
+          total_deposit_value: 0,
+          callbacks_due: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }),
+        calls_made: yesterdayCallsMade, // Override with deduplicated count
+        connects: yesterdayConnects // Override with deduplicated connects count
       });
 
     } catch (err) {

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Softphone } from "@/components/dashboard/Softphone";
 import { QueueCard } from "@/components/dashboard/QueueCard";
 import { AfterCallSummary } from "@/components/dashboard/AfterCallSummary";
 import { AgentKPIs } from "@/components/dashboard/AgentKPIs";
@@ -19,6 +18,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { Softphone } from "@/components/dashboard/Softphone";
+import { useSoftphone } from "@/contexts/SoftphoneContext";
+import { NotificationDropdown } from "@/components/layout/NotificationDropdown";
 import { toast } from "sonner";
 import { getCategoryFromSegment, getSequenceForCategory } from "@/data/aiScriptsMock";
 import type { CallSentiment } from "@/utils/RealtimeAI";
@@ -28,6 +30,7 @@ import { useAgentStatus } from "@/hooks/useAgentStatus";
 function DashboardContent() {
   const { user } = useAuth();
   const { updateStatus } = useAgentStatus();
+  const { showSoftphone, setShowSoftphone } = useSoftphone();
   const [currentLead, setCurrentLead] = useState<Lead | null>(null);
   const [currentLeadIndex, setCurrentLeadIndex] = useState(0);
   const [queueLeads, setQueueLeads] = useState<Lead[]>([]);
@@ -46,7 +49,8 @@ function DashboardContent() {
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [isCallActive, setIsCallActive] = useState(false);
-  
+  const [callTranscript, setCallTranscript] = useState<string>('');
+
   const suggestionTimerRef = useRef<NodeJS.Timeout | null>(null);
   const sentimentTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
@@ -87,14 +91,14 @@ function DashboardContent() {
   useEffect(() => {
     const loadCampaignScript = async () => {
       if (!currentLead?.segment) return;
-      
+
       const { data, error } = await supabase
         .from('campaigns')
         .select('ai_script, suggestions')
         .eq('target_segment', currentLead.segment)
         .eq('status', 'active')
         .single();
-      
+
       if (data) {
         setCampaignScript(data.ai_script);
         const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
@@ -114,9 +118,8 @@ function DashboardContent() {
         .then(() => {
           // Wait a bit for the connection to stabilize before sending initial context
           setTimeout(() => {
-            const initialContext = `New call started with lead ${currentLead?.name || 'Unknown'} in campaign ${
-              currentLead?.campaign || 'No Campaign'
-            }. Monitor the conversation and provide real-time suggestions to help close the deal.`;
+            const initialContext = `New call started with lead ${currentLead?.name || 'Unknown'} in campaign ${currentLead?.campaign || 'No Campaign'
+              }. Monitor the conversation and provide real-time suggestions to help close the deal.`;
             console.log('[Dashboard] Sending initial context to AI:', initialContext);
             sendAISnippet(initialContext);
           }, 1000);
@@ -125,7 +128,7 @@ function DashboardContent() {
           console.error('[Dashboard] Failed to connect AI coach:', err);
           toast.error('Failed to connect AI coach. Suggestions may not be available.');
         });
-      } else {
+    } else {
       console.log('[Dashboard] Call ended, disconnecting AI coach...');
       clearSuggestions();
       disconnectAI();
@@ -158,36 +161,36 @@ function DashboardContent() {
   }, [callNotes, currentCallId]);
 
   // Persist lead index whenever it changes
-useEffect(() => {
-  if (!user?.id) return;
-  if (!hasRestoredIndex.current) return;
-  console.log('[Leads] Saving currentLeadIndex to localStorage:', currentLeadIndex);
-  localStorage.setItem(`lead_index_${user.id}`, currentLeadIndex.toString());
-}, [currentLeadIndex, user?.id]);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!hasRestoredIndex.current) return;
+    console.log('[Leads] Saving currentLeadIndex to localStorage:', currentLeadIndex);
+    localStorage.setItem(`lead_index_${user.id}`, currentLeadIndex.toString());
+  }, [currentLeadIndex, user?.id]);
 
-// Robust restoration after leads load
-useEffect(() => {
-  if (!user?.id) return;
-  if (hasRestoredIndex.current) return;
-  if (queueLeads.length === 0) return;
-  const savedIndex = localStorage.getItem(`lead_index_${user.id}`);
-  const restoredIndex = savedIndex ? parseInt(savedIndex) : 0;
-  const validIndex = Math.min(Math.max(0, restoredIndex), queueLeads.length - 1);
-  console.log('[Leads] Restoring index after leads load:', { savedIndex, restoredIndex, validIndex, total: queueLeads.length });
-  setCurrentLeadIndex(validIndex);
-  setCurrentLead(queueLeads[validIndex]);
-  hasRestoredIndex.current = true;
-  if (savedIndex && restoredIndex === validIndex && restoredIndex > 0) {
-    toast.success(`Restored position: Lead ${validIndex + 1} of ${queueLeads.length}`);
-  }
-}, [queueLeads, user?.id]);
+  // Robust restoration after leads load
+  useEffect(() => {
+    if (!user?.id) return;
+    if (hasRestoredIndex.current) return;
+    if (queueLeads.length === 0) return;
+    const savedIndex = localStorage.getItem(`lead_index_${user.id}`);
+    const restoredIndex = savedIndex ? parseInt(savedIndex) : 0;
+    const validIndex = Math.min(Math.max(0, restoredIndex), queueLeads.length - 1);
+    console.log('[Leads] Restoring index after leads load:', { savedIndex, restoredIndex, validIndex, total: queueLeads.length });
+    setCurrentLeadIndex(validIndex);
+    setCurrentLead(queueLeads[validIndex]);
+    hasRestoredIndex.current = true;
+    if (savedIndex && restoredIndex === validIndex && restoredIndex > 0) {
+      toast.success(`Restored position: Lead ${validIndex + 1} of ${queueLeads.length}`);
+    }
+  }, [queueLeads, user?.id]);
 
   const fetchLeads = async () => {
     try {
       setLoading(true);
-      
+
       console.log('[Dashboard] Fetching leads for agent:', user?.id);
-      
+
       // Use optimized database function that filters uncalled leads on the server side
       const { data: uncalledLeads, error } = await supabase
         .rpc('get_agent_uncalled_leads', { agent_id: user?.id as string });
@@ -196,7 +199,7 @@ useEffect(() => {
         console.error('[Dashboard] RPC error:', error);
         throw error;
       }
-      
+
       console.log('[Dashboard] Fetched uncalled leads:', uncalledLeads?.length || 0);
 
       const formattedLeads: Lead[] = (uncalledLeads || []).map(lead => ({
@@ -221,20 +224,20 @@ useEffect(() => {
       }));
 
       setQueueLeads(formattedLeads);
-      
+
       // Restore saved lead index from localStorage
       if (formattedLeads.length > 0 && !currentLead && user?.id) {
         const savedIndex = localStorage.getItem(`lead_index_${user.id}`);
         const restoredIndex = savedIndex ? parseInt(savedIndex) : 0;
-        
+
         // Ensure the index is valid
         const validIndex = Math.min(Math.max(0, restoredIndex), formattedLeads.length - 1);
-        
+
         console.log('[Leads] Restoring index inside fetchLeads:', { savedIndex, restoredIndex, validIndex, total: formattedLeads.length });
         setCurrentLeadIndex(validIndex);
         setCurrentLead(formattedLeads[validIndex]);
         hasRestoredIndex.current = true;
-        
+
         if (savedIndex && restoredIndex === validIndex && restoredIndex > 0) {
           toast.success(`Restored position: Lead ${validIndex + 1} of ${formattedLeads.length}`);
         }
@@ -318,7 +321,7 @@ useEffect(() => {
         .eq('id', currentCallId);
 
       if (error) throw error;
-      
+
       toast.success('Notes saved successfully');
       console.log('[Dashboard] Notes saved');
     } catch (error) {
@@ -335,33 +338,18 @@ useEffect(() => {
     setCurrentLead(lead);
     setCallDuration(0);
     setCallNotes("");
-    
+
     // Update agent status to on-call
     await updateStatus('on-call');
-    
-    // Create a new call activity record
-    try {
-      const { data, error } = await supabase
-        .from('call_activities')
-        .insert({
-          user_id: user?.id,
-          lead_name: lead.name,
-          phone_number: lead.phone,
-          campaign_id: lead.campaignId,
-          status: 'connected',
-          start_time: new Date().toISOString()
-        })
-        .select()
-        .single();
 
-      if (error) throw error;
-      
-      setCurrentCallId(data.id);
-      console.log('[Dashboard] Call activity created:', data.id);
-    } catch (error) {
-      console.error('[Dashboard] Error creating call activity:', error);
-    }
-    
+    // Start Global Softphone Call
+    startCall({
+      id: lead.id,
+      name: lead.name,
+      phone: lead.phone,
+      campaign: lead.campaign || "Unknown"
+    });
+
     // Reset compliance checklist
     setComplianceChecked({
       introduction: false,
@@ -372,13 +360,13 @@ useEffect(() => {
   };
 
   const handleCallEnd = async () => {
-    // Save final notes before showing summary
-    if (currentCallId && callNotes.trim()) {
-      await saveCallNotes();
-    }
-    
-    // Update call end time, duration, and status
+    // Save final notes and transcript before showing summary
     if (currentCallId) {
+      if (callNotes.trim() || callTranscript.trim()) {
+        await saveCallNotes();
+      }
+
+      // Update call end time, duration, status, and transcript
       try {
         // Fetch the call start time to calculate duration
         const { data: callData, error: fetchError } = await supabase
@@ -393,29 +381,43 @@ useEffect(() => {
         const startTime = new Date(callData.start_time);
         const durationSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
 
+        const updateData: any = {
+          end_time: endTime.toISOString(),
+          duration_seconds: durationSeconds,
+          status: 'completed'
+        };
+
+        // Save transcript if available
+        if (callTranscript.trim()) {
+          updateData.transcript = callTranscript.trim();
+          console.log('[Dashboard] Saving transcript, length:', callTranscript.length);
+        }
+
         const { error } = await supabase
           .from('call_activities')
-          .update({
-            end_time: endTime.toISOString(),
-            duration_seconds: durationSeconds,
-            status: 'completed'
-          })
+          .update(updateData)
           .eq('id', currentCallId);
 
         if (error) throw error;
-        
+
         setCallDuration(durationSeconds);
-        toast.success('Call notes saved');
+        const savedItems = [];
+        if (callNotes.trim()) savedItems.push('notes');
+        if (callTranscript.trim()) savedItems.push('transcript');
+        toast.success(`Call ${savedItems.join(' and ')} saved`);
         console.log('[Dashboard] Call ended, duration:', durationSeconds, 'seconds');
       } catch (error) {
         console.error('[Dashboard] Error ending call:', error);
-        toast.error('Failed to save call notes');
+        toast.error('Failed to save call data');
       }
     }
-    
+
     // Set agent status back to online after call ends
     await updateStatus('online');
-    
+
+    // Reset transcript
+    setCallTranscript('');
+
     setShowACS(true);
     setCurrentCallId(null);
   };
@@ -427,10 +429,10 @@ useEffect(() => {
         <div>
           <h1 className="text-3xl font-black tracking-tight font-serif">Agent Dashboard</h1>
           <p className="text-muted-foreground">
-            Your workspace for managing calls and leads ??? {new Date().toLocaleDateString('en-UG', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
+            Your workspace for managing calls and leads ??? {new Date().toLocaleDateString('en-UG', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
               day: 'numeric',
               timeZone: 'Africa/Kampala'
             })}
@@ -450,24 +452,19 @@ useEffect(() => {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left Column - Softphone & Queue */}
         <div className="lg:col-span-1 space-y-6">
-          <Softphone 
-            currentLead={currentLead}
+          {/* Persistent Softphone */}
+          <Softphone
+            currentLead={currentLead || undefined}
             onNextLead={handleNextLead}
-            onPreviousLead={handlePreviousLead}
             hasNextLead={currentLeadIndex < queueLeads.length - 1}
-            hasPreviousLead={currentLeadIndex > 0}
-            currentLeadPosition={currentLeadIndex + 1}
-            totalLeads={queueLeads.length}
-            onCallStart={() => setIsCallActive(true)}
-            onCallEnd={() => setIsCallActive(false)}
           />
-          
-          <QueueCard 
+
+          <QueueCard
             nextLead={nextLead}
             queueLength={queueLeads.length}
             onCallLead={handleCallLead}
           />
-          
+
           {/* Quick Actions */}
           <Card>
             <CardHeader className="pb-3">
@@ -509,7 +506,7 @@ useEffect(() => {
                   <TabsTrigger value="faq">FAQ</TabsTrigger>
                   <TabsTrigger value="objections">Objections</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="pitch" className="space-y-4">
                   <LivePitchScript
                     leadName={currentLead?.name || ''}
@@ -518,34 +515,35 @@ useEffect(() => {
                     isCallActive={isCallActive}
                     audioContext={audioContext || undefined}
                     onTranscriptForAI={sendAISnippet}
+                    onTranscriptChange={setCallTranscript}
                   />
                 </TabsContent>
-                
+
                 <TabsContent value="faq" className="space-y-4">
                   <div className="space-y-3 text-sm">
                     <div className="bg-accent/50 rounded-lg p-3">
-                      <strong>Q: How do I make a deposit?</strong><br/>
+                      <strong>Q: How do I make a deposit?</strong><br />
                       A: You can deposit using Mobile Money (MTN, Airtel), bank transfer, or visit any of our agent locations.
                     </div>
                     <div className="bg-accent/50 rounded-lg p-3">
-                      <strong>Q: What's the minimum deposit?</strong><br/>
+                      <strong>Q: What's the minimum deposit?</strong><br />
                       A: The minimum deposit is UGX 10,000 for new customers.
                     </div>
                     <div className="bg-accent/50 rounded-lg p-3">
-                      <strong>Q: How long do withdrawals take?</strong><br/>
+                      <strong>Q: How long do withdrawals take?</strong><br />
                       A: Mobile Money withdrawals are instant. Bank transfers take 1-2 business days.
                     </div>
                   </div>
                 </TabsContent>
-                
+
                 <TabsContent value="objections" className="space-y-4">
                   <div className="space-y-3 text-sm">
                     <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-                      <strong>Objection:</strong> "I don't have time to bet"<br/>
+                      <strong>Objection:</strong> "I don't have time to bet"<br />
                       <strong>Response:</strong> "I understand you're busy! That's why our mobile app makes it quick and easy - you can place bets in under 30 seconds."
                     </div>
                     <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-                      <strong>Objection:</strong> "I'm not interested in bonuses"<br/>
+                      <strong>Objection:</strong> "I'm not interested in bonuses"<br />
                       <strong>Response:</strong> "No problem at all! Even without bonuses, we offer the best odds in Uganda and instant payouts."
                     </div>
                   </div>
@@ -575,7 +573,7 @@ useEffect(() => {
                     )}
                   </TabsTrigger>
                 </TabsList>
-                
+
                 {/* Campaign Script Tab */}
                 <TabsContent value="campaign" className="space-y-4 mt-4">
                   {campaignScript ? (
@@ -584,17 +582,17 @@ useEffect(() => {
                         <h4 className="font-medium mb-2">Campaign Objective</h4>
                         <p className="text-sm whitespace-pre-line">{campaignScript}</p>
                       </div>
-                      
+
                       {campaignSuggestions.length > 0 && (
                         <div className="space-y-3">
                           <h4 className="font-medium text-sm">Key Talking Points</h4>
                           {campaignSuggestions.map((suggestion: any, index: number) => {
-                            const bgColor = 
+                            const bgColor =
                               suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
-                              suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
-                              suggestion.type === 'info' ? 'bg-blue-50 border-blue-200' :
-                              'bg-accent/10 border-accent/20';
-                            
+                                suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
+                                  suggestion.type === 'info' ? 'bg-blue-50 border-blue-200' :
+                                    'bg-accent/10 border-accent/20';
+
                             return (
                               <div key={index} className={`${bgColor} border rounded-lg p-3 text-sm`}>
                                 <div className="flex items-center gap-2 mb-1">
@@ -619,7 +617,7 @@ useEffect(() => {
                     </div>
                   )}
                 </TabsContent>
-                
+
                 {/* Real-time AI Tab */}
                 <TabsContent value="realtime" className="space-y-4 mt-4">
                   {/* Connection Status */}
@@ -643,7 +641,7 @@ useEffect(() => {
                     </div>
                   )}
                   {/* Sentiment Orb with Suggestions */}
-                  <CallSentimentOrb 
+                  <CallSentimentOrb
                     sentiment={callSentiment}
                     isActive={isCallActive}
                     suggestions={suggestions}

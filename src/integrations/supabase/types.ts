@@ -59,6 +59,7 @@ export type Database = {
           recording_url: string | null
           start_time: string
           status: string | null
+          transcript: string | null
           updated_at: string
           user_id: string
         }
@@ -76,6 +77,7 @@ export type Database = {
           recording_url?: string | null
           start_time?: string
           status?: string | null
+          transcript?: string | null
           updated_at?: string
           user_id: string
         }
@@ -93,6 +95,7 @@ export type Database = {
           recording_url?: string | null
           start_time?: string
           status?: string | null
+          transcript?: string | null
           updated_at?: string
           user_id?: string
         }

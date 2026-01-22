@@ -13,10 +13,33 @@ serve(async (req) => {
   }
 
   try {
-    const { dateRange } = await req.json();
+    // Parse request body with error handling
+    let dateRange = '30d';
+    try {
+      const body = await req.json();
+      dateRange = body.dateRange || '30d';
+    } catch (parseError) {
+      console.warn('Failed to parse request body, using default dateRange:', parseError);
+    }
     
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Supabase configuration missing');
+      return new Response(
+        JSON.stringify({
+          agents: [],
+          insights: [],
+          message: 'Server configuration error. Please contact support.'
+        }),
+        { 
+          status: 200, // Return 200 with error message instead of 500
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Calculate date range
@@ -52,13 +75,26 @@ serve(async (req) => {
       .from('profiles')
       .select('id, full_name, email');
 
-    if (profilesError) throw profilesError;
+    if (profilesError) {
+      console.error('Error fetching profiles:', profilesError);
+      return new Response(
+        JSON.stringify({
+          agents: [],
+          insights: [],
+          message: 'Failed to load agent data'
+        }),
+        { 
+          status: 200, // Return 200 with empty data instead of 500
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
 
     if (!profiles || profiles.length === 0) {
       return new Response(
         JSON.stringify({
           agents: [],
-          analysis: null,
+          insights: [],
           message: 'No agents found in the system'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -72,51 +108,123 @@ serve(async (req) => {
       .gte('start_time', startDate.toISOString())
       .lte('start_time', endDate.toISOString());
 
-    if (callsError) throw callsError;
-
-    // Calculate metrics for each agent
-    const agentMetrics = profiles.map(profile => {
-      const agentCalls = callActivities?.filter(call => call.user_id === profile.id) || [];
-      const totalCalls = agentCalls.length;
-      const connects = agentCalls.filter(call => call.status === 'connected' || call.status === 'converted').length;
-      const conversions = agentCalls.filter(call => call.status === 'converted').length;
-      const totalRevenue = agentCalls.reduce((sum, call) => sum + (Number(call.deposit_amount) || 0), 0);
-      const totalDuration = agentCalls.reduce((sum, call) => sum + (call.duration_seconds || 0), 0);
-      const avgHandleTime = totalCalls > 0 ? Math.floor(totalDuration / totalCalls) : 0;
-      const conversionRate = connects > 0 ? ((conversions / connects) * 100) : 0;
-
-      return {
+    if (callsError) {
+      console.error('Error fetching call activities:', callsError);
+      // Return basic rankings with empty call data
+      const rankedAgents = profiles.map((profile, index) => ({
         id: profile.id,
         name: profile.full_name || profile.email || 'Unknown Agent',
-        calls: totalCalls,
-        connects,
-        conversions,
-        conversionRate: parseFloat(conversionRate.toFixed(1)),
-        avgHandleTime,
-        revenue: totalRevenue
-      };
+        calls: 0,
+        connects: 0,
+        conversions: 0,
+        conversionRate: 0,
+        avgHandleTime: 0,
+        revenue: 0,
+        rank: index + 1,
+        score: 0,
+        strengths: [],
+        improvements: []
+      }));
+      
+      return new Response(
+        JSON.stringify({
+          agents: rankedAgents,
+          insights: ['Unable to load call data. Please try again later.'],
+          message: null
+        }),
+        { 
+          status: 200, // Return 200 with basic data instead of 500
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Calculate metrics for each agent with error handling
+    const agentMetrics = profiles.map(profile => {
+      try {
+        const agentCalls = (callActivities || []).filter((call: any) => call?.user_id === profile.id);
+        const totalCalls = agentCalls.length;
+        const connects = agentCalls.filter((call: any) => call?.status === 'connected' || call?.status === 'converted').length;
+        const conversions = agentCalls.filter((call: any) => call?.status === 'converted').length;
+        const totalRevenue = agentCalls.reduce((sum: number, call: any) => sum + (Number(call?.deposit_amount) || 0), 0);
+        const totalDuration = agentCalls.reduce((sum: number, call: any) => sum + (Number(call?.duration_seconds) || 0), 0);
+        const avgHandleTime = totalCalls > 0 ? Math.floor(totalDuration / totalCalls) : 0;
+        const conversionRate = connects > 0 ? ((conversions / connects) * 100) : 0;
+
+        return {
+          id: profile.id,
+          name: profile.full_name || profile.email || 'Unknown Agent',
+          calls: totalCalls,
+          connects,
+          conversions,
+          conversionRate: parseFloat(conversionRate.toFixed(1)),
+          avgHandleTime,
+          revenue: totalRevenue
+        };
+      } catch (error) {
+        console.error(`Error calculating metrics for agent ${profile.id}:`, error);
+        // Return zero metrics for this agent
+        return {
+          id: profile.id,
+          name: profile.full_name || profile.email || 'Unknown Agent',
+          calls: 0,
+          connects: 0,
+          conversions: 0,
+          conversionRate: 0,
+          avgHandleTime: 0,
+          revenue: 0
+        };
+      }
     });
 
     // Filter out agents with no activity
     const activeAgents = agentMetrics.filter(agent => agent.calls > 0);
 
+    console.log(`[analyze-agents] Found ${activeAgents.length} active agents out of ${agentMetrics.length} total agents`);
+
     if (activeAgents.length < 2) {
+      console.log(`[analyze-agents] Insufficient agents: ${activeAgents.length} (minimum: 2)`);
       return new Response(
         JSON.stringify({
           agents: activeAgents.map((agent, index) => ({ ...agent, rank: index + 1, score: 0 })),
-          analysis: null,
+          insights: [],
           message: 'Not enough agent data for meaningful analysis. Need at least 2 agents with activity.'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Analyzing', activeAgents.length, 'agents with GPT-5');
+    console.log(`[analyze-agents] Analyzing ${activeAgents.length} agents with GPT-4o-mini`);
 
-    // Analyze with GPT-5
+    // Analyze with GPT-4 (or fallback to GPT-3.5-turbo)
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openAIApiKey) {
-      throw new Error('OpenAI API key not configured');
+      console.warn('OpenAI API key not configured, returning basic rankings');
+      // Return basic rankings without AI analysis
+      const rankedAgents = activeAgents
+        .sort((a, b) => {
+          // Sort by conversion rate (primary), then by calls (secondary)
+          if (b.conversionRate !== a.conversionRate) {
+            return b.conversionRate - a.conversionRate;
+          }
+          return b.calls - a.calls;
+        })
+        .map((agent, index) => ({
+          ...agent,
+          rank: index + 1,
+          score: Math.max(0, Math.min(100, Math.round(agent.conversionRate * 0.4 + (agent.calls / 100) * 30 + (agent.revenue / 100000) * 20 + (100 - agent.avgHandleTime / 10) * 0.1))),
+          strengths: [],
+          improvements: []
+        }));
+      
+      return new Response(
+        JSON.stringify({
+          agents: rankedAgents,
+          insights: ['AI analysis unavailable. Rankings based on performance metrics.'],
+          message: null
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -126,7 +234,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5-2025-08-07',
+        model: 'gpt-4o-mini', // Use a valid model - gpt-4o-mini is cost-effective and fast
         messages: [
           {
             role: 'system',
@@ -161,13 +269,66 @@ Return your analysis in this JSON format:
     if (!response.ok) {
       const errorText = await response.text();
       console.error('OpenAI API error:', response.status, errorText);
-      throw new Error(`OpenAI API error: ${response.status}`);
+      
+      // Return fallback rankings instead of throwing error
+      const rankedAgents = activeAgents
+        .sort((a, b) => {
+          if (b.conversionRate !== a.conversionRate) {
+            return b.conversionRate - a.conversionRate;
+          }
+          return b.calls - a.calls;
+        })
+        .map((agent, index) => ({
+          ...agent,
+          rank: index + 1,
+          score: Math.max(0, Math.min(100, Math.round(agent.conversionRate * 0.4 + (agent.calls / 100) * 30 + (agent.revenue / 100000) * 20 + (100 - agent.avgHandleTime / 10) * 0.1))),
+          strengths: [],
+          improvements: []
+        }));
+      
+      return new Response(
+        JSON.stringify({
+          agents: rankedAgents,
+          insights: ['AI analysis temporarily unavailable. Rankings based on performance metrics.'],
+          message: null
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const data = await response.json();
+    
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('Invalid response format from OpenAI API:', data);
+      // Return fallback rankings instead of throwing
+      const rankedAgents = activeAgents
+        .sort((a, b) => {
+          if (b.conversionRate !== a.conversionRate) {
+            return b.conversionRate - a.conversionRate;
+          }
+          return b.calls - a.calls;
+        })
+        .map((agent, index) => ({
+          ...agent,
+          rank: index + 1,
+          score: Math.max(0, Math.min(100, Math.round(agent.conversionRate * 0.4 + (agent.calls / 100) * 30 + (agent.revenue / 100000) * 20 + (100 - agent.avgHandleTime / 10) * 0.1))),
+          strengths: [],
+          improvements: []
+        }));
+      
+      return new Response(
+        JSON.stringify({
+          agents: rankedAgents,
+          insights: ['AI analysis temporarily unavailable. Rankings based on performance metrics.'],
+          message: null
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     const content = data.choices[0].message.content;
 
-    console.log('GPT-5 analysis response received');
+    console.log(`[analyze-agents] GPT analysis response received (${content.length} chars)`);
 
     // Parse the JSON response with better error handling
     let analysis;
@@ -176,16 +337,24 @@ Return your analysis in this JSON format:
       const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/) || content.match(/(\{[\s\S]*\})/);
       const jsonString = jsonMatch ? jsonMatch[1].trim() : content.trim();
       
-      console.log('Attempting to parse JSON string');
+      console.log(`[analyze-agents] Attempting to parse JSON string (${jsonString.length} chars)`);
       analysis = JSON.parse(jsonString);
       
       // Validate the structure
       if (!analysis.rankings || !Array.isArray(analysis.rankings)) {
         throw new Error('Invalid analysis structure: missing rankings array');
       }
+      
+      // Ensure insights is an array
+      if (!Array.isArray(analysis.insights)) {
+        console.warn('[analyze-agents] Insights is not an array, converting:', typeof analysis.insights);
+        analysis.insights = analysis.insights ? [analysis.insights] : [];
+      }
+      
+      console.log(`[analyze-agents] Successfully parsed ${analysis.rankings.length} rankings and ${analysis.insights?.length || 0} insights`);
     } catch (parseError) {
-      console.error('Failed to parse GPT response:', parseError);
-      console.error('Raw content:', content);
+      console.error('[analyze-agents] Failed to parse GPT response:', parseError);
+      console.error('[analyze-agents] Raw content (first 500 chars):', content.substring(0, 500));
       
       // Return a fallback response with basic rankings
       const rankedAgents = activeAgents
@@ -216,19 +385,22 @@ Return your analysis in this JSON format:
 
     // Merge rankings with agent data
     const rankedAgents = activeAgents.map(agent => {
-      const ranking = analysis.rankings.find((r: any) => r.agentId === agent.id) || {
+      const ranking = analysis.rankings?.find((r: any) => r.agentId === agent.id) || {
         rank: 999,
         score: 0,
         strengths: [],
         improvements: []
       };
       return { ...agent, ...ranking };
-    }).sort((a, b) => a.rank - b.rank);
+    }).sort((a, b) => (a.rank || 999) - (b.rank || 999));
+
+    const insights = Array.isArray(analysis.insights) ? analysis.insights : (analysis.insights ? [analysis.insights] : []);
+    console.log(`[analyze-agents] Returning ${rankedAgents.length} ranked agents and ${insights.length} insights`);
 
     return new Response(
       JSON.stringify({
         agents: rankedAgents,
-        insights: analysis.insights || [],
+        insights: insights,
         message: null
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -236,10 +408,15 @@ Return your analysis in this JSON format:
 
   } catch (error) {
     console.error('Error in analyze-agents function:', error);
+    // Always return 200 with error message instead of 500 to prevent UI breaking
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ 
+        agents: [],
+        insights: [],
+        message: 'Agent analysis temporarily unavailable. Please try again later.'
+      }),
       {
-        status: 500,
+        status: 200, // Return 200 instead of 500 so UI doesn't break
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );

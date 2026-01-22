@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { UpdateDialog } from "@/components/UpdateDialog";
+import { SoftphoneProvider } from "@/contexts/SoftphoneContext";
 
 // Lazy load pages for better initial load performance
 const RoleBasedDashboard = lazy(() => import("@/components/RoleBasedDashboard").then(m => ({ default: m.RoleBasedDashboard })));
@@ -27,6 +28,7 @@ const ManagementReports = lazy(() => import("./pages/ManagementReports"));
 const Integrations = lazy(() => import("./pages/Integrations"));
 const Callbacks = lazy(() => import("./pages/Callbacks"));
 const WhatsApp = lazy(() => import("./pages/WhatsApp"));
+const Kanban = lazy(() => import("./pages/Kanban"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -43,13 +45,15 @@ const queryClient = new QueryClient({
 
 // Component that initializes auto-update checking and shows update dialog
 function AutoUpdateChecker({ children }: { children: React.ReactNode }) {
-  const { 
+  const {
     currentVersion,
-    updateInfo, 
-    showUpdateDialog, 
+    updateInfo,
+    showUpdateDialog,
     setShowUpdateDialog,
+    isDownloading,
+    downloadProgress,
     downloadAndInstall,
-    dismissUpdate 
+    dismissUpdate
   } = useAutoUpdate();
 
   return (
@@ -64,6 +68,8 @@ function AutoUpdateChecker({ children }: { children: React.ReactNode }) {
           releaseNotes={updateInfo.releaseNotes}
           onDownload={downloadAndInstall}
           onDismiss={dismissUpdate}
+          isDownloading={isDownloading}
+          downloadProgress={downloadProgress}
         />
       )}
     </>
@@ -73,105 +79,112 @@ function AutoUpdateChecker({ children }: { children: React.ReactNode }) {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <ThemeProvider defaultTheme="light" storageKey="betsure-theme">
+      <ThemeProvider defaultTheme="light" storageKey="bangbet-theme">
         <TooltipProvider>
           <AutoUpdateChecker>
             <Toaster />
             <Sonner />
-            <BrowserRouter>
-            <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-              <Routes>
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/" element={
-                <ProtectedRoute>
-                  <RoleBasedDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/dashboard" element={
-                <ProtectedRoute>
-                  <RoleBasedDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/monitor" element={
-                <ProtectedRoute>
-                  <Monitor />
-                </ProtectedRoute>
-              } />
-              <Route path="/management-monitor" element={
-                <ProtectedRoute>
-                  <ManagementMonitor />
-                </ProtectedRoute>
-              } />
-              <Route path="/performance" element={
-                <ProtectedRoute>
-                  <Performance />
-                </ProtectedRoute>
-              } />
-              <Route path="/leads" element={
-                <ProtectedRoute>
-                  <Leads />
-                </ProtectedRoute>
-              } />
-              <Route path="/reports" element={
-                <ProtectedRoute>
-                  <RoleBasedReports />
-                </ProtectedRoute>
-              } />
-              <Route path="/management-reports" element={
-                <ProtectedRoute>
-                  <ManagementReports />
-                </ProtectedRoute>
-              } />
-              <Route path="/campaigns" element={
-                <ProtectedRoute>
-                  <Campaigns />
-                </ProtectedRoute>
-              } />
-              <Route path="/management-campaigns" element={
-                <ProtectedRoute>
-                  <ManagementCampaigns />
-                </ProtectedRoute>
-              } />
-              <Route path="/management-campaign" element={
-                <ProtectedRoute>
-                  <ManagementCampaigns />
-                </ProtectedRoute>
-              } />
-              <Route path="/integrations" element={
-                <ProtectedRoute>
-                  <Integrations />
-                </ProtectedRoute>
-              } />
-          <Route path="/callbacks" element={
-            <ProtectedRoute>
-              <Callbacks />
-            </ProtectedRoute>
-          } />
-          <Route path="/whatsapp" element={
-            <ProtectedRoute>
-              <WhatsApp />
-            </ProtectedRoute>
-          } />
-              <Route path="/settings" element={
-                <ProtectedRoute>
-                  <RoleBasedSettings />
-                </ProtectedRoute>
-              } />
-              <Route path="/user-management" element={
-                <ProtectedRoute>
-                  <UserManagement />
-                </ProtectedRoute>
-              } />
-              <Route path="/users" element={
-                <ProtectedRoute>
-                  <UserManagement />
-                </ProtectedRoute>
-              } />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
+            <SoftphoneProvider>
+              <BrowserRouter>
+                <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                  <Routes>
+                    <Route path="/auth" element={<Auth />} />
+                    <Route path="/" element={
+                      <ProtectedRoute>
+                        <RoleBasedDashboard />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/dashboard" element={
+                      <ProtectedRoute>
+                        <RoleBasedDashboard />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/monitor" element={
+                      <ProtectedRoute>
+                        <Monitor />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/management-monitor" element={
+                      <ProtectedRoute>
+                        <ManagementMonitor />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/performance" element={
+                      <ProtectedRoute>
+                        <Performance />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/leads" element={
+                      <ProtectedRoute>
+                        <Leads />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/reports" element={
+                      <ProtectedRoute>
+                        <RoleBasedReports />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/management-reports" element={
+                      <ProtectedRoute>
+                        <ManagementReports />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/campaigns" element={
+                      <ProtectedRoute>
+                        <Campaigns />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/management-campaigns" element={
+                      <ProtectedRoute>
+                        <ManagementCampaigns />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/management-campaign" element={
+                      <ProtectedRoute>
+                        <ManagementCampaigns />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/integrations" element={
+                      <ProtectedRoute>
+                        <Integrations />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/callbacks" element={
+                      <ProtectedRoute>
+                        <Callbacks />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/whatsapp" element={
+                      <ProtectedRoute>
+                        <WhatsApp />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/kanban" element={
+                      <ProtectedRoute>
+                        <Kanban />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/settings" element={
+                      <ProtectedRoute>
+                        <RoleBasedSettings />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/user-management" element={
+                      <ProtectedRoute>
+                        <UserManagement />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/users" element={
+                      <ProtectedRoute>
+                        <UserManagement />
+                      </ProtectedRoute>
+                    } />
+                    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
+              </BrowserRouter>
+            </SoftphoneProvider>
           </AutoUpdateChecker>
         </TooltipProvider>
       </ThemeProvider>

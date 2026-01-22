@@ -51,6 +51,12 @@ export function useFunnelAnalysis(dateRange: string, campaignId: string, manager
           }
         }
 
+        console.log('[useFunnelAnalysis] Calling analyze-funnel with:', {
+          dateRange,
+          campaignId,
+          managerId: managerFilter || null
+        });
+        
         const { data, error: functionError } = await supabase.functions.invoke('analyze-funnel', {
           body: { 
             dateRange, 
@@ -59,14 +65,83 @@ export function useFunnelAnalysis(dateRange: string, campaignId: string, manager
           }
         });
 
-        if (functionError) throw functionError;
+        if (functionError) {
+          console.error('Error from analyze-funnel function:', functionError);
+          // Set empty data instead of throwing
+          setFunnelData({
+            dials: 0,
+            connects: 0,
+            qualified: 0,
+            conversions: 0,
+            connectRate: "0",
+            qualificationRate: "0",
+            conversionRate: "0"
+          });
+          setInsights(null);
+          setMessage('Analysis temporarily unavailable');
+          return;
+        }
 
-        setFunnelData(data.funnelData);
-        setInsights(data.insights || []);
-        setMessage(data.message);
+        // Handle error response from function
+        if (data?.error) {
+          console.error('Error in function response:', data.error);
+          setFunnelData({
+            dials: 0,
+            connects: 0,
+            qualified: 0,
+            conversions: 0,
+            connectRate: "0",
+            qualificationRate: "0",
+            conversionRate: "0"
+          });
+          setInsights(null);
+          setMessage(data.message || 'Analysis temporarily unavailable');
+          return;
+        }
+
+        setFunnelData(data?.funnelData || {
+          dials: 0,
+          connects: 0,
+          qualified: 0,
+          conversions: 0,
+          connectRate: "0",
+          qualificationRate: "0",
+          conversionRate: "0"
+        });
+        
+        // Log the response for debugging
+        console.log('[useFunnelAnalysis] Response data:', {
+          hasInsights: !!data?.insights,
+          insightsCount: Array.isArray(data?.insights) ? data.insights.length : 0,
+          insights: data?.insights,
+          message: data?.message,
+          funnelData: data?.funnelData
+        });
+        
+        // Only set message if there are no insights
+        // If insights exist, clear the message so they can be displayed
+        if (data?.insights && Array.isArray(data.insights) && data.insights.length > 0) {
+          setInsights(data.insights);
+          setMessage(null); // Clear message when insights are available
+        } else {
+          setInsights(data?.insights || null);
+          setMessage(data?.message || null);
+        }
       } catch (err) {
         console.error('Error fetching funnel analysis:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load analysis');
+        // Set empty data instead of breaking
+        setFunnelData({
+          dials: 0,
+          connects: 0,
+          qualified: 0,
+          conversions: 0,
+          connectRate: "0",
+          qualificationRate: "0",
+          conversionRate: "0"
+        });
+        setInsights(null);
+        setMessage('Analysis temporarily unavailable');
+        setError(null); // Don't set error state, just show message
       } finally {
         setLoading(false);
       }

@@ -9,8 +9,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { z } from "zod";
-import loginBackground from "@/assets/login-background.png";
-import betsureLogo from "@/assets/betsure-logo.png";
+import loginBackground from "@/assets/images.jpeg";
+import bangbetLogo from "@/assets/bangbet-logo.png";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -244,9 +244,18 @@ const Auth = () => {
     }
     
     // Only redirect to dashboard if NOT in recovery mode
-    if (user && !isResettingPassword) {
-      console.log('[Auth] Normal login, redirecting to dashboard');
-      navigate("/dashboard");
+    // Also check if we're in the middle of signing out (user might be cleared but state not updated yet)
+    // Add a small delay to prevent race condition with signOut
+    if (user && !isResettingPassword && session) {
+      // Check if we just signed out by looking at the URL or a flag
+      const isSigningOut = sessionStorage.getItem('signingOut') === 'true';
+      if (!isSigningOut) {
+        console.log('[Auth] Normal login, redirecting to dashboard');
+        navigate("/dashboard");
+      } else {
+        // Clear the signing out flag
+        sessionStorage.removeItem('signingOut');
+      }
     }
   }, [user, session, navigate, isResettingPassword]);
 
@@ -550,22 +559,16 @@ const Auth = () => {
 
   return (
     <div 
-      className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat relative"
-      style={{ backgroundImage: `url(${loginBackground})` }}
+      className="min-h-screen flex items-center justify-center bg-center bg-no-repeat relative"
+      style={{ 
+        backgroundImage: `url(${loginBackground})`,
+        backgroundSize: "contain",
+        backgroundColor: "#00963f"
+      }}
     >
       <div className="absolute inset-0 bg-black/20" />
       
-      <div className="relative z-10 w-full max-w-6xl mx-auto px-4 flex items-center justify-between">
-        <div className="flex-1 flex justify-center lg:justify-start">
-          <div className="flex items-center justify-center">
-            <img 
-              src={betsureLogo} 
-              alt="Betsure Logo" 
-              className="w-96 h-96 object-contain"
-            />
-          </div>
-        </div>
-
+      <div className="relative z-10 w-full max-w-6xl mx-auto px-4 flex items-center justify-center">
         <div className="flex-1 flex justify-center lg:justify-end">
           <Card className="w-full max-w-md bg-black/40 backdrop-blur-sm border-gray-600">
             <CardHeader>

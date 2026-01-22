@@ -28,12 +28,31 @@ export class RealtimeAI {
       // Get ephemeral token from edge function
       const { data, error } = await supabase.functions.invoke('get-realtime-token');
       
-      if (error) throw error;
-      if (!data?.client_secret?.value) {
-        throw new Error('Failed to get ephemeral token');
+      if (error) {
+        console.error('[RealtimeAI] Error from get-realtime-token:', error);
+        throw error;
+      }
+      
+      console.log('[RealtimeAI] Token response structure:', JSON.stringify(data, null, 2));
+      
+      // Handle different possible response structures
+      let token: string | null = null;
+      if (data?.client_secret?.value) {
+        token = data.client_secret.value;
+      } else if (data?.client_secret) {
+        // If client_secret is a string directly
+        token = typeof data.client_secret === 'string' ? data.client_secret : null;
+      } else if (data?.session?.client_secret?.value) {
+        token = data.session.client_secret.value;
+      } else if (data?.value) {
+        token = data.value;
+      }
+      
+      if (!token) {
+        console.error('[RealtimeAI] Token not found in response. Response structure:', data);
+        throw new Error(`Failed to get ephemeral token. Response structure: ${JSON.stringify(data)}`);
       }
 
-      const token = data.client_secret.value;
       console.log('[RealtimeAI] Got ephemeral token, connecting to OpenAI...');
 
       // Connect to OpenAI Realtime API
@@ -53,7 +72,7 @@ export class RealtimeAI {
           type: 'session.update',
           session: {
             modalities: ['text'],
-            instructions: `You are an AI assistant helping a call center agent at Betsure Uganda. 
+            instructions: `You are an AI assistant helping a call center agent at Bangbet Uganda. 
 Your role is to:
 1. Listen to the conversation and provide real-time suggestions
 2. Detect customer sentiment and intent
@@ -91,24 +110,31 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
             // Extract the complete text from the output item
             const text = message.item?.content?.[0]?.text || '';
             if (text && text.trim().length > 0) {
-              console.log('[RealtimeAI] Complete response:', text);
+              console.log('[RealtimeAI] Complete response from output_item.done:', text);
               this.handleTextComplete(text);
             }
           } else if (message.type === 'response.done') {
-            // Fallback: extract text from the response
+            // Only process response.done if we haven't already processed the text from output_item.done
+            // This prevents duplicate suggestions
             const outputs = message.response?.output || [];
             let foundText = false;
             outputs.forEach((output: any) => {
               output.content?.forEach((content: any) => {
                 if (content.type === 'text' && content.text && content.text.trim().length > 0) {
-                  console.log('[RealtimeAI] Response text:', content.text);
-                  this.handleTextComplete(content.text);
-                  foundText = true;
+                  // Check if this text was already processed
+                  if (content.text.trim() !== this.lastProcessedText.trim()) {
+                    console.log('[RealtimeAI] Response text from response.done:', content.text);
+                    this.handleTextComplete(content.text);
+                    foundText = true;
+                  } else {
+                    console.log('[RealtimeAI] Skipping duplicate text from response.done');
+                  }
                 }
               });
             });
-            if (!foundText && this.currentTextAccumulator.trim().length > 0) {
-              // Use accumulated text if no text found in response
+            // Only use accumulator if no text was found and it's different from last processed
+            if (!foundText && this.currentTextAccumulator.trim().length > 0 && 
+                this.currentTextAccumulator.trim() !== this.lastProcessedText.trim()) {
               console.log('[RealtimeAI] Using accumulated text:', this.currentTextAccumulator);
               this.handleTextComplete(this.currentTextAccumulator);
             }
@@ -144,6 +170,8 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
   }
 
   private currentTextAccumulator = '';
+  private lastProcessedText = '';
+  private lastProcessedTimestamp = 0;
 
   private handleTextDelta(delta: string) {
     this.currentTextAccumulator += delta;
@@ -157,6 +185,16 @@ Provide concise, actionable suggestions. Focus on helping the agent close the sa
       console.log('[RealtimeAI] Text too short, skipping:', fullText);
       return;
     }
+
+    // Prevent duplicate processing - if same text processed within 1 second, skip
+    const now = Date.now();
+    if (fullText.trim() === this.lastProcessedText.trim() && (now - this.lastProcessedTimestamp) < 1000) {
+      console.log('[RealtimeAI] Duplicate response detected, skipping:', fullText.substring(0, 50) + '...');
+      return;
+    }
+
+    this.lastProcessedText = fullText.trim();
+    this.lastProcessedTimestamp = now;
 
     console.log('[RealtimeAI] Processing complete text:', fullText.substring(0, 100) + '...');
 

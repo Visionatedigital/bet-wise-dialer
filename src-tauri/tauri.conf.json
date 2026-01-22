@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "BetSure Dialer",
-  "version": "1.0.4",
-  "identifier": "com.betsure.dialer",
+  "productName": "Bangbet-telemarketing software",
+  "version": "1.0.6",
+  "identifier": "com.bangbet.dialer",
   "plugins": {
     "updater": {
       "pubkey": "",
@@ -23,7 +23,7 @@
   "app": {
     "windows": [
       {
-        "title": "BetSure Dialer",
+        "title": "Bangbet-telemarketing software",
         "label": "main",
         "width": 1400,
         "height": 900,
@@ -43,27 +43,23 @@
       "csp": "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* http://127.0.0.1:* http://*:* https://api.openai.com https://voice.africastalking.com https://*.africastalking.com wss://*.africastalking.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webrtc.africastalking.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; font-src 'self' data:; frame-src 'self' https:"
     },
     "trayIcon": {
-      "iconPath": "icons/32x32.png",
+      "iconPath": "../src/assets/bangbet-logo.png",
       "iconAsTemplate": true,
       "menuOnLeftClick": false,
-      "title": "BetSure"
+      "title": "Bangbet"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
     "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "../src/assets/bangbet-logo.png"
     ],
     "category": "Business",
-    "shortDescription": "BetSure Call Center Dialer",
-    "longDescription": "A professional call center application for BetSure agents to manage leads, make calls, and track customer interactions.",
-    "copyright": "© 2025 BetSure. All rights reserved.",
-    "publisher": "BetSure",
+    "shortDescription": "Bangbet Call Center Dialer",
+    "longDescription": "A professional call center application for Bangbet agents to manage leads, make calls, and track customer interactions.",
+    "copyright": "© 2026 Bangbet. All rights reserved.",
+    "publisher": "Bangbet",
     "macOS": {
       "entitlements": null,
       "exceptionDomain": "",
@@ -81,7 +77,7 @@
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
         "installMode": "perMachine",
-        "startMenuFolder": "BetSure",
+        "startMenuFolder": "BangBet",
         "compression": "lzma"
       }
     }

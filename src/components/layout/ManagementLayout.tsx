@@ -5,6 +5,7 @@ import { Moon, Sun, Bell, Shield, Users } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +22,7 @@ export function ManagementLayout({ children }: ManagementLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { isAdmin } = useUserRole();
+  const { currentVersion } = useAutoUpdate();
 
   const switchDashboard = (mode: 'agent' | 'management' | 'admin') => {
     localStorage.setItem('adminViewMode', mode);
@@ -33,8 +35,18 @@ export function ManagementLayout({ children }: ManagementLayoutProps) {
     return emailPrefix.substring(0, 2).toUpperCase();
   };
 
+  const getUserDisplayName = (email: string): string => {
+    if (!email) return "Manager";
+    const emailPrefix = email.split("@")[0];
+    // Capitalize first letter of each word
+    return emailPrefix.split('.').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ') || emailPrefix;
+  };
+
   const userEmail = user?.email || "manager@example.com";
   const userInitials = getInitials(userEmail);
+  const userDisplayName = getUserDisplayName(userEmail);
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -68,12 +80,15 @@ export function ManagementLayout({ children }: ManagementLayoutProps) {
                       <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
                         {userInitials}
                       </div>
-                      <span className="hidden md:inline text-sm font-medium">{userEmail}</span>
+                      <span className="hidden md:inline text-sm font-medium">{userDisplayName}</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5 text-sm font-medium">{userEmail}</div>
+                    <div className="px-2 py-1.5 text-sm font-medium">{userDisplayName}</div>
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">Manager</div>
+                    <div className="px-2 py-1 text-xs text-muted-foreground border-t mt-1 pt-1">
+                      Version v{currentVersion}
+                    </div>
                     <DropdownMenuSeparator />
                     {isAdmin && (
                       <>
@@ -101,8 +116,11 @@ export function ManagementLayout({ children }: ManagementLayoutProps) {
 
           <footer className="border-t bg-muted/30 px-6 py-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Management Portal v1.0</span>
-              <span>Betsure Uganda • Performance Analytics</span>
+              <span>Management Portal</span>
+              <div className="flex items-center gap-4">
+                <span>Bangbet Uganda • Performance Analytics</span>
+                <span className="font-mono">v{currentVersion}</span>
+              </div>
             </div>
           </footer>
         </div>

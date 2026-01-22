@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificationDropdown } from "./NotificationDropdown";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +19,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Softphone } from "@/components/dashboard/Softphone";
+import { useSoftphone } from "@/contexts/SoftphoneContext";
+import { X } from "lucide-react";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -26,9 +31,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { status, updateStatus } = useAgentStatus();
-  const { isAdmin } = useUserRole();
+  const { isAdmin, isManagement } = useUserRole();
+  const { currentVersion } = useAutoUpdate();
   const [queueCount, setQueueCount] = useState(0);
   const [todayCallsCount, setTodayCallsCount] = useState(0);
+  const { showSoftphone, setShowSoftphone, activeLead } = useSoftphone();
 
   const switchDashboard = (mode: 'agent' | 'management' | 'admin') => {
     localStorage.setItem('adminViewMode', mode);
@@ -40,23 +47,53 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
     const fetchHeaderStats = async () => {
       try {
-        // Fetch queue count (leads count)
-        const { count: leadsCount } = await supabase
-          .from('leads')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id);
+        // Determine which user IDs to fetch data for
+        let userIds: string[] = [];
 
+        if (isManagement && !isAdmin && user) {
+          // For managers, fetch their assigned agents
+          const { data: managerAgents } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('manager_id', user.id)
+            .eq('approved', true);
+
+          userIds = managerAgents?.map(a => a.id) || [];
+
+          if (userIds.length === 0) {
+            setQueueCount(0);
+            setTodayCallsCount(0);
+            return;
+          }
+        } else {
+          // For regular agents or admins, use their own ID
+          userIds = [user.id];
+        }
+
+        // Fetch queue count (leads count) - for managers, sum across all agents
+        let leadsQuery = supabase
+          .from('leads')
+          .select('*', { count: 'exact', head: true });
+
+        if (isManagement && !isAdmin) {
+          leadsQuery = leadsQuery.in('user_id', userIds);
+        } else {
+          leadsQuery = leadsQuery.eq('user_id', user.id);
+        }
+
+        const { count: leadsCount } = await leadsQuery;
         setQueueCount(leadsCount || 0);
 
-        // Fetch today's calls count
+        // Fetch today's calls count - for managers, sum across all agents
         const today = new Date().toISOString().split('T')[0];
-        const { count: callsCount } = await supabase
+        let callsQuery = supabase
           .from('call_activities')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
+          .in('user_id', userIds)
           .gte('start_time', `${today}T00:00:00`)
           .lt('start_time', `${today}T23:59:59`);
 
+        const { count: callsCount } = await callsQuery;
         setTodayCallsCount(callsCount || 0);
       } catch (error) {
         console.error('Error fetching header stats:', error);
@@ -66,71 +103,103 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     fetchHeaderStats();
 
     // Set up real-time subscriptions
-    const leadsChannel = supabase
-      .channel('leads-count')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'leads',
-          filter: `user_id=eq.${user.id}`
-        },
-        () => {
-          fetchHeaderStats();
-        }
-      )
-      .subscribe();
+    // For managers, subscribe to all their agents' data
+    const setupSubscriptions = async () => {
+      let leadsFilter = `user_id=eq.${user.id}`;
+      let callsFilter = `user_id=eq.${user.id}`;
 
-    const callsChannel = supabase
-      .channel('calls-count')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'call_activities',
-          filter: `user_id=eq.${user.id}`
-        },
-        () => {
-          fetchHeaderStats();
+      if (isManagement && !isAdmin && user) {
+        const { data: managerAgents } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('manager_id', user.id)
+          .eq('approved', true);
+
+        const agentIds = managerAgents?.map(a => a.id) || [];
+        if (agentIds.length > 0) {
+          leadsFilter = `user_id=in.(${agentIds.join(',')})`;
+          callsFilter = `user_id=in.(${agentIds.join(',')})`;
         }
-      )
-      .subscribe();
+      }
+
+      const leadsChannel = supabase
+        .channel('leads-count')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'leads',
+            filter: leadsFilter
+          },
+          () => {
+            fetchHeaderStats();
+          }
+        )
+        .subscribe();
+
+      const callsChannel = supabase
+        .channel('calls-count')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'call_activities',
+            filter: callsFilter
+          },
+          () => {
+            fetchHeaderStats();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        leadsChannel.unsubscribe();
+        callsChannel.unsubscribe();
+      };
+    };
+
+    let cleanup: (() => void) | undefined;
+    setupSubscriptions().then(unsub => {
+      cleanup = unsub;
+    });
 
     return () => {
-      supabase.removeChannel(leadsChannel);
-      supabase.removeChannel(callsChannel);
+      if (cleanup) cleanup();
     };
-  }, [user]);
+  }, [user, isManagement, isAdmin]);
 
   // Generate initials from email
   const getInitials = (email: string): string => {
     if (!email) return "U";
     const emailPrefix = email.split("@")[0];
     const words = emailPrefix.split(/[._-]/);
-    
+
     if (words.length >= 2) {
       return (words[0][0] + words[1][0]).toUpperCase();
     }
-    
+
     return emailPrefix.substring(0, 2).toUpperCase();
   };
 
   const userEmail = user?.email || "user@example.com";
   const userInitials = getInitials(userEmail);
 
+  const location = useLocation();
+  const isEmbeddedPage = location.pathname === "/" || location.pathname === "/kanban" || location.pathname === "/telemarketing";
+
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full bg-dashboard-bg">
         <AppSidebar />
-        
+
         <div className="flex-1 flex flex-col">
           {/* Top Header */}
           <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="flex h-14 items-center gap-4 px-4">
               <SidebarTrigger className="md:hidden" />
-              
+
               {/* Search */}
               <div className="flex-1 max-w-md">
                 <div className="relative">
@@ -188,8 +257,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">
                       Agent • <span className="capitalize">{status}</span>
                     </div>
+                    <div className="px-2 py-1 text-xs text-muted-foreground border-t mt-1 pt-1">
+                      Version v{currentVersion}
+                    </div>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => updateStatus(status === 'break' ? 'online' : 'break')}
                     >
                       <Coffee className="mr-2 h-4 w-4" />
@@ -236,11 +308,37 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <footer className="border-t bg-muted/30 px-6 py-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Please bet responsibly. 18+ Only.</span>
-              <span>Betsure Uganda • EAT (UTC+3) • Support: +256 800 123456</span>
+              <div className="flex items-center gap-4">
+                <span>Bangbet Uganda • EAT (UTC+3) • Support: +256 800 123456</span>
+                <span className="font-mono">v{currentVersion}</span>
+              </div>
             </div>
           </footer>
         </div>
       </div>
-    </SidebarProvider>
+
+      {
+        showSoftphone && !isEmbeddedPage && (
+          <div className="fixed bottom-4 right-4 z-[50] w-[350px] shadow-2xl rounded-xl border-border animate-in slide-in-from-bottom-5 fade-in duration-300">
+            {/* Close button overlay */}
+            <div className="absolute top-2 right-2 z-[60]">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 rounded-full bg-background/80 backdrop-blur hover:bg-destructive hover:text-destructive-foreground shadow-sm"
+                onClick={() => setShowSoftphone(false)}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+
+            <Softphone
+              currentLead={activeLead || undefined}
+            />
+          </div>
+        )
+      }
+
+    </SidebarProvider >
   );
 }

@@ -31,6 +31,7 @@ const ManagementReports = () => {
   const [editedReportContent, setEditedReportContent] = useState<string>('');
   const [editedExcelData, setEditedExcelData] = useState<any>(null); // For Excel editing
   const [isSavingReport, setIsSavingReport] = useState(false);
+  const [activeExcelTab, setActiveExcelTab] = useState<string>(''); // Track active Excel tab
 
   useEffect(() => {
     if (user) {
@@ -103,6 +104,24 @@ const ManagementReports = () => {
   const handlePreviewReport = (report: any) => {
     setPreviewReport(report);
     setEditedReportContent(report.report_content);
+    
+    // Parse Excel data if it's an Excel report
+    if (report.file_type === 'xlsx') {
+      try {
+        const excelData = JSON.parse(report.report_content);
+        setEditedExcelData(excelData);
+        // Set default active tab to first sheet (usually Summary)
+        setActiveExcelTab(excelData.sheets?.[0]?.name || 'Summary');
+      } catch (e) {
+        console.error('Error parsing Excel data:', e);
+        setEditedExcelData(null);
+        setActiveExcelTab('');
+      }
+    } else {
+      setEditedExcelData(null);
+      setActiveExcelTab('');
+    }
+    
     setPreviewOpen(true);
     // Note: Download is only available from the preview dialog, not immediately
   };
@@ -299,7 +318,17 @@ const ManagementReports = () => {
         // excelWorkbook.company = 'BetSure';
         
         // Reconstruct workbook from JSON data
-        excelData.sheets.forEach((sheet: any) => {
+        // If a specific tab is selected, only include that sheet; otherwise include all sheets
+        const sheetsToInclude = report.selectedSheet 
+          ? excelData.sheets.filter((sheet: any) => sheet.name === report.selectedSheet)
+          : excelData.sheets;
+        
+        if (sheetsToInclude.length === 0) {
+          // Fallback: include all sheets if selected sheet not found
+          sheetsToInclude.push(...excelData.sheets);
+        }
+        
+        sheetsToInclude.forEach((sheet: any) => {
           const worksheet = excelWorkbook.addWorksheet(sheet.name);
           if (sheet.data && Array.isArray(sheet.data)) {
             sheet.data.forEach((row: any[]) => {
@@ -614,7 +643,11 @@ const ManagementReports = () => {
                 {previewReport?.file_type === 'xlsx' && editedExcelData ? (
                   // Excel Preview - Show editable tables
                   <ScrollArea className="h-full">
-                    <Tabs defaultValue={editedExcelData.sheets[0]?.name || 'Summary'} className="w-full">
+                    <Tabs 
+                      value={activeExcelTab || editedExcelData.sheets[0]?.name || 'Summary'} 
+                      onValueChange={setActiveExcelTab}
+                      className="w-full"
+                    >
                       <TabsList className="grid w-full grid-cols-2">
                         {editedExcelData.sheets.map((sheet: any) => (
                           <TabsTrigger key={sheet.name} value={sheet.name}>
@@ -624,40 +657,84 @@ const ManagementReports = () => {
                       </TabsList>
                       {editedExcelData.sheets.map((sheet: any) => (
                         <TabsContent key={sheet.name} value={sheet.name} className="mt-4">
-                          <div className="border rounded-lg overflow-auto">
-                            <Table>
-                              <TableHeader>
-                                {sheet.data[0] && (
-                                  <TableRow>
-                                    {sheet.data[0].map((header: any, idx: number) => (
-                                      <TableHead key={idx} className="bg-muted font-semibold">
-                                        {String(header || '')}
-                                      </TableHead>
-                                    ))}
-                                  </TableRow>
-                                )}
-                              </TableHeader>
-                              <TableBody>
-                                {sheet.data.slice(1).map((row: any[], rowIdx: number) => (
-                                  <TableRow key={rowIdx}>
-                                    {row.map((cell: any, cellIdx: number) => (
-                                      <TableCell key={cellIdx}>
-                                        <input
-                                          type="text"
-                                          value={String(cell || '')}
-                                          onChange={(e) => {
-                                            const newData = JSON.parse(JSON.stringify(editedExcelData));
-                                            newData.sheets.find((s: any) => s.name === sheet.name).data[rowIdx + 1][cellIdx] = e.target.value;
-                                            setEditedExcelData(newData);
-                                          }}
-                                          className="w-full border-none bg-transparent focus:outline-none focus:ring-1 focus:ring-primary px-2 py-1"
-                                        />
-                                      </TableCell>
-                                    ))}
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                          <div className="border rounded-lg overflow-auto bg-white shadow-sm">
+                            <div className="overflow-x-auto max-h-[60vh]">
+                              <table className="w-full border-collapse text-sm">
+                                <thead className="sticky top-0 z-20">
+                                  {sheet.data[0] && (
+                                    <tr className="bg-muted border-b-2 border-border">
+                                      {sheet.data[0].map((header: any, idx: number) => (
+                                        <th 
+                                          key={idx} 
+                                          className="border border-border px-4 py-3 text-left font-semibold text-xs uppercase tracking-wider bg-muted/80 whitespace-nowrap"
+                                        >
+                                          {String(header || '')}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  )}
+                                </thead>
+                                <tbody>
+                                  {sheet.data.slice(1).map((row: any[], rowIdx: number) => {
+                                    // Skip completely empty rows
+                                    if (!row || row.length === 0 || row.every(cell => !cell || String(cell).trim() === '')) {
+                                      return null;
+                                    }
+                                    
+                                    // Check if this is a section header row
+                                    const firstCell = String(row[0] || '').trim();
+                                    const isSectionHeader = firstCell && (
+                                      firstCell.includes('Performance Report Summary') ||
+                                      firstCell.includes('Key Performance Indicators') ||
+                                      firstCell.includes('Team Performance Summary') ||
+                                      firstCell.includes('Call Log') ||
+                                      firstCell === 'Metric' ||
+                                      firstCell === 'Date' ||
+                                      firstCell === 'Report Period:' ||
+                                      firstCell === 'Generated:' ||
+                                      firstCell === 'Agent:' ||
+                                      firstCell === 'Email:'
+                                    );
+                                    
+                                    return (
+                                      <tr 
+                                        key={rowIdx} 
+                                        className={`${
+                                          isSectionHeader 
+                                            ? 'bg-muted/50 font-semibold' 
+                                            : rowIdx % 2 === 0 
+                                              ? 'bg-background hover:bg-muted/30' 
+                                              : 'bg-muted/20 hover:bg-muted/40'
+                                        } transition-colors`}
+                                      >
+                                        {row.map((cell: any, cellIdx: number) => {
+                                          const cellValue = String(cell || '');
+                                          const isNumeric = !isNaN(Number(cellValue)) && cellValue !== '' && !cellValue.includes('%') && !cellValue.includes('UGX');
+                                          const isEmpty = cellValue.trim() === '';
+                                          
+                                          return (
+                                            <td 
+                                              key={cellIdx}
+                                              className={`border border-border px-4 py-2 ${
+                                                isSectionHeader ? 'font-semibold text-sm' : 'text-sm'
+                                              } ${
+                                                isNumeric ? 'text-right font-mono tabular-nums' : 'text-left'
+                                              } ${
+                                                cellValue.includes('%') || cellValue.includes('UGX') ? 'text-right font-semibold' : ''
+                                              } ${
+                                                isEmpty ? 'bg-muted/20' : ''
+                                              }`}
+                                            >
+                                              {cellValue || '\u00A0'}
+                                            </td>
+                                          );
+                                        })}
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
                         </TabsContent>
                       ))}
@@ -719,7 +796,17 @@ const ManagementReports = () => {
                     onClick={() => {
                       if (previewReport) {
                         // Update previewReport with edited content for download
-                        const updatedReport = { ...previewReport, report_content: editedReportContent };
+                        // For Excel reports, use editedExcelData; for others, use editedReportContent
+                        const contentToDownload = previewReport.file_type === 'xlsx' && editedExcelData
+                          ? JSON.stringify(editedExcelData)
+                          : editedReportContent;
+                        
+                        // For Excel reports, include the selected sheet name so download can filter to that sheet
+                        const updatedReport = { 
+                          ...previewReport, 
+                          report_content: contentToDownload,
+                          selectedSheet: previewReport.file_type === 'xlsx' && activeExcelTab ? activeExcelTab : undefined
+                        };
                         handleDownloadReport(updatedReport);
                       }
                     }}
@@ -727,7 +814,9 @@ const ManagementReports = () => {
                     className="bg-primary text-primary-foreground"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Download {previewReport?.file_type ? previewReport.file_type.toUpperCase() : 'DOCX'}
+                    {previewReport?.file_type === 'xlsx' && activeExcelTab 
+                      ? `Download ${activeExcelTab}` 
+                      : `Download ${previewReport?.file_type ? previewReport.file_type.toUpperCase() : 'DOCX'}`}
                   </Button>
                 </div>
               </div>

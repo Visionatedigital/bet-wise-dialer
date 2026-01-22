@@ -101,8 +101,15 @@ serve(async (req) => {
     });
 
     // Calculate metrics
+    // Only count calls that actually rang and were answered (duration > 0 OR status is converted)
+    const connects = callActivities.filter((call: any) => {
+      if (call.status === 'converted') return true;
+      if (call.status === 'connected') {
+        return (Number(call.duration_seconds) || 0) > 0;
+      }
+      return false;
+    }).length;
     const conversions = statusCounts['converted'] || 0;
-    const connects = statusCounts['connected'] || 0;
     const totalDeposits = callActivities.reduce((sum: number, call: any) => 
       sum + (Number(call.deposit_amount) || 0), 0
     );
@@ -253,10 +260,22 @@ Format the report in clear sections with bullet points where appropriate.`;
     if (!response.ok) {
       const errorText = await response.text();
       console.error('OpenAI API error:', response.status, errorText);
-      throw new Error('Failed to generate AI insights');
+      let errorMessage = 'Failed to generate AI insights';
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error?.message || errorMessage;
+      } catch {
+        // If parsing fails, use the error text directly
+        errorMessage = errorText || errorMessage;
+      }
+      throw new Error(`OpenAI API error (${response.status}): ${errorMessage}`);
     }
 
     const data = await response.json();
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('Invalid OpenAI response structure:', JSON.stringify(data));
+      throw new Error('Invalid response from OpenAI API');
+    }
     const report = data.choices[0].message.content;
 
     return new Response(
@@ -265,8 +284,14 @@ Format the report in clear sections with bullet points where appropriate.`;
     );
   } catch (error) {
     console.error('Error in generate-ai-report:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorDetails = error instanceof Error ? error.stack : String(error);
+    console.error('Error details:', errorDetails);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ 
+        error: errorMessage,
+        details: process.env.DENO_ENV === 'development' ? errorDetails : undefined
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

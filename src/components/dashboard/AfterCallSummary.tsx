@@ -10,36 +10,49 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-type Disposition = "no_answer" | "callback" | "interested" | "converted" | "dnc" | "escalate";
+type Disposition = "no_answer" | "not_interested" | "interested" | "unreachable" | "escalate";
+
+export interface AfterCallSummaryData {
+  disposition: string;
+  interestScore: number;
+  leadStrength: "hot" | "warm" | "cold" | "";
+  notes: string;
+  nextAction: string;
+  nextActionDate: string;
+  selectedTags: string[];
+  conversionLikelihood: string;
+  escalateToOperations: boolean;
+}
 
 interface AfterCallSummaryProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   leadName: string;
   callDuration: number;
+  onSave?: (data: AfterCallSummaryData) => Promise<void> | void;
 }
 
 const dispositionOptions = [
   { value: "no_answer", label: "No Answer", color: "bg-muted" },
-  { value: "callback", label: "Callback Scheduled", color: "bg-info" },
+  { value: "not_interested", label: "Not Interested", color: "bg-orange-500" },
   { value: "interested", label: "Interested", color: "bg-warning" },
-  { value: "converted", label: "Converted", color: "bg-success" },
-  { value: "dnc", label: "Do Not Call", color: "bg-destructive" },
-  { value: "escalate", label: "Escalate", color: "bg-primary" },
+  { value: "unreachable", label: "Unreachable", color: "bg-destructive" },
+
 ];
 
 const availableTags = [
   "Bonus Inquiry",
-  "Payment Issue", 
+  "Payment Issue",
   "KYC Required",
   "Technical Support",
   "Account Verification",
   "Promotional Offer"
 ];
 
-export function AfterCallSummary({ open, onOpenChange, leadName, callDuration }: AfterCallSummaryProps) {
+export function AfterCallSummary({ open, onOpenChange, leadName, callDuration, onSave }: AfterCallSummaryProps) {
   const [disposition, setDisposition] = useState<Disposition | "">("");
   const [interestScore, setInterestScore] = useState(3);
+  const [leadStrength, setLeadStrength] = useState<"hot" | "warm" | "cold" | "">("warm");
   const [notes, setNotes] = useState("");
   const [nextAction, setNextAction] = useState("");
   const [nextActionDate, setNextActionDate] = useState("");
@@ -54,39 +67,46 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration }:
   };
 
   const handleTagToggle = (tag: string) => {
-    setSelectedTags(prev => 
-      prev.includes(tag) 
+    setSelectedTags(prev =>
+      prev.includes(tag)
         ? prev.filter(t => t !== tag)
         : [...prev, tag]
     );
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!disposition) {
       alert("Please select a call disposition");
       return;
     }
 
-    // Here you would save the call summary
-    console.log({
+    const summaryData: AfterCallSummaryData = {
       disposition,
       interestScore,
+      leadStrength,
       notes,
       nextAction,
       nextActionDate,
       selectedTags,
       conversionLikelihood,
       escalateToOperations
-    });
+    };
 
-    // Show success message
-    alert(`Great work! Disposition saved. ${nextAction && nextActionDate ? `Next callback set for ${nextActionDate}` : ''}`);
-    
+    console.log("Saving summary:", summaryData);
+
+    if (onSave) {
+      await onSave(summaryData);
+    } else {
+      // Show success message if no onSave provided (demo mode)
+      alert(`Great work! Disposition saved. ${nextAction && nextActionDate ? `Next callback set for ${nextActionDate}` : ''}`);
+    }
+
     onOpenChange(false);
-    
+
     // Reset form
     setDisposition("");
     setInterestScore(3);
+    setLeadStrength("warm");
     setNotes("");
     setNextAction("");
     setNextActionDate("");
@@ -117,16 +137,16 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration }:
               <AlertTriangle className="h-4 w-4 text-destructive" />
               Call Disposition *
             </Label>
-            <RadioGroup 
-              value={disposition} 
+            <RadioGroup
+              value={disposition}
               onValueChange={(value) => setDisposition(value as Disposition)}
               className="grid grid-cols-2 gap-3"
             >
               {dispositionOptions.map((option) => (
                 <div key={option.value} className="flex items-center space-x-2">
                   <RadioGroupItem value={option.value} id={option.value} />
-                  <Label 
-                    htmlFor={option.value} 
+                  <Label
+                    htmlFor={option.value}
                     className="flex items-center gap-2 cursor-pointer"
                   >
                     <div className={`h-2 w-2 rounded-full ${option.color}`} />
@@ -137,57 +157,49 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration }:
             </RadioGroup>
           </div>
 
-          {/* Interest Score */}
-          <div className="space-y-3">
-            <Label className="text-base font-medium">Interest Score (1-5)</Label>
-            <RadioGroup 
-              value={interestScore.toString()} 
-              onValueChange={(value) => setInterestScore(parseInt(value))}
-              className="flex gap-4"
-            >
-              {[1, 2, 3, 4, 5].map((score) => (
-                <div key={score} className="flex items-center space-x-2">
-                  <RadioGroupItem value={score.toString()} id={`score-${score}`} />
-                  <Label htmlFor={`score-${score}`} className="cursor-pointer">
-                    {score}
+
+
+
+          {/* Lead Strength (for callback prioritization) - Only show if interested is selected */}
+          {disposition === 'interested' && (
+            <div className="space-y-3">
+              <Label className="text-base font-medium">Lead Strength (Callback Priority)</Label>
+              <RadioGroup
+                value={leadStrength}
+                onValueChange={(value) => setLeadStrength(value as "hot" | "warm" | "cold")}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="hot" id="strength-hot" />
+                  <Label htmlFor="strength-hot" className="cursor-pointer flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-red-500" />
+                    Hot (High Priority)
                   </Label>
                 </div>
-              ))}
-            </RadioGroup>
-          </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="warm" id="strength-warm" />
+                  <Label htmlFor="strength-warm" className="cursor-pointer flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-yellow-500" />
+                    Warm (Medium Priority)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="cold" id="strength-cold" />
+                  <Label htmlFor="strength-cold" className="cursor-pointer flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-blue-500" />
+                    Cold (Low Priority)
+                  </Label>
+                </div>
+              </RadioGroup>
+              <p className="text-xs text-muted-foreground">
+                Rate this lead's potential for conversion to help prioritize callbacks
+              </p>
+            </div>
+          )}
 
-          {/* AI Insights */}
-          <div className="bg-accent/50 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="h-4 w-4 text-primary" />
-              <span className="font-medium text-sm">AI Insights</span>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              <p>• Conversion likelihood: <strong>{conversionLikelihood}</strong></p>
-              <p>• Detected intent: Bonus eligibility questions</p>
-              <p>• Suggested next action: Follow up with bonus details</p>
-            </div>
-          </div>
 
-          {/* Tags */}
-          <div className="space-y-3">
-            <Label className="text-base font-medium flex items-center gap-2">
-              <Tag className="h-4 w-4" />
-              Tags
-            </Label>
-            <div className="flex flex-wrap gap-2">
-              {availableTags.map((tag) => (
-                <Badge
-                  key={tag}
-                  variant={selectedTags.includes(tag) ? "default" : "outline"}
-                  className="cursor-pointer"
-                  onClick={() => handleTagToggle(tag)}
-                >
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          </div>
+
+
 
           {/* Notes */}
           <div className="space-y-3">
@@ -202,54 +214,28 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration }:
           </div>
 
           {/* Next Action */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="nextAction" className="text-base font-medium flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Next Action
-              </Label>
-              <Select value={nextAction} onValueChange={setNextAction}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select next step" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No next step</SelectItem>
-                  <SelectItem value="callback">Schedule Callback</SelectItem>
-                  <SelectItem value="email">Send Email</SelectItem>
-                  <SelectItem value="whatsapp">WhatsApp Follow-up</SelectItem>
-                  <SelectItem value="meeting">Schedule Meeting</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="nextActionDate" className="text-base font-medium">Due Date</Label>
-              <Input
-                id="nextActionDate"
-                type="datetime-local"
-                value={nextActionDate}
-                onChange={(e) => setNextActionDate(e.target.value)}
-                disabled={!nextAction}
-              />
-            </div>
-          </div>
-
-          {/* Escalation */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="escalate"
-              checked={escalateToOperations}
-              onCheckedChange={(checked) => setEscalateToOperations(checked as boolean)}
-            />
-            <Label htmlFor="escalate" className="flex items-center gap-2 cursor-pointer">
-              <Send className="h-4 w-4" />
-              Escalate to operations@betsure.com
+          <div className="space-y-2">
+            <Label htmlFor="nextAction" className="text-base font-medium flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Next Action
             </Label>
+            <Select value={nextAction} onValueChange={setNextAction}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select next step" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No next step</SelectItem>
+                <SelectItem value="callback">Schedule Callback</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp Follow-up</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+
 
           {/* Actions */}
           <div className="flex gap-3 pt-4 border-t">
-            <Button 
+            <Button
               onClick={handleSave}
               disabled={!canSave}
               className="flex-1"
@@ -257,7 +243,7 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration }:
               <Save className="h-4 w-4 mr-2" />
               Save Summary (Press S)
             </Button>
-            
+
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}

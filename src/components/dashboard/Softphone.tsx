@@ -10,8 +10,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { maskPhone } from "@/lib/formatters";
-import { PostCallNotesDialog } from "./PostCallNotesDialog";
+import { AfterCallSummary, AfterCallSummaryData } from "./AfterCallSummary";
 import { parseCallbackIntent } from "@/utils/parseCallbackIntent";
+import { useSoftphone } from "@/contexts/SoftphoneContext";
 import { SipClient } from "@/utils/SipClient";
 import { SessionState } from "sip.js";
 
@@ -24,6 +25,7 @@ type ConnectionMode = 'sip' | 'webrtc';
 
 interface SoftphoneProps {
   currentLead?: {
+    id: string; // Added id to prop
     name: string;
     phone: string;
     campaign: string;
@@ -39,10 +41,10 @@ interface SoftphoneProps {
   onCallEnd?: () => void;
 }
 
-export function Softphone({ 
-  currentLead, 
-  onNextLead, 
-  onPreviousLead, 
+export function Softphone({
+  currentLead,
+  onNextLead,
+  onPreviousLead,
   hasNextLead = false,
   hasPreviousLead = false,
   currentLeadPosition = 1,
@@ -70,20 +72,91 @@ export function Softphone({
     duration: number;
     leadName: string;
     campaign: string;
+    callId?: string; // Added callId to pending data
+    leadId?: string; // Added leadId to pending data
   } | null>(null);
-  
+
   const { createCallActivity, updateCallActivity } = useCallMetrics();
   const { user } = useAuth();
+  const {
+    setCallId: setContextCallId,
+    setIsCallActive: setContextIsCallActive,
+    callId: contextCallId,
+    activeLead: contextActiveLead,
+    autoDialTrigger
+  } = useSoftphone();
+
+  // Effective lead is either the prop (if passed) or the context active lead
+  const effectiveLead = currentLead || contextActiveLead ? {
+    id: currentLead?.id || contextActiveLead?.id, // Capture ID from either source
+    name: currentLead?.name || contextActiveLead?.name || "Unknown",
+    phone: currentLead?.phone || contextActiveLead?.phone || "",
+    campaign: currentLead?.campaign || contextActiveLead?.campaign || "Direct Dial"
+  } : undefined;
+
   const sipClientRef = useRef<SipClient | null>(null);
   const webrtcClientRef = useRef<any>(null);
   const callIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const sipStatusRef = useRef<ConnectionStatus>('disconnected');
   const sipRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Auto-dial when trigger increments
+  useEffect(() => {
+    // Only auto-dial if we have a phone number and we're not already in a call
+    if (autoDialTrigger > 0 && effectiveLead?.phone && callStatus === 'idle') {
+      console.log("[Softphone] Auto-dial trigger received:", autoDialTrigger);
+      handleCall(effectiveLead.phone);
+    }
+  }, [autoDialTrigger]);
+
+  // Auto-fill dialed number when effective lead changes
+  useEffect(() => {
+    if (effectiveLead?.phone) {
+      setDialedNumber(effectiveLead.phone);
+    }
+  }, [effectiveLead?.phone]);
+
+  // Sync internal call state with context
+  useEffect(() => {
+    if (callStatus === 'connected') {
+      setContextIsCallActive(true);
+    } else {
+      setContextIsCallActive(false);
+    }
+  }, [callStatus, setContextIsCallActive]);
+
   // Keep ref in sync with state for background retry logic
   useEffect(() => {
     sipStatusRef.current = sipConnectionStatus;
   }, [sipConnectionStatus]);
+
+  // Helper to create call activity on connect
+  const createActivityOnConnect = async (number: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('call_activities')
+        .insert({
+          user_id: user?.id,
+          lead_name: effectiveLead?.name || "Unknown",
+          phone_number: number,
+          campaign_id: effectiveLead?.campaign ? undefined : undefined, // Placeholder logic, ideally lookup ID
+          status: 'connected',
+          start_time: new Date().toISOString(),
+          call_type: 'outbound'
+        })
+        .select()
+        .single();
+
+      if (data) {
+        setCurrentCallId(data.id);
+        setContextCallId(data.id);
+        return data.id;
+      }
+    } catch (err) {
+      console.error("Failed to create call activity on connect:", err);
+    }
+    return null;
+  };
 
   // Initialize WebRTC client
   const initializeWebRTC = async () => {
@@ -91,16 +164,16 @@ export function Softphone({
       console.log('========================================');
       console.log('[WebRTC-INIT] ???? Starting WebRTC initialization');
       toast.info("Connecting to WebRTC...");
-      
+
       // First, check if we have a valid token in the database
       console.log('[WebRTC-INIT] ???? Checking for existing token in database...');
       const { data: existingTokenData, error: tokenError } = await supabase
         .from('webrtc_tokens')
         .select('*')
         .single();
-      
+
       let tokenData;
-      
+
       if (!tokenError && existingTokenData && new Date(existingTokenData.expires_at) > new Date()) {
         // Use existing valid token
         console.log('[WebRTC-INIT] ??? Found valid token in database');
@@ -114,12 +187,12 @@ export function Softphone({
         // Fetch new token
         console.log('[WebRTC-INIT] ???? Fetching new token from Supabase...');
         const { data, error } = await supabase.functions.invoke('get-webrtc-token');
-        
+
         if (error) {
           console.error('[WebRTC-INIT] ??? Token request failed:', error);
           throw error;
         }
-        
+
         if (!data.token) {
           console.error('[WebRTC-INIT] ??? No token in response:', data);
           throw new Error('No token received');
@@ -127,23 +200,23 @@ export function Softphone({
 
         console.log('[WebRTC-INIT] ??? New token received successfully');
         tokenData = data;
-        
+
         // Store token in database
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
         const { error: storeError } = await supabase
           .from('webrtc_tokens')
           .upsert(
             {
-            user_id: user?.id,
-            token: tokenData.token,
-            client_name: tokenData.clientName,
-            expires_at: expiresAt.toISOString()
+              user_id: user?.id,
+              token: tokenData.token,
+              client_name: tokenData.clientName,
+              expires_at: expiresAt.toISOString()
             },
             {
               onConflict: 'user_id', // use unique user_id key for upsert
             }
           );
-        
+
         if (storeError && storeError.code !== '23505') {
           // 23505 = unique violation; safe to ignore here because upsert semantics still hold
           console.error('[WebRTC-INIT] ?????? Failed to store token:', storeError);
@@ -175,7 +248,7 @@ export function Softphone({
 
       // Set up event listeners
       console.log('[WebRTC-INIT] ???? Registering event listeners...');
-      
+
       client.on('ready', () => {
         console.log('========================================');
         console.log('[WebRTC-EVENT] ???? READY - Client is ready to make calls');
@@ -220,7 +293,7 @@ export function Softphone({
         setCallStatus('connected');
         setCallStartTime(new Date());
         toast.success('Call connected!');
-        
+
         // Start call timer
         const timer = setInterval(() => {
           setCallDuration(prev => prev + 1);
@@ -299,7 +372,7 @@ export function Softphone({
       hasTauriWindow: typeof window !== 'undefined' && '__TAURI__' in window,
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
     });
-    
+
     if (isTauri) {
       console.log('[Softphone] ??? Running in Tauri desktop - using SIP mode');
       setSipConnectionStatus('connecting');
@@ -316,7 +389,7 @@ export function Softphone({
         });
     } else {
       console.log('[Softphone] ??? Running in browser - initializing WebRTC');
-    initializeWebRTC();
+      initializeWebRTC();
     }
 
     return () => {
@@ -383,32 +456,36 @@ export function Softphone({
     };
   }, [isTauri, sipConnectionStatus, initializeSipClient]);
 
-function normalizePhoneNumber(input: string) {
-  const trimmed = (input || '').trim();
-  if (!trimmed) return trimmed;
-  const clean = trimmed.replace(/[^0-9+]/g, '');
-  if (clean.startsWith('+')) return clean;
-  if (clean.startsWith('00')) return '+' + clean.slice(2);
-  return '+' + clean;
-}
+  function normalizePhoneNumber(input: string) {
+    const trimmed = (input || '').trim();
+    if (!trimmed) return trimmed;
+    const clean = trimmed.replace(/[^0-9+]/g, '');
+    if (clean.startsWith('+')) return clean;
+    if (clean.startsWith('00')) return '+' + clean.slice(2);
+    return '+' + clean;
+  }
+  const activeCallNumberRef = useRef<string>("");
+  const activeCallLeadIdRef = useRef<string | undefined>(undefined);
 
-const handleCallEnd = () => {
+  const handleCallEnd = () => {
     if (callIntervalRef.current) {
       clearInterval(callIntervalRef.current);
     }
 
     // Always show post-call notes dialog after any call attempt
     // Calculate duration if call was connected, otherwise use 0
-    const duration = callStartTime 
+    const duration = callStartTime
       ? Math.floor((Date.now() - callStartTime.getTime()) / 1000)
       : 0;
-    
+
     // Store call data for any call attempt (ringing, connected, or failed)
     setPendingCallData({
-      phoneNumber: currentLead?.phone || dialedNumber,
+      phoneNumber: activeCallNumberRef.current || effectiveLead?.phone || dialedNumber, // Use persisted active number first
       duration: duration,
-      leadName: currentLead?.name || 'Unknown',
-      campaign: currentLead?.campaign || 'No Campaign'
+      leadName: effectiveLead?.name || 'Unknown',
+      campaign: effectiveLead?.campaign || 'No Campaign',
+      callId: currentCallId || undefined,
+      leadId: activeCallLeadIdRef.current || effectiveLead?.id // Use persisted ID first
     });
     setShowPostCallNotes(true);
 
@@ -416,11 +493,14 @@ const handleCallEnd = () => {
     setCallDuration(0);
     setCallStartTime(null);
     setCurrentCallId(null);
+    setContextCallId(null);
+    activeCallNumberRef.current = ""; // Reset after storing pending data
+    activeCallLeadIdRef.current = undefined; // Reset ID
     // Notify parent that call has ended
     onCallEnd?.();
   };
 
-  const handleSaveCallNotes = async (notes: string) => {
+  const handleSaveCallNotes = async (data: AfterCallSummaryData) => {
     if (!pendingCallData) {
       console.error('[Softphone] No pending call data to save');
       toast.error("No call data to save");
@@ -428,8 +508,12 @@ const handleCallEnd = () => {
     }
 
     try {
-      console.log('[Softphone] Saving call notes:', { notes, pendingCallData });
-      
+      console.log('[Softphone] Saving call notes:', { data, pendingCallData });
+
+      // key information to append to notes
+      const notesHeader = `[Disposition: ${data.disposition}] [Strength: ${data.leadStrength}] [Interest: ${data.interestScore}/5]`;
+      const fullNotes = `${notesHeader}\n${data.notes}`;
+
       // Get campaign_id if available
       let campaignId = null;
       if (pendingCallData.campaign !== 'No Campaign') {
@@ -438,7 +522,7 @@ const handleCallEnd = () => {
           .select('id')
           .eq('name', pendingCallData.campaign)
           .single();
-        
+
         if (campaignError) {
           console.warn('[Softphone] Could not find campaign:', campaignError);
         } else if (campaignData) {
@@ -453,38 +537,50 @@ const handleCallEnd = () => {
 
       // Save call activity with notes
       console.log('[Softphone] Attempting to save call activity...');
-      
-      // Add timeout to prevent hanging (30 seconds)
-      const savePromise = createCallActivity({
-        phone_number: pendingCallData.phoneNumber,
-        lead_name: pendingCallData.leadName,
-        duration_seconds: pendingCallData.duration,
-        status: callActivityStatus,
-        notes: notes,
-        campaign_id: campaignId,
-        call_type: 'outbound',
-        start_time: new Date().toISOString(),
-        end_time: new Date().toISOString()
-      } as any);
-      
-      const timeoutPromise = new Promise((_, reject) => 
+
+      let savePromise;
+      if (pendingCallData.callId) {
+        // Update existing
+        savePromise = updateCallActivity(pendingCallData.callId, {
+          status: callActivityStatus,
+          notes: fullNotes,
+          campaign_id: campaignId || undefined,
+          end_time: new Date().toISOString(),
+          duration_seconds: pendingCallData.duration || 0
+        });
+      } else {
+        // Create new (fallback)
+        savePromise = createCallActivity({
+          phone_number: pendingCallData.phoneNumber,
+          lead_name: pendingCallData.leadName,
+          duration_seconds: pendingCallData.duration || 0,
+          status: callActivityStatus,
+          notes: fullNotes,
+          campaign_id: campaignId || undefined,
+          call_type: 'outbound',
+          start_time: new Date().toISOString(), // Warning: inaccurate start time
+          end_time: new Date().toISOString()
+        } as any);
+      }
+
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Save operation timed out after 30 seconds')), 30000)
       );
-      
+
       const callActivityData = await Promise.race([savePromise, timeoutPromise]);
 
       console.log('[Softphone] ??? Call activity saved successfully:', callActivityData);
 
       // Parse notes for callback intent
-      const callbackIntent = parseCallbackIntent(notes);
-      
+      const callbackIntent = parseCallbackIntent(data.notes);
+
       if (callbackIntent.shouldCreateCallback && user) {
         // Automatically create callback - only use fields that exist in the schema
         const { error: callbackError } = await supabase.from('callbacks').insert([{
           user_id: user.id,
           scheduled_for: callbackIntent.callbackDate!.toISOString(),
           status: 'pending',
-          notes: notes,
+          notes: data.notes,
           lead_name: pendingCallData.leadName,
           phone_number: pendingCallData.phoneNumber
         }]);
@@ -493,21 +589,60 @@ const handleCallEnd = () => {
           console.error('[Softphone] Error creating callback:', callbackError);
           toast.success("Call notes saved (callback scheduling failed)");
         } else {
+          const formattedDate = callbackIntent.callbackDate!.toLocaleDateString();
           toast.success("Call notes saved and callback scheduled", {
-            description: `Callback set for ${callbackIntent.callbackDate!.toLocaleDateString()}`
+            description: `Follow-up set for ${formattedDate}`
           });
         }
       } else {
         toast.success("Call notes saved successfully");
       }
 
-      // Close dialog and clear pending data
-      setShowPostCallNotes(false);
+      // Fallback: If pendingCallData is missing info (e.g. ref cleared or race condition), try using current effectiveLead
+      const targetLeadId = pendingCallData.leadId || effectiveLead?.id;
+      const targetPhoneNumber = pendingCallData.phoneNumber || effectiveLead?.phone;
+
+      // Update lead status in leads table
+      if (targetLeadId) {
+        const { error: updateError } = await supabase
+          .from('leads')
+          .update({
+            status: data.disposition,
+            last_contact_at: new Date().toISOString()
+          })
+          .eq('id', targetLeadId);
+
+        if (updateError) {
+          console.error('[Softphone] Error updating lead status (by ID):', updateError);
+        } else {
+          console.log('[Softphone] Lead status updated to:', data.disposition, 'for ID:', targetLeadId);
+        }
+      } else if (targetPhoneNumber) {
+        const { error: updateError } = await supabase
+          .from('leads')
+          .update({
+            status: data.disposition,
+            last_contact_at: new Date().toISOString()
+          })
+          .eq('phone', targetPhoneNumber);
+
+        if (updateError) {
+          console.error('[Softphone] Error updating lead status (by ID):', updateError);
+        } else {
+          console.log('[Softphone] Lead status updated to:', data.disposition);
+        }
+      } else {
+        console.warn('[Softphone] No phone number available to update lead status. Pending:', pendingCallData, 'Effective:', effectiveLead);
+        toast.warning("Could not update lead status: missing ID/Phone");
+      }
+
       setPendingCallData(null);
-      console.log('[Softphone] Call notes saved successfully, dialog closed');
+      setShowPostCallNotes(false); // Close dialog
+      onCallEnd?.();
+
     } catch (error) {
       console.error('[Softphone] ??? Error saving call notes:', error);
-      
+
       // Provide more specific error messages
       let errorMessage = "Failed to save call notes";
       if (error instanceof Error) {
@@ -523,7 +658,7 @@ const handleCallEnd = () => {
           errorMessage = error.message;
         }
       }
-      
+
       toast.error(errorMessage);
       // Re-throw error so PostCallNotesDialog can handle it
       throw error;
@@ -532,14 +667,22 @@ const handleCallEnd = () => {
 
   const handleCall = async (phoneNumber?: string) => {
     try {
-      const numberToCall = phoneNumber || currentLead?.phone || dialedNumber;
-      
+      const numberToCall = phoneNumber || effectiveLead?.phone || dialedNumber;
+
+      // Ensure we have pending call data set immediately so we don't lose the phone number
+      setPendingCallData({
+        phoneNumber: numberToCall,
+        duration: 0,
+        leadName: effectiveLead?.name || "Unknown",
+        campaign: effectiveLead?.campaign || "Direct Dial"
+      });
+
       if (connectionMode === 'webrtc') {
         // Use WebRTC client
         console.log('========================================');
         console.log('[WebRTC-CALL] ???? INITIATING CALL');
         console.log('[WebRTC-CALL] Raw input number:', numberToCall);
-        
+
         if (!webrtcClientRef.current || !isWebRTCReady) {
           console.error('[WebRTC-CALL] ??? Client not ready');
           console.log('[WebRTC-CALL] Has client:', !!webrtcClientRef.current);
@@ -560,16 +703,16 @@ const handleCallEnd = () => {
 
         // Close dial pad if open
         setShowDialPad(false);
-        
+
         try {
           console.log('[WebRTC-CALL] ???? Calling client.call() with:', normalizedNumber);
           console.log('[WebRTC-CALL] Call parameters:', {
             phoneNumber: normalizedNumber,
             timestamp: new Date().toISOString()
           });
-          
+
           const callResult = webrtcClientRef.current.call(normalizedNumber);
-          
+
           console.log('[WebRTC-CALL] ??? Call method returned');
           console.log('[WebRTC-CALL] Result:', callResult);
           console.log('[WebRTC-CALL] Result type:', typeof callResult);
@@ -577,7 +720,7 @@ const handleCallEnd = () => {
             console.log('[WebRTC-CALL] Result keys:', Object.keys(callResult));
           }
           console.log('========================================');
-          
+
           setCallStatus('ringing');
           setDialedNumber("");
         } catch (error) {
@@ -598,9 +741,9 @@ const handleCallEnd = () => {
         toast.error('No phone number to call');
         return;
       }
-      
+
       setCallStatus("ringing");
-      
+
       // Initialize SIP client if not already done or if previous init failed
       if (!sipClientRef.current || sipConnectionStatus !== 'connected') {
         console.log('[Softphone] SIP not initialized or connection lost, initializing now...');
@@ -618,16 +761,16 @@ const handleCallEnd = () => {
       toast.loading('Calling customer...');
       // Notify parent that a call is starting
       onCallStart?.();
-      
+
       // Close dial pad if open
       setShowDialPad(false);
-      
+
       // Make SIP call
       await sipClientRef.current!.makeCall(
         numberToCall,
         (state) => {
           console.log('Call state changed:', state);
-          
+
           if (state === SessionState.Establishing) {
             toast.dismiss();
             toast.loading('Ringing...');
@@ -637,7 +780,10 @@ const handleCallEnd = () => {
             setCallStatus("connected");
             setCallStartTime(new Date());
             setIsRecording(true);
-            
+
+            // Create activity record
+            createActivityOnConnect(numberToCall);
+
             // Start call timer
             const timer = setInterval(() => {
               setCallDuration(prev => prev + 1);
@@ -661,15 +807,15 @@ const handleCallEnd = () => {
     try {
       console.log('[Softphone] ???? Initializing SIP client...');
       setSipConnectionStatus('connecting');
-      
+
       const { data, error } = await supabase.functions.invoke('get-sip-credentials');
-      
+
       if (error) {
         console.error('[Softphone] ??? Failed to get SIP credentials:', error);
         setSipConnectionStatus('error');
         throw error;
       }
-      
+
       if (!data?.username || !data?.password) {
         console.error('[Softphone] ??? Missing SIP credentials in response:', data);
         setSipConnectionStatus('error');
@@ -679,12 +825,12 @@ const handleCallEnd = () => {
       console.log('[Softphone] ??? Got credentials, initializing SIP client...');
       sipClientRef.current = new SipClient();
       const initialized = await sipClientRef.current.initialize(data.username, data.password);
-      
+
       if (initialized) {
         console.log('[Softphone] ??? SIP client ready and registered');
         setSipConnectionStatus('connected');
         toast.success('SIP phone connected');
-      return true;
+        return true;
       } else {
         console.error('[Softphone] ??? SIP initialization returned false');
         setSipConnectionStatus('error');
@@ -789,21 +935,21 @@ const handleCallEnd = () => {
   const handleTestApiCall = async () => {
     try {
       const testNumber = dialedNumber || currentLead?.phone || '+256702282029';
-      
+
       toast.loading('Testing direct API call to Africa\'s Talking...');
-      
+
       const { data, error } = await supabase.functions.invoke('test-voice-call', {
         body: { phoneNumber: testNumber }
       });
-      
+
       toast.dismiss();
-      
+
       if (error) {
         console.error('API test error:', error);
         toast.error(`API Error: ${error.message}`);
         return;
       }
-      
+
       if (data.error) {
         console.error('Call failed:', data);
         toast.error(`Call failed: ${data.error}`);
@@ -827,31 +973,31 @@ const handleCallEnd = () => {
             <Phone className="h-5 w-5" />
             Softphone
             <Badge variant={
-              connectionMode === 'sip' 
+              connectionMode === 'sip'
                 ? (sipConnectionStatus === 'connected' ? "default" : sipConnectionStatus === 'connecting' ? "secondary" : "destructive")
                 : (isWebRTCReady ? "default" : "secondary")
             } className="text-xs">
-              {connectionMode === 'sip' 
+              {connectionMode === 'sip'
                 ? (sipConnectionStatus === 'connected' ? "SIP Ready" : sipConnectionStatus === 'connecting' ? "Connecting..." : "SIP Error")
                 : (isWebRTCReady ? "Ready" : "Connecting...")
               }
             </Badge>
           </div>
           {connectionMode === 'webrtc' && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (isWebRTCReady) {
-                disconnectWebRTC();
-              } else {
-                initializeWebRTC();
-              }
-            }}
-            className="h-8 w-8 p-0"
-          >
-            <Plug className={`h-4 w-4 ${isWebRTCReady ? 'text-success' : ''}`} />
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (isWebRTCReady) {
+                  disconnectWebRTC();
+                } else {
+                  initializeWebRTC();
+                }
+              }}
+              className="h-8 w-8 p-0"
+            >
+              <Plug className={`h-4 w-4 ${isWebRTCReady ? 'text-success' : ''}`} />
+            </Button>
           )}
         </CardTitle>
       </CardHeader>
@@ -870,11 +1016,11 @@ const handleCallEnd = () => {
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              
+
               <div className="text-xs text-muted-foreground">
                 Lead {currentLeadPosition} of {totalLeads}
               </div>
-              
+
               <Button
                 variant="outline"
                 size="sm"
@@ -885,7 +1031,7 @@ const handleCallEnd = () => {
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-            
+
             <div className="bg-muted/50 rounded-lg p-3 text-sm">
               <div className="font-medium">{currentLead.name}</div>
               <div className="text-muted-foreground">{maskPhone(currentLead.phone)}</div>
@@ -914,17 +1060,17 @@ const handleCallEnd = () => {
         <div className="flex items-center justify-center gap-2">
           {callStatus === "idle" ? (
             <>
-              <Button 
+              <Button
                 onClick={() => handleCall()}
                 className="h-12 w-12 rounded-full bg-success hover:bg-success/90"
                 disabled={!currentLead || (connectionMode === 'webrtc' && !isWebRTCReady)}
               >
                 <Phone className="h-5 w-5" />
               </Button>
-              
+
               <Dialog open={showDialPad} onOpenChange={setShowDialPad}>
                 <DialogTrigger asChild>
-                  <Button 
+                  <Button
                     variant="outline"
                     className="h-12 w-12 rounded-full"
                   >
@@ -938,7 +1084,7 @@ const handleCallEnd = () => {
                   <div className="space-y-4">
                     {/* Number Display */}
                     <div className="relative">
-                      <Input 
+                      <Input
                         value={dialedNumber}
                         onChange={(e) => setDialedNumber(e.target.value)}
                         placeholder="Enter phone number"
@@ -955,7 +1101,7 @@ const handleCallEnd = () => {
                         </Button>
                       )}
                     </div>
-                    
+
                     {/* Dial Pad Grid */}
                     <div className="grid grid-cols-3 gap-2">
                       {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map((digit) => (
@@ -969,7 +1115,7 @@ const handleCallEnd = () => {
                         </Button>
                       ))}
                     </div>
-                    
+
                     {/* Call Button */}
                     <Button
                       onClick={handleDialPadCall}
@@ -979,7 +1125,7 @@ const handleCallEnd = () => {
                       <Phone className="h-5 w-5 mr-2" />
                       Call
                     </Button>
-                    
+
                     {/* Test API Call Button */}
                     <Button
                       onClick={handleTestApiCall}
@@ -1067,12 +1213,11 @@ const handleCallEnd = () => {
 
       {/* Post-Call Notes Dialog */}
       {pendingCallData && (
-        <PostCallNotesDialog
+        <AfterCallSummary
           open={showPostCallNotes}
+          onOpenChange={setShowPostCallNotes}
           onSave={handleSaveCallNotes}
           leadName={pendingCallData.leadName}
-          phoneNumber={pendingCallData.phoneNumber}
-          campaign={pendingCallData.campaign}
           callDuration={pendingCallData.duration}
         />
       )}

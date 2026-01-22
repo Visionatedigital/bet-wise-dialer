@@ -1,6 +1,6 @@
 [package]
 name = "betsure-dialer"
-version = "1.0.0"
+version = "1.0.6"
 description = "BetSure Call Center Dialer - Professional call center application for managing leads and customer calls"
 authors = ["BetSure Development Team"]
 license = "Proprietary"

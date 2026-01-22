@@ -26,7 +26,7 @@ serve(async (req) => {
 
     // Verify user is authenticated and is an admin
     const { data: { user }, error: authError } = await authClient.auth.getUser();
-    
+
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: 'Authentication required' }),
@@ -58,7 +58,8 @@ serve(async (req) => {
     const { data: unassignedLeads, error: leadsError } = await supabaseClient
       .from('leads')
       .select('id')
-      .is('user_id', null);
+      .is('user_id', null)
+      .range(0, 99999);
 
     if (leadsError) throw leadsError;
 
@@ -118,11 +119,11 @@ serve(async (req) => {
 
     for (let i = 0; i < updates.length; i += batchSize) {
       const batch = updates.slice(i, i + batchSize);
-      
+
       for (const update of batch) {
         const { error: updateError } = await supabaseClient
           .from('leads')
-          .update({ 
+          .update({
             user_id: update.user_id,
             assigned_at: update.assigned_at
           })

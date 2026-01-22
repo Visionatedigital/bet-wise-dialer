@@ -95,11 +95,11 @@ const Settings = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="company-name">Company Name</Label>
-                      <Input id="company-name" defaultValue="Betsure Telemarketing" />
+                      <Input id="company-name" defaultValue="Bangbet Telemarketing" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="company-website">Website</Label>
-                      <Input id="company-website" defaultValue="https://betsure.com" />
+                      <Input id="company-website" defaultValue="https://bangbet.com" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="company-phone">Phone Number</Label>
@@ -107,7 +107,7 @@ const Settings = () => {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="company-email">Email</Label>
-                      <Input id="company-email" defaultValue="info@betsure.com" />
+                      <Input id="company-email" defaultValue="info@bangbet.com" />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -195,7 +195,7 @@ const Settings = () => {
                     Application Updates
                   </CardTitle>
                   <CardDescription>
-                    Check for and install the latest version of BetSure Dialer
+                    Check for and install the latest version of Bangbet-telemarketing software
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">

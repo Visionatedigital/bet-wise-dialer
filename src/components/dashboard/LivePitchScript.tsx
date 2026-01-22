@@ -12,6 +12,7 @@ interface LivePitchScriptProps {
   isCallActive: boolean;
   audioContext?: AudioContext;
   onTranscriptForAI?: (text: string) => void;
+  onTranscriptChange?: (transcript: string) => void;
 }
 
 const complianceItems = [
@@ -28,6 +29,7 @@ export const LivePitchScript = ({
   isCallActive,
   audioContext,
   onTranscriptForAI,
+  onTranscriptChange,
 }: LivePitchScriptProps) => {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -69,6 +71,13 @@ export const LivePitchScript = ({
       }
     }
   });
+
+  // Notify parent component when transcript changes
+  useEffect(() => {
+    if (fullTranscript && onTranscriptChange) {
+      onTranscriptChange(fullTranscript);
+    }
+  }, [fullTranscript, onTranscriptChange]);
   
   // Cleanup timer on unmount
   useEffect(() => {
@@ -132,7 +141,7 @@ export const LivePitchScript = ({
   }, [isCallActive, audioContext, sendAudioData]);
 
   // Full script text split into sentences for better highlighting
-  const scriptText = `Hello ${leadName || '[Customer Name]'}, this is your agent calling from Betsure Uganda. I hope you're having a great day! I'm calling to share an exclusive offer that's perfect for valued customers like yourself. We have a special welcome bonus available for you today - when you make your first deposit, we'll match it 100% up to UGX 200,000. That means if you deposit UGX 100,000, you'll have UGX 200,000 to bet with! We also offer the best odds in Uganda, instant payouts via Mobile Money, and 24/7 customer support. Would you be interested in taking advantage of this exclusive offer today?`;
+  const scriptText = `Hello ${leadName || '[Customer Name]'}, this is your agent calling from Bangbet Uganda. I hope you're having a great day! I'm calling to share an exclusive offer that's perfect for valued customers like yourself. We have a special welcome bonus available for you today - when you make your first deposit, we'll match it 100% up to UGX 200,000. That means if you deposit UGX 100,000, you'll have UGX 200,000 to bet with! We also offer the best odds in Uganda, instant payouts via Mobile Money, and 24/7 customer support. Would you be interested in taking advantage of this exclusive offer today?`;
 
   const scriptSentences = scriptText.match(/[^.!?]+[.!?]+/g) || [scriptText];
   const scriptWords = scriptText.split(' ');

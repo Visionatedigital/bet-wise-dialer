@@ -64,8 +64,8 @@ export function AgentKPIs() {
 
   if (loading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {Array.from({ length: 6 }).map((_, i) => (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
           <Card key={i}>
             <CardHeader className="animate-pulse">
               <div className="h-4 bg-muted rounded w-3/4"></div>
@@ -120,19 +120,11 @@ export function AgentKPIs() {
       change: getPercentageChange(todayMetrics?.total_deposit_value || 0, yesterdayMetrics?.total_deposit_value || 0) >= 0 
         ? `+${getPercentageChange(todayMetrics?.total_deposit_value || 0, yesterdayMetrics?.total_deposit_value || 0)}%`
         : `${getPercentageChange(todayMetrics?.total_deposit_value || 0, yesterdayMetrics?.total_deposit_value || 0)}%`
-    },
-    callbacksDue: { 
-      value: todayMetrics?.callbacks_due || 0, 
-      target: undefined, 
-      change: (todayMetrics?.callbacks_due || 0) - (yesterdayMetrics?.callbacks_due || 0) === 0 
-        ? undefined 
-        : ((todayMetrics?.callbacks_due || 0) - (yesterdayMetrics?.callbacks_due || 0) >= 0 ? "+" : "") + 
-          ((todayMetrics?.callbacks_due || 0) - (yesterdayMetrics?.callbacks_due || 0))
     }
   };
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       <KPICard
         title="Calls Made"
         value={kpis.callsMade.value}
@@ -175,13 +167,6 @@ export function AgentKPIs() {
         change={kpis.depositValue.change}
         icon={DollarSign}
         color="text-success"
-      />
-      
-      <KPICard
-        title="Callbacks Due"
-        value={kpis.callbacksDue.value}
-        icon={Clock}
-        color="text-destructive"
       />
     </div>
   );

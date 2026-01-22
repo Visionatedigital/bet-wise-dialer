@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { cn } from "@/lib/utils";
+import { isRateLimitError, getRateLimitMessage } from "@/utils/rateLimitHandler";
 
 interface MessageComposerProps {
   conversationId: string;
@@ -169,7 +170,18 @@ export function MessageComposer({ conversationId, disabled = false, onOptimistic
       }
     } catch (error) {
       console.error("Error sending message:", error);
-      toast.error("Failed to send message: " + (error instanceof Error ? error.message : 'Unknown error'));
+      
+      // Check for rate limit errors
+      const rateLimit = isRateLimitError(error);
+      
+      if (rateLimit.isRateLimit) {
+        toast.error(getRateLimitMessage(rateLimit), {
+          duration: 10000,
+          description: 'Please wait before sending another message.'
+        });
+      } else {
+        toast.error("Failed to send message: " + (error instanceof Error ? error.message : 'Unknown error'));
+      }
     } finally {
       setIsSending(false);
     }

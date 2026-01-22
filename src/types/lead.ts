@@ -22,5 +22,6 @@ export interface Lead {
   last_contact_at?: string | null;
   created_at?: string;
   updated_at?: string;
+  status?: string | null;
 }
 

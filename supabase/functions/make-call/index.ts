@@ -34,14 +34,17 @@ serve(async (req) => {
     // Format phone number (ensure it starts with +)
     const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
 
-    // Prepare the call request
+    // Prepare the call request with recording enabled
     const callbackUrl = `${SUPABASE_URL}/functions/v1/voice-callback`;
-    
+    const recordingCallbackUrl = `${SUPABASE_URL}/functions/v1/recording-callback`;
+
     const params = new URLSearchParams({
       username: AFRICASTALKING_USERNAME,
       to: formattedPhone,
       from: '+256323200928',
       callStartUrl: callbackUrl,
+      record: 'true', // Enable call recording
+      recordingCallbackUrl: recordingCallbackUrl // Webhook for recording notification
     });
 
     console.log('Initiating call to:', formattedPhone);
@@ -96,10 +99,10 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: 'Call initiated successfully',
-        data: result 
+        data: result
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -107,13 +110,13 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error making call:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
       }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
   }

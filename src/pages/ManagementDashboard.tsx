@@ -21,6 +21,7 @@ interface AgentStats {
   email: string;
   calls: number;
   connects: number;
+  qualified: number;
   conversions: number;
   deposits: number;
 }
@@ -33,12 +34,95 @@ const ManagementDashboard = () => {
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [showExportModal, setShowExportModal] = useState(false);
 
-  const { funnelData, insights, message: funnelMessage, loading: funnelLoading } = useFunnelAnalysis(dateRange, '');
+  // Pass manager ID to ensure funnel analysis filters by assigned agents
+  const { funnelData, insights, message: funnelMessage, loading: funnelLoading } = useFunnelAnalysis(dateRange, '', user?.id || null);
   const { agents: topAgents, insights: agentInsights, loading: agentsLoading, message: agentsMessage } = useAgentAnalysis(dateRange);
 
   useEffect(() => {
     fetchAgentStats();
   }, [dateRange, selectedAgent]);
+
+  // Deduplication function: Groups calls by phone_number and removes duplicates within 10 minutes
+  // If agent calls same number multiple times within 10 minutes, keep only one
+  // Priority: converted > connected > longest duration > most recent
+  const deduplicateCallsForAgent = (calls: any[]): any[] => {
+    if (!calls || calls.length === 0) return [];
+    
+    // Group calls by phone_number (since we're already filtering by agent)
+    const callGroups = new Map<string, any[]>();
+    
+    calls.forEach((call) => {
+      const key = call.phone_number || 'unknown';
+      if (!callGroups.has(key)) {
+        callGroups.set(key, []);
+      }
+      callGroups.get(key)!.push(call);
+    });
+
+    const deduplicated: any[] = [];
+    const DEDUP_WINDOW_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+    callGroups.forEach((group) => {
+      if (group.length === 1) {
+        deduplicated.push(group[0]);
+        return;
+      }
+
+      // Sort by time
+      group.sort((a, b) => {
+        const timeA = new Date(a.start_time || a.created_at).getTime();
+        const timeB = new Date(b.start_time || b.created_at).getTime();
+        return timeA - timeB;
+      });
+
+      let lastKeptCall: any = null;
+      
+      group.forEach((call) => {
+        const callTime = new Date(call.start_time || call.created_at).getTime();
+        
+        if (!lastKeptCall) {
+          // First call in group - always keep
+          lastKeptCall = call;
+          deduplicated.push(call);
+        } else {
+          const lastKeptTime = new Date(lastKeptCall.start_time || lastKeptCall.created_at).getTime();
+          const timeDiff = callTime - lastKeptTime;
+          
+          // If more than 10 minutes apart, keep this call
+          if (timeDiff > DEDUP_WINDOW_MS) {
+            lastKeptCall = call;
+            deduplicated.push(call);
+          } else {
+            // Within 10 minutes - keep the "better" call based on priority
+            // Priority: converted > connected > longer duration > more recent
+            const shouldReplace = 
+              (call.status === 'converted' && lastKeptCall.status !== 'converted') ||
+              (call.status === 'converted' && lastKeptCall.status === 'converted' && 
+               (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
+              (call.status === 'connected' && lastKeptCall.status !== 'converted' && 
+               (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
+              (call.status === lastKeptCall.status && 
+               (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
+              (call.status === lastKeptCall.status && 
+               (Number(call.duration_seconds) || 0) === (Number(lastKeptCall.duration_seconds) || 0) &&
+               callTime > lastKeptTime);
+            
+            if (shouldReplace) {
+              // Remove last kept call and add this one
+              const index = deduplicated.indexOf(lastKeptCall);
+              if (index > -1) {
+                deduplicated.splice(index, 1);
+              }
+              lastKeptCall = call;
+              deduplicated.push(call);
+            }
+          }
+        }
+      });
+    });
+
+    return deduplicated;
+  };
 
   const fetchAgentStats = async () => {
     try {
@@ -65,6 +149,9 @@ const ManagementDashboard = () => {
       
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - daysAgo);
+      startDate.setHours(0, 0, 0, 0); // Start of day - match Performance.tsx logic
+      const endDate = new Date();
+      endDate.setHours(23, 59, 59, 999); // End of today - match Performance.tsx logic
       
       // Validate the date before using it
       if (isNaN(startDate.getTime())) {
@@ -92,13 +179,38 @@ const ManagementDashboard = () => {
             .from('call_activities')
             .select('*')
             .eq('user_id', profile.id)
-            .gte('created_at', startDate.toISOString());
+            .gte('start_time', startDate.toISOString())
+            .lte('start_time', endDate.toISOString());
+          
+          // Apply range limit AFTER all filters to ensure we get ALL matching records
+          query = query.range(0, 99999); // Fetch up to 100,000 records to include ALL calls
 
           const { data: calls } = await query;
 
-          const totalCalls = calls?.length || 0;
-          const connects = calls?.filter(c => c.status === 'connected' || c.status === 'converted').length || 0;
+          // Deduplicate ALL calls first: If agent calls same number multiple times within 10 minutes, count only once
+          const deduplicatedAllCalls = deduplicateCallsForAgent(calls || []);
+          
+          // Total calls = all deduplicated call attempts (one per phone number)
+          const totalCalls = deduplicatedAllCalls.length;
+          
+          // Connects = only calls that actually rang and were answered
+          // A call is considered "connected" if:
+          // 1. Status is 'converted' (definitely answered)
+          // 2. Status is 'connected' AND duration_seconds > 0 (actually rang and was answered)
+          const connects = deduplicatedAllCalls.filter(c => {
+            if (c.status === 'converted') return true;
+            if (c.status === 'connected') {
+              return (Number(c.duration_seconds) || 0) > 0;
+            }
+            return false;
+          }).length;
           const conversions = calls?.filter(c => c.status === 'converted').length || 0;
+          // Qualified = connects that actually rang, were answered, and lasted more than 2 minutes
+          const qualified = calls?.filter(c => {
+            const isConnected = c.status === 'converted' || 
+              (c.status === 'connected' && (Number(c.duration_seconds) || 0) > 0);
+            return isConnected && (Number(c.duration_seconds) || 0) > 120;
+          }).length || 0;
           const totalDeposits = calls?.reduce((sum, c) => sum + (Number(c.deposit_amount) || 0), 0) || 0;
 
           return {
@@ -107,6 +219,7 @@ const ManagementDashboard = () => {
             email: profile.email || '',
             calls: totalCalls,
             connects,
+            qualified,
             conversions,
             deposits: totalDeposits
           };
@@ -130,19 +243,25 @@ const ManagementDashboard = () => {
     (acc, agent) => ({
       calls: acc.calls + agent.calls,
       connects: acc.connects + agent.connects,
+      qualified: acc.qualified + (agent.qualified || 0),
       conversions: acc.conversions + agent.conversions,
       deposits: acc.deposits + agent.deposits
     }),
-    { calls: 0, connects: 0, conversions: 0, deposits: 0 }
+    { calls: 0, connects: 0, qualified: 0, conversions: 0, deposits: 0 }
   );
+
+  // Calculate rates from totals to ensure accuracy
+  const connectRate = totals.calls > 0 ? ((totals.connects / totals.calls) * 100).toFixed(1) : '0.0';
+  const qualificationRate = totals.connects > 0 ? ((totals.qualified / totals.connects) * 100).toFixed(1) : '0.0';
+  const conversionRate = totals.qualified > 0 ? ((totals.conversions / totals.qualified) * 100).toFixed(1) : '0.0';
 
   return (
     <ManagementLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Management Dashboard</h1>
-            <p className="text-muted-foreground">Performance analytics and agent insights</p>
+            <h1 className="text-3xl font-bold tracking-tight">Manager Hub</h1>
+            <p className="text-muted-foreground">Management Dashboard • Performance analytics and agent insights</p>
           </div>
           <Button onClick={() => setShowExportModal(true)}>
             <Download className="h-4 w-4 mr-2" />
@@ -189,7 +308,7 @@ const ManagementDashboard = () => {
             <CardContent>
               <div className="text-2xl font-bold">{totals.calls.toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">
-                {funnelData ? `${funnelData.connectRate}% connect rate` : 'Loading...'}
+                {connectRate}% connect rate
               </p>
             </CardContent>
           </Card>
@@ -202,7 +321,7 @@ const ManagementDashboard = () => {
             <CardContent>
               <div className="text-2xl font-bold">{totals.connects.toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">
-                {funnelData ? `${funnelData.qualificationRate}% qualified` : 'Loading...'}
+                {qualificationRate}% qualified
               </p>
             </CardContent>
           </Card>
@@ -215,7 +334,7 @@ const ManagementDashboard = () => {
             <CardContent>
               <div className="text-2xl font-bold">{totals.conversions.toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">
-                {funnelData ? `${funnelData.conversionRate}% conversion rate` : 'Loading...'}
+                {conversionRate}% conversion rate
               </p>
             </CardContent>
           </Card>
