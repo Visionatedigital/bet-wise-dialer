@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Users, Target, UserX, Upload } from "lucide-react";
+import { Users, Target, UserX, Upload, Download, RefreshCw, Share2 } from "lucide-react";
 import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
 import { ImportLeadsForAgentModal } from "@/components/leads/ImportLeadsForAgentModal";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -49,6 +49,12 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAgentImportModal, setShowAgentImportModal] = useState(false);
+  const [requestSegment, setRequestSegment] = useState<string>('vip_dormant');
+  const [requestLeadCount, setRequestLeadCount] = useState<string>('100');
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [lastSyncCount, setLastSyncCount] = useState<number>(0);
+  const [distributing, setDistributing] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -224,6 +230,57 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleRequestLeads = async () => {
+    setSyncing(true);
+    try {
+      const limit = requestLeadCount ? parseInt(requestLeadCount) : 2000; // Increased to get all leads
+
+      const { data, error } = await supabase.functions.invoke('vip-dormant-sync', {
+        body: {
+          segment: requestSegment,
+          limit: limit
+        }
+      });
+
+      if (error) throw error;
+
+      const syncedCount = data?.players_synced || 0;
+      setLastSyncTime(new Date().toISOString());
+      setLastSyncCount(syncedCount);
+
+      toast.success(`Successfully synced ${syncedCount} leads from BangBet`);
+      fetchData(); // Refresh the dashboard
+    } catch (error) {
+      console.error('Error requesting leads:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      toast.error('Failed to request leads from BangBet - check console for details');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDistributeLeads = async () => {
+    setDistributing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('distribute-leads');
+
+      if (error) {
+        console.error('Distribution error:', error);
+        throw error;
+      }
+
+      const distributed = data?.distributed || 0;
+      toast.success(`Successfully distributed ${distributed} leads among agents`);
+      fetchData(); // Refresh the dashboard
+    } catch (error: any) {
+      console.error('Error distributing leads:', error);
+      const errorMessage = error?.message || 'Failed to distribute leads';
+      toast.error(`Error: ${errorMessage}`);
+    } finally {
+      setDistributing(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -261,6 +318,96 @@ const AdminDashboard = () => {
             </Button>
           </div>
         </div>
+
+        {/* Request New Leads Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Download className="h-5 w-5" />
+              Request New Leads from BangBet
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Select Segment</Label>
+                  <Select value={requestSegment} onValueChange={setRequestSegment}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose segment" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vip_dormant">VIP Dormant (14-30 days inactive)</SelectItem>
+                      <SelectItem value="aviator_only">Aviator Only Players</SelectItem>
+                      <SelectItem value="casino_only">Casino Only Players</SelectItem>
+                      <SelectItem value="sportsbook_only">Sportsbook Only Players</SelectItem>
+                      <SelectItem value="inactive_14_days">Inactive 14+ Days</SelectItem>
+                      <SelectItem value="low_balance">Low Balance Players</SelectItem>
+                      <SelectItem value="high_value">High Value Players</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Number of Leads (optional)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Leave empty to fetch all available"
+                    value={requestLeadCount}
+                    onChange={(e) => setRequestLeadCount(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    If not specified, all available leads for the selected segment will be imported
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleRequestLeads}
+                disabled={syncing}
+                className="w-full"
+              >
+                {syncing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Syncing from BangBet...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Request Leads
+                  </>
+                )}
+              </Button>
+
+              <Button
+                onClick={handleDistributeLeads}
+                disabled={distributing}
+                variant="outline"
+                className="w-full"
+              >
+                {distributing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Distributing...
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Distribute Leads to Agents
+                  </>
+                )}
+              </Button>
+
+              {lastSyncTime && (
+                <div className="text-sm text-muted-foreground text-center pt-2 border-t">
+                  Last sync: {new Date(lastSyncTime).toLocaleString()} • {lastSyncCount} leads imported
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Active Agents */}

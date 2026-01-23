@@ -13,25 +13,51 @@ serve(async (req) => {
   }
 
   try {
-    // Create client for authentication check
-    const authClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    );
+    // Check for Service Role bypass
+    const authHeader = req.headers.get('Authorization');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
-    // Verify user is authenticated and is an admin
-    const { data: { user }, error: authError } = await authClient.auth.getUser();
-
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Authentication required' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    if (!isServiceRole) {
+      // Create client for authentication check
+      const authClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        {
+          global: {
+            headers: { Authorization: authHeader! },
+          },
+        }
       );
+
+      // Verify user is authenticated and is an admin
+      const { data: { user }, error: authError } = await authClient.auth.getUser();
+
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Authentication required' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if user has admin role
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      );
+
+      const { data: userRole, error: roleError } = await supabaseClient
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .single();
+
+      if (roleError || userRole?.role !== 'admin') {
+        return new Response(
+          JSON.stringify({ error: 'Admin access required' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Create service role client for operations
@@ -40,17 +66,30 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    // Check if user has admin role
-    const { data: userRole, error: roleError } = await supabaseClient
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .single();
+    // Parse request body for action
+    let action = 'distribute';
+    try {
+      const body = await req.json();
+      if (body.action) action = body.action;
+    } catch {
+      // no body, default to distribute
+    }
 
-    if (roleError || userRole?.role !== 'admin') {
+    if (action === 'reset') {
+      console.log('Resetting lead distribution...');
+      const { error: resetError, count } = await supabaseClient
+        .from('leads')
+        .update({ user_id: null, assigned_at: null })
+        .not('user_id', 'is', null);
+
+      if (resetError) throw resetError;
+
       return new Response(
-        JSON.stringify({ error: 'Admin access required' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          message: `Successfully unassigned all leads`,
+          action: 'reset'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -61,14 +100,14 @@ serve(async (req) => {
       .is('user_id', null)
       .range(0, 99999);
 
-    if (leadsError) throw leadsError;
-
-    if (!unassignedLeads || unassignedLeads.length === 0) {
-      return new Response(
-        JSON.stringify({ message: 'No unassigned leads to distribute', distributed: 0 }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (leadsError) {
+      console.error('Error fetching unassigned leads:', leadsError);
+      throw leadsError;
     }
+
+    console.log(`Found ${unassignedLeads?.length || 0} unassigned leads`);
+
+    // ... (rest of distribution logic)
 
     // Get all approved agents with 'agent' role and status 'online' or 'offline'
     const { data: agentRoles, error: rolesError } = await supabaseClient

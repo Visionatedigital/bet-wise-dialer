@@ -22,6 +22,7 @@ export interface AfterCallSummaryData {
   selectedTags: string[];
   conversionLikelihood: string;
   escalateToOperations: boolean;
+  promisedDepositAmount?: number;
 }
 
 interface AfterCallSummaryProps {
@@ -59,6 +60,7 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration, o
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [conversionLikelihood, setConversionLikelihood] = useState("Medium");
   const [escalateToOperations, setEscalateToOperations] = useState(false);
+  const [promisedDepositAmount, setPromisedDepositAmount] = useState<number | undefined>();
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -89,7 +91,8 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration, o
       nextActionDate,
       selectedTags,
       conversionLikelihood,
-      escalateToOperations
+      escalateToOperations,
+      promisedDepositAmount
     };
 
     console.log("Saving summary:", summaryData);
@@ -113,6 +116,7 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration, o
     setSelectedTags([]);
     setConversionLikelihood("Medium");
     setEscalateToOperations(false);
+    setPromisedDepositAmount(undefined);
   };
 
   const canSave = disposition !== "";
@@ -159,6 +163,26 @@ export function AfterCallSummary({ open, onOpenChange, leadName, callDuration, o
 
 
 
+
+          {/* Promised Deposit Amount - Only show if interested */}
+          {disposition === 'interested' && (
+            <div className="space-y-3">
+              <Label htmlFor="promisedDeposit" className="text-base font-medium flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-green-600" />
+                Promised Deposit Amount (UGX)
+              </Label>
+              <Input
+                id="promisedDeposit"
+                type="number"
+                placeholder="e.g., 50000"
+                value={promisedDepositAmount || ""}
+                onChange={(e) => setPromisedDepositAmount(e.target.value ? parseInt(e.target.value) : undefined)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter the amount the customer promised to deposit (if discussed)
+              </p>
+            </div>
+          )}
 
           {/* Lead Strength (for callback prioritization) - Only show if interested is selected */}
           {disposition === 'interested' && (

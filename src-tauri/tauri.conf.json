@@ -53,7 +53,8 @@
     "active": true,
     "targets": "all",
     "icon": [
-      "../src/assets/bangbet-logo.png"
+      "icons/icon.ico",
+      "icons/icon.png"
     ],
     "category": "Business",
     "shortDescription": "Bangbet Call Center Dialer",
