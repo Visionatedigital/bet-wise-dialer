@@ -92,6 +92,19 @@ serve(async (req) => {
                     log(`  ✓ Already has role`);
                 }
 
+                // NEW: Ensure profile is approved
+                if (profile && user.id) {
+                    const { error: approveError } = await supabase
+                        .from('profiles')
+                        .update({ approved: true, status: 'online' }) // Force online status too for visibility
+                        .eq('id', user.id);
+                    if (approveError) {
+                        log(`  Error setting approved status: ${approveError.message}`);
+                    } else {
+                        log(`  ✅ Enforced approved=true and status=online`);
+                    }
+                }
+
             } else {
                 // user is NOT in trusted list, ensure they DO NOT have agent role
                 const { data: role } = await supabase

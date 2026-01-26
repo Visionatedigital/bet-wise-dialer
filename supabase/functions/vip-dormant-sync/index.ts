@@ -76,17 +76,76 @@ serve(async (req) => {
       throw new Error("No admin user found");
     }
 
-    // Step 3: Create leads (with user_id = null so they can be distributed)
-    const leads = players.map((p: any) => ({
-      user_id: null, // NULL so distribute-leads can assign to agents
-      name: p.name || `Player ${p.player_id}`,
-      phone: p.phone,
-      segment: "vip",
-      priority: "medium",
-      score: 50,
-      campaign: `VIP Dormant - ${new Date().toISOString().split('T')[0]}`,
-      tags: ["vip_dormant"],
-      intent: `Player ${p.player_id}`,
+    // Step 3: Create leads with AI Scoring
+    const leads = await Promise.all(players.map(async (p: any) => {
+      // Fetch full profile for LTV and patterns
+      let lifetimeValue = 0;
+      let depositCount = 0;
+      let preferredProduct = "unknown";
+      let bettingPatterns = {};
+
+      try {
+        // Fetch profile
+        const profileRes = await fetch(`${mockApiUrl.replace(/\/segments\/.*$/, '')}/players/${p.player_id}/profile`, {
+          headers: { "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey! }
+        });
+        if (profileRes.ok) {
+          const profileData = await profileRes.json();
+          if (profileData.success) {
+            lifetimeValue = profileData.data.financial?.lifetime_value || 0;
+            depositCount = profileData.data.financial?.total_deposits || 0;
+            preferredProduct = profileData.data.preferences?.favorite_product || "unknown";
+          }
+        }
+
+        // Fetch patterns
+        const patternsRes = await fetch(`${mockApiUrl.replace(/\/segments\/.*$/, '')}/players/${p.player_id}/betting-patterns`, {
+          headers: { "Authorization": `Bearer ${supabaseAnonKey}`, "apikey": supabaseAnonKey! }
+        });
+        if (patternsRes.ok) {
+          const patternData = await patternsRes.json();
+          if (patternData.success) {
+            bettingPatterns = patternData.data;
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch details for player ${p.player_id}`, err);
+      }
+
+      // --- AI SCORING LOGIC ---
+      // Base score on Lifetime Value (Proprietary Algorithm)
+      // Cap LTV contribution at 80 points (assuming ~1M UGX is "high")
+      let score = Math.min(Math.round((lifetimeValue / 1000000) * 80), 80);
+
+      // Bonus for VIP level
+      if (p.vip_level === 'platinum') score += 20;
+      else if (p.vip_level === 'gold') score += 15;
+      else if (p.vip_level === 'silver') score += 10;
+      else score += 5;
+
+      // Cap at 100
+      score = Math.min(score, 100);
+
+      const analysisNotes = `AI Analysis: LTV ${lifetimeValue.toLocaleString()} UGX. Preferred: ${preferredProduct}. Score: ${score}/100`;
+
+      return {
+        user_id: null,
+        name: p.name || `Player ${p.player_id}`,
+        phone: p.phone,
+        segment: "vip",
+        priority: "medium",
+        score: 50, // Legacy score
+        campaign: `VIP Dormant - ${new Date().toISOString().split('T')[0]}`,
+        tags: ["vip_dormant"],
+        intent: `Player ${p.player_id}`,
+        // New AI Fields
+        lifetime_value: lifetimeValue,
+        deposit_count: depositCount,
+        preferred_product: preferredProduct,
+        lead_score: score,
+        betting_patterns: bettingPatterns,
+        analysis_notes: analysisNotes
+      };
     }));
 
     // Step 4: Insert leads

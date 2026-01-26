@@ -66,23 +66,41 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    // Parse request body for action
+    // Parse request body for action and limit
     let action = 'distribute';
+    let limit = 100000; // Default to "all" (high number)
     try {
-      const body = await req.json();
-      if (body.action) action = body.action;
-    } catch {
-      // no body, default to distribute
+      console.log('Request Content-Type:', req.headers.get('content-type'));
+      const text = await req.text(); // Read as text first to avoid JSON error if empty and to log it
+      console.log('Raw Request Body:', text);
+
+      if (text) {
+        const body = JSON.parse(text);
+        console.log('Parsed Body:', body);
+        if (body.action) action = body.action;
+        if (body.limit) limit = parseInt(body.limit);
+      }
+    } catch (err) {
+      console.warn('Error parsing request body:', err);
     }
 
-    if (action === 'reset') {
-      console.log('Resetting lead distribution...');
-      const { error: resetError, count } = await supabaseClient
-        .from('leads')
-        .update({ user_id: null, assigned_at: null })
-        .not('user_id', 'is', null);
+    console.log(`Distribution Configuration -> Action: ${action}, Limit: ${limit}`);
 
-      if (resetError) throw resetError;
+    if (action === 'reset') {
+      console.log('Resetting lead distribution via RPC...');
+
+      const { error: resetError } = await supabaseClient
+        .rpc('reset_lead_assignments');
+
+      if (resetError) {
+        console.warn('RPC reset_lead_assignments failed, attempting direct update:', resetError);
+        const { error: fallbackError } = await supabaseClient
+          .from('leads')
+          .update({ user_id: null, assigned_at: null })
+          .not('user_id', 'is', null);
+
+        if (fallbackError) throw fallbackError;
+      }
 
       return new Response(
         JSON.stringify({
@@ -93,93 +111,186 @@ serve(async (req) => {
       );
     }
 
-    // Get all unassigned leads
-    const { data: unassignedLeads, error: leadsError } = await supabaseClient
-      .from('leads')
-      .select('id')
-      .is('user_id', null)
-      .range(0, 99999);
+    // Get all unassigned leads (with pagination)
+    let allLeads: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
 
-    if (leadsError) {
-      console.error('Error fetching unassigned leads:', leadsError);
-      throw leadsError;
+    while (hasMore) {
+      // Calculate how many to fetch in this page
+      // If we have a global limit, ensure we don't fetch more than needed
+      const remainingNeeded = limit - allLeads.length;
+      if (remainingNeeded <= 0) break;
+
+      const fetchSize = Math.min(pageSize, remainingNeeded);
+
+      // Try to select with lead_score first
+      let { data: leads, error: leadsError } = await supabaseClient
+        .from('leads')
+        .select('id, lead_score, lifetime_value')
+        .is('user_id', null)
+        .order('lead_score', { ascending: false })
+        .range(page * pageSize, (page * pageSize) + fetchSize - 1); // Correct range logic for fetchSize
+
+      if (leadsError && leadsError.code === 'PGRST100') { // Postgres error for column missing (often 400)
+        console.warn("Lead score column missing, falling back to basic select");
+        const fallback = await supabaseClient
+          .from('leads')
+          .select('id')
+          .is('user_id', null)
+          .range(page * pageSize, (page * pageSize) + fetchSize - 1);
+
+        leads = fallback.data;
+        leadsError = fallback.error;
+      } else if (leadsError) {
+        // If error is not specifically about missing column but still fails, let's try fallback anyway to be safe?
+        // No, might hide other errors. But for 400 (Bad Request), it's usually schema.
+        console.warn("Error fetching with scores, trying fallback...", leadsError);
+        const fallback = await supabaseClient
+          .from('leads')
+          .select('id')
+          .is('user_id', null)
+          .range(page * pageSize, (page * pageSize) + fetchSize - 1);
+
+        if (!fallback.error) {
+          leads = fallback.data;
+          leadsError = null;
+        }
+      }
+
+      if (leadsError) {
+        console.error('Error fetching unassigned leads:', leadsError);
+        throw leadsError;
+      }
+
+      if (leads && leads.length > 0) {
+        allLeads = [...allLeads, ...leads];
+        // If we got fewer than requested (fetchSize), we're done
+        if (leads.length < fetchSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      } else {
+        hasMore = false;
+      }
+
+      // Safety break to enforce limit
+      if (allLeads.length >= limit) {
+        hasMore = false;
+      }
     }
 
-    console.log(`Found ${unassignedLeads?.length || 0} unassigned leads`);
+    const unassignedLeads = allLeads;
+    console.log(`Found ${unassignedLeads.length} unassigned leads`);
 
     // ... (rest of distribution logic)
 
-    // Get all approved agents with 'agent' role and status 'online' or 'offline'
-    const { data: agentRoles, error: rolesError } = await supabaseClient
-      .from('user_roles')
-      .select('user_id')
-      .eq('role', 'agent');
-
-    if (rolesError) throw rolesError;
-
-    const agentIds = agentRoles?.map(r => r.user_id) || [];
-
-    if (agentIds.length === 0) {
-      return new Response(
-        JSON.stringify({ message: 'No agents available for lead distribution', distributed: 0 }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
+    // Get all approved agents directly from profiles
+    // We intentionally skip the 'user_roles' join to avoid sync issues.
+    // If they are approved and online, they get leads.
     const { data: agents, error: agentsError } = await supabaseClient
       .from('profiles')
       .select('id, full_name')
-      .in('id', agentIds)
-      .eq('approved', true);
+      .eq('approved', true)
+      .eq('status', 'online');
 
-    if (agentsError) throw agentsError;
+    if (agentsError) {
+      console.error('Error fetching agents:', agentsError);
+      throw agentsError;
+    }
 
     if (!agents || agents.length === 0) {
+      // Fallback: Try fetching 'offline' agents if no online ones found?
+      // No, strictly online for now unless user asks.
+      console.log('No online agents found.');
       return new Response(
-        JSON.stringify({ message: 'No approved agents available', distributed: 0 }),
+        JSON.stringify({ message: 'No online APPROVED agents found', distributed: 0, debug: { reason: 'No profiles with approved=true AND status=online' } }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Distribute leads equally using round-robin
-    const updates = unassignedLeads.map((lead, index) => {
-      const agentIndex = index % agents.length;
-      const agent = agents[agentIndex];
+    console.log(`Found ${agents.length} active agents: ${agents.map(a => a.full_name).join(', ')}`);
+
+    // --- FAIR DISTRIBUTION ALGORITHM ---
+    // Goal: Balance the TOTAL SCORE assigned to each agent, not just the count.
+
+    // Initialize agent score trackers
+    const agentScores = agents.map(a => ({
+      id: a.id,
+      totalScore: 0,
+      count: 0
+    }));
+
+    const updates = unassignedLeads.map((lead) => {
+      // Find agent with the lowest current total score
+      // Tie-breaker: If scores are equal (e.g. 0), pick the one with fewest leads in this batch
+      agentScores.sort((a, b) => {
+        if (a.totalScore !== b.totalScore) {
+          return a.totalScore - b.totalScore;
+        }
+        return a.count - b.count;
+      });
+
+      const targetAgent = agentScores[0];
+
+      // Assign lead
+      // Ensure we add at least a tiny fraction to totalScore if lead_score is 0/null
+      // This prevents the "sticky zero" issue where an agent stays at 0 and keeps getting leads
+      const scoreToAdd = (lead.lead_score || 0);
+      targetAgent.totalScore += scoreToAdd;
+      targetAgent.count += 1;
+
       return {
         id: lead.id,
-        user_id: agent.id,
+        user_id: targetAgent.id,
         assigned_at: new Date().toISOString()
       };
     });
 
-    // Update leads in batches
-    const batchSize = 100;
+    // Try to update using RPC (Fastest & Best)
     let totalUpdated = 0;
 
-    for (let i = 0; i < updates.length; i += batchSize) {
-      const batch = updates.slice(i, i + batchSize);
+    const { error: rpcError } = await supabaseClient
+      .rpc('bulk_assign_leads', { payload: updates });
 
-      for (const update of batch) {
-        const { error: updateError } = await supabaseClient
-          .from('leads')
-          .update({
-            user_id: update.user_id,
-            assigned_at: update.assigned_at
-          })
-          .eq('id', update.id);
+    if (!rpcError) {
+      console.log('Successfully distributed leads via RPC');
+      totalUpdated = updates.length;
+    } else {
+      console.warn('RPC bulk_assign_leads failed, falling back to batch updates. Error:', rpcError);
 
-        if (!updateError) {
-          totalUpdated++;
-        }
+      // Fallback: Update leads in batches using parallel updates
+      // Using smaller batch size to be safe against 500 errors
+      const batchSize = 10;
+
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const batch = updates.slice(i, i + batchSize);
+
+        await Promise.all(batch.map(async (update) => {
+          const { error: updateError } = await supabaseClient
+            .from('leads')
+            .update({
+              user_id: update.user_id,
+              assigned_at: update.assigned_at
+            })
+            .eq('id', update.id);
+
+          if (updateError) throw updateError;
+        }));
+
+        totalUpdated += batch.length;
       }
     }
 
     // Calculate distribution per agent
     const distribution = agents.map(agent => {
-      const count = updates.filter(u => u.user_id === agent.id).length;
+      const stats = agentScores.find(s => s.id === agent.id);
       return {
         agent: agent.full_name,
-        leadsAssigned: count
+        leadsAssigned: stats?.count || 0,
+        totalScore: stats?.totalScore || 0
       };
     });
 
@@ -187,15 +298,29 @@ serve(async (req) => {
       JSON.stringify({
         message: `Successfully distributed ${totalUpdated} leads among ${agents.length} agents`,
         distributed: totalUpdated,
-        distribution: distribution
+        distribution: distribution,
+        debug: {
+          foundAgents: agents.map(a => a.full_name),
+          totalAvailable: agents.length
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error) {
-    console.error('Error in distribute-leads function:', error);
+  } catch (error: any) {
+    console.error('CRITICAL Error in distribute-leads function:', error);
+    // Log the full error object structure
+    if (error?.message) console.error('Error Message:', error.message);
+    if (error?.hint) console.error('Error Hint:', error.hint);
+    if (error?.details) console.error('Error Details:', error.details);
+    if (error?.code) console.error('Error Code:', error.code);
+
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        details: error?.details || error?.hint || 'No details',
+        code: error?.code
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

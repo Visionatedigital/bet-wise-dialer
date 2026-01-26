@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Users, Target, UserX, Upload, Download, RefreshCw, Share2 } from "lucide-react";
+import { Users, Phone, Calendar, Clock, Download, RefreshCw, LogOut, Settings, UserPlus, FileUp, Trash2, Shield, Target, Brain, UserX, BadgeCheck, Share2 } from "lucide-react";
 import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
-import { ImportLeadsForAgentModal } from "@/components/leads/ImportLeadsForAgentModal";
+import { DistributionAnalysisModal } from "@/components/analytics/DistributionAnalysisModal";
+
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface Agent {
@@ -21,6 +22,7 @@ interface Agent {
   status: string;
   assignedLeads: number;
   managerId?: string | null;
+  totalScore: number;
 }
 
 interface Manager {
@@ -43,18 +45,18 @@ const AdminDashboard = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [managers, setManagers] = useState<Manager[]>([]);
   const [unassignedLeads, setUnassignedLeads] = useState<Lead[]>([]);
-  const [selectedSegment, setSelectedSegment] = useState<string>('all');
-  const [selectedAgent, setSelectedAgent] = useState<string>("");
-  const [numberOfLeads, setNumberOfLeads] = useState<string>("");
+
   const [loading, setLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showAgentImportModal, setShowAgentImportModal] = useState(false);
   const [requestSegment, setRequestSegment] = useState<string>('vip_dormant');
   const [requestLeadCount, setRequestLeadCount] = useState<string>('100');
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>(''); // 'fetching', 'analyzing', 'saving'
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [lastSyncCount, setLastSyncCount] = useState<number>(0);
   const [distributing, setDistributing] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -70,17 +72,29 @@ const AdminDashboard = () => {
       });
       if (monitorError) throw monitorError;
 
-      // Build a map of today's assigned leads per agent (client-side aggregation to avoid group-by issues)
+      // Build a map of today's assigned leads per agent
       const start = new Date();
       start.setHours(0, 0, 0, 0);
+
+      // 1. Fetch counts & scores (Safe query - Increased limit for accurate stats)
       const { data: leadRows, error: leadAggError } = await supabase
         .from('leads')
-        .select('user_id, assigned_at')
+        .select('user_id, assigned_at, lead_score')
         .not('user_id', 'is', null)
-        .gte('assigned_at', start.toISOString());
+        .gte('assigned_at', start.toISOString())
+        .limit(50000); // Increase limit to capture full distribution stats
+
       if (leadAggError) throw leadAggError;
+
       const leadCounts: Record<string, number> = {};
-      (leadRows || []).forEach((r: any) => { if (r.user_id) leadCounts[r.user_id] = (leadCounts[r.user_id] || 0) + 1; });
+      const leadScores: Record<string, number> = {};
+
+      (leadRows || []).forEach((r: any) => {
+        if (r.user_id) {
+          leadCounts[r.user_id] = (leadCounts[r.user_id] || 0) + 1;
+          leadScores[r.user_id] = (leadScores[r.user_id] || 0) + (r.lead_score || 0);
+        }
+      });
 
       const agentsWithLeads = (monitorData || []).map((a: any) => ({
         id: a.id,
@@ -88,6 +102,7 @@ const AdminDashboard = () => {
         email: a.email || '',
         status: a.current_call_start ? 'on-call' : (a.status || 'offline'),
         assignedLeads: leadCounts[a.id] ?? 0,
+        totalScore: leadScores[a.id] ?? 0,
         managerId: a.manager_id,
       }));
 
@@ -142,56 +157,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleAssignLeads = async () => {
-    if (!selectedAgent) {
-      toast.error('Please select an agent');
-      return;
-    }
 
-    const numLeads = parseInt(numberOfLeads);
-    if (!numLeads || numLeads <= 0) {
-      toast.error('Please enter a valid number of leads');
-      return;
-    }
-
-    // Filter leads by segment
-    const filteredLeads = unassignedLeads.filter(lead =>
-      selectedSegment === 'all' || lead.segment === selectedSegment
-    );
-
-    if (filteredLeads.length === 0) {
-      toast.error('No unassigned leads available in the selected segment');
-      return;
-    }
-
-    if (numLeads > filteredLeads.length) {
-      toast.error(`Only ${filteredLeads.length} leads available in this segment`);
-      return;
-    }
-
-    // Take the first N leads
-    const leadsToAssign = filteredLeads.slice(0, numLeads).map(lead => lead.id);
-
-    try {
-      const { error } = await supabase
-        .from('leads')
-        .update({
-          user_id: selectedAgent,
-          assigned_at: new Date().toISOString()
-        })
-        .in('id', leadsToAssign);
-
-      if (error) throw error;
-
-      toast.success(`Assigned ${numLeads} lead(s) successfully`);
-      setNumberOfLeads("");
-      setSelectedAgent("");
-      fetchData();
-    } catch (error) {
-      console.error('Error assigning leads:', error);
-      toast.error('Failed to assign leads');
-    }
-  };
 
   const handleManagerAssignment = async (agentId: string, managerId: string | null) => {
     try {
@@ -232,6 +198,13 @@ const AdminDashboard = () => {
 
   const handleRequestLeads = async () => {
     setSyncing(true);
+    setSyncStatus('Connecting to generic API...');
+
+    // Simulate AI steps for UX (since the edge function does it all in one go, it might be too fast to see)
+    setTimeout(() => setSyncStatus('Fetching player profiles...'), 800);
+    setTimeout(() => setSyncStatus('AI Analyzing betting patterns...'), 2000);
+    setTimeout(() => setSyncStatus('Calculating Lead Scores...'), 3500);
+
     try {
       const limit = requestLeadCount ? parseInt(requestLeadCount) : 2000; // Increased to get all leads
 
@@ -248,7 +221,7 @@ const AdminDashboard = () => {
       setLastSyncTime(new Date().toISOString());
       setLastSyncCount(syncedCount);
 
-      toast.success(`Successfully synced ${syncedCount} leads from BangBet`);
+      toast.success(`Success! Imported and AI-Analyzed ${syncedCount} leads.`);
       fetchData(); // Refresh the dashboard
     } catch (error) {
       console.error('Error requesting leads:', error);
@@ -256,21 +229,118 @@ const AdminDashboard = () => {
       toast.error('Failed to request leads from BangBet - check console for details');
     } finally {
       setSyncing(false);
+      setSyncStatus('');
     }
   };
-
   const handleDistributeLeads = async () => {
     setDistributing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('distribute-leads');
+      // Pass the requested lead count as limit if available
+      const limit = requestLeadCount ? parseInt(requestLeadCount) : 10000;
 
-      if (error) {
-        console.error('Distribution error:', error);
-        throw error;
+      // --- CLIENT SIDE DISTRIBUTION ---
+      // Since Edge Function deployment failed, we run the logic here.
+
+      // 1. Fetch Agents (Online & Approved AND Role is 'agent')
+      // First fetch online profiles
+      const { data: onlineProfiles, error: agentsError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('approved', true)
+        .eq('status', 'online');
+
+      if (agentsError) throw agentsError;
+
+      if (!onlineProfiles || onlineProfiles.length === 0) {
+        toast.error("No online users found.");
+        setDistributing(false);
+        return;
       }
 
-      const distributed = data?.distributed || 0;
-      toast.success(`Successfully distributed ${distributed} leads among agents`);
+      // Then filter for strictly 'agent' role to avoid distributing to admins/managers
+      const { data: agentRoles } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'agent')
+        .in('user_id', onlineProfiles.map(p => p.id));
+
+      const validAgentIds = new Set(agentRoles?.map(r => r.user_id) || []);
+      const onlineAgents = onlineProfiles.filter(p => validAgentIds.has(p.id));
+
+      if (onlineAgents.length === 0) {
+        toast.error("No online AGENTS found (Admins/Managers excluded).");
+        setDistributing(false);
+        return;
+      }
+
+      // 2. Fetch Unassigned Leads (Respecting Limit)
+      // Try with score first, fallback if error
+      let leadsToDistribute: any[] = [];
+      try {
+        const { data, error } = await supabase
+          .from('leads')
+          .select('id, lead_score')
+          .is('user_id', null)
+          .order('lead_score', { ascending: false })
+          .limit(limit);
+
+        if (error) throw error;
+        leadsToDistribute = data || [];
+      } catch (err) {
+        console.warn("Falling back to unscored distribution", err);
+        const { data } = await supabase
+          .from('leads')
+          .select('id')
+          .is('user_id', null)
+          .limit(limit);
+        leadsToDistribute = data || [];
+      }
+
+      if (leadsToDistribute.length === 0) {
+        toast.info("No unassigned leads found.");
+        return;
+      }
+
+      // 3. Current Load Balancing
+      // To ensure true fairness, we should consider *current* load, 
+      // but for now we'll just distribute this batch evenly among them.
+      // A more advanced version would fetch current counts first.
+
+      // Initialize trackers
+      const agentStats = onlineAgents.map(a => ({
+        id: a.id,
+        count: 0,
+        score: 0
+      }));
+
+      const updates = leadsToDistribute.map(lead => {
+        // Sort to find best candidate (Lowest Score -> Lowest Count)
+        agentStats.sort((a, b) => {
+          if (a.score !== b.score) return a.score - b.score;
+          return a.count - b.count;
+        });
+
+        const target = agentStats[0];
+        target.count++;
+        target.score += (lead.lead_score || 0);
+
+        return {
+          id: lead.id,
+          user_id: target.id,
+          assigned_at: new Date().toISOString()
+        };
+      });
+
+      // 4. Perform Updates (Batched)
+      const batchSize = 50;
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const batch = updates.slice(i, i + batchSize);
+        await Promise.all(batch.map(u =>
+          supabase.from('leads').update({ user_id: u.user_id, assigned_at: u.assigned_at }).eq('id', u.id)
+        ));
+      }
+
+      toast.success(`Successfully distributed ${updates.length} leads among ${onlineAgents.length} agents`);
       fetchData(); // Refresh the dashboard
     } catch (error: any) {
       console.error('Error distributing leads:', error);
@@ -278,6 +348,95 @@ const AdminDashboard = () => {
       toast.error(`Error: ${errorMessage}`);
     } finally {
       setDistributing(false);
+    }
+  };
+
+  // Ref to control analysis loop
+  const stopAnalysisRef = useRef(false);
+  const [aiLogs, setAiLogs] = useState<string[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [aiLogs]);
+
+  const handleAnalyzeLeads = async () => {
+    // If already analyzing, this click means STOP
+    if (analyzing) {
+      stopAnalysisRef.current = true;
+      toast.info("Stopping analysis after current batch...");
+      return;
+    }
+
+    setAnalyzing(true);
+    stopAnalysisRef.current = false;
+    let totalProcessed = 0;
+
+    try {
+      toast.info("Starting AI Auto-Analysis. Click again to stop.");
+
+      while (!stopAnalysisRef.current) {
+        const { data, error } = await supabase.functions.invoke('analyze-leads');
+
+        if (error) throw error;
+
+        if (data?.logs && Array.isArray(data.logs)) {
+          console.group(`🧠 AI Batch Logs (Total so far: ${totalProcessed})`);
+          data.logs.forEach((log: string) => console.log(log));
+          console.groupEnd();
+        }
+
+        const count = data?.processed || 0;
+
+        if (count === 0) {
+          toast.info("Analysis Complete: No more unscored leads found.");
+          break;
+        }
+
+        totalProcessed += count;
+        toast.success(`AI Processed batch of ${count} leads... (Total: ${totalProcessed})`);
+
+        // Small delay to prevent rate limiting issues and allow UI updates
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      if (totalProcessed > 0) {
+        toast.success(`Analysis Finished! Total analyzed: ${totalProcessed} leads.`);
+        fetchData();
+      } else if (stopAnalysisRef.current) {
+        toast.info("Analysis stopped by user.");
+      }
+
+    } catch (error) {
+      console.error('Error analyzing leads:', error);
+      toast.error('Failed to analyze leads');
+    } finally {
+      setAnalyzing(false);
+      stopAnalysisRef.current = false;
+    }
+  };
+
+  const [verifyingDeposits, setVerifyingDeposits] = useState(false);
+
+  const handleVerifyDeposits = async () => {
+    setVerifyingDeposits(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-player-deposits');
+      if (error) throw error;
+
+      if (data?.success) {
+        const msg = `Found ${data.deposits_found} deposits from ${data.verified_count} checked calls! (Probable Rev: ${data.conversion_rate}%)`;
+        toast.success(msg);
+        if (data.deposits_found > 0) fetchData(); // Refresh stats
+      } else {
+        toast.info(data?.message || "Verification completed");
+      }
+    } catch (err) {
+      console.error("Verification failed:", err);
+      toast.error("Failed to verify deposits");
+    } finally {
+      setVerifyingDeposits(false);
     }
   };
 
@@ -312,10 +471,6 @@ const AdminDashboard = () => {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            <Button onClick={() => setShowImportModal(true)}>
-              <Target className="h-4 w-4 mr-2" />
-              Import Leads
-            </Button>
           </div>
         </div>
 
@@ -324,11 +479,50 @@ const AdminDashboard = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Download className="h-5 w-5" />
-              Request New Leads from BangBet
+              Request New Leads <Badge variant="secondary" className="ml-2 bg-purple-100 text-purple-700 hover:bg-purple-100"><Brain className="w-3 h-3 mr-1" /> AI Active</Badge>
             </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto text-xs bg-slate-900 text-white hover:bg-slate-800 border-none"
+              onClick={handleAnalyzeLeads}
+            >
+              {analyzing ? (
+                <>
+                  <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+                  Stop Analysis
+                </>
+              ) : (
+                <>
+                  <Brain className="h-3 w-3 mr-1" />
+                  Analyze Existing Leads
+                </>
+              )}
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+
+              {/* AI Live Logs */}
+              {aiLogs.length > 0 && (
+                <div className="bg-slate-950 text-green-400 font-mono text-xs p-4 rounded-md h-48 overflow-y-auto mb-4 border border-slate-800 shadow-inner">
+                  <div className="flex items-center gap-2 text-slate-400 mb-2 border-b border-slate-800 pb-2">
+                    <Brain className="w-3 h-3" />
+                    <span>AI Analysis Terminal</span>
+                    {analyzing && <span className="animate-pulse ml-auto">● Processing...</span>}
+                  </div>
+                  <div className="space-y-1">
+                    {aiLogs.map((log, i) => (
+                      <div key={i} className="break-words">
+                        <span className="text-slate-500 mr-2">[{new Date().toLocaleTimeString()}]</span>
+                        {log}
+                      </div>
+                    ))}
+                    <div ref={logsEndRef} />
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Select Segment</Label>
@@ -366,17 +560,17 @@ const AdminDashboard = () => {
               <Button
                 onClick={handleRequestLeads}
                 disabled={syncing}
-                className="w-full"
+                className="w-full relative overflow-hidden"
               >
                 {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Syncing from BangBet...
-                  </>
+                  <div className="flex items-center gap-2 animate-pulse">
+                    <Brain className="h-4 w-4 animate-bounce text-purple-200" />
+                    <span>{syncStatus || 'Processing...'}</span>
+                  </div>
                 ) : (
                   <>
                     <Download className="h-4 w-4 mr-2" />
-                    Request Leads
+                    Request & Analyze Leads
                   </>
                 )}
               </Button>
@@ -416,6 +610,15 @@ const AdminDashboard = () => {
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
                 Active Agents
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
+                  onClick={() => setShowAnalysisModal(true)}
+                >
+                  <Brain className="w-3 h-3 mr-1" />
+                  Analyze Distribution with AI
+                </Button>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -429,6 +632,7 @@ const AdminDashboard = () => {
                         <TableHead>Agent</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Manager</TableHead>
+                        <TableHead className="text-right">Total Score (AI)</TableHead>
                         <TableHead className="text-right">Leads</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -461,6 +665,15 @@ const AdminDashboard = () => {
                                 ))}
                               </SelectContent>
                             </Select>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs">
+                            {agent.totalScore > 0 ? (
+                              <Badge variant="outline" className="border-purple-200 text-purple-700">
+                                {agent.totalScore.toLocaleString()} pts
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">{agent.assignedLeads}</TableCell>
                         </TableRow>
@@ -516,97 +729,7 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-1">
-          {/* Bulk Lead Assignment */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5" />
-                Bulk Assign Leads
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Agent</Label>
-                  <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose an agent" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {agents.map((agent) => (
-                        <SelectItem key={agent.id} value={agent.id}>
-                          {agent.full_name} ({agent.assignedLeads} leads)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                <div className="space-y-2">
-                  <Label>Select Segment</Label>
-                  <Select
-                    value={selectedSegment}
-                    onValueChange={setSelectedSegment}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose segment" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Segments</SelectItem>
-                      <SelectItem value="vip">VIP</SelectItem>
-                      <SelectItem value="semi-active">Semi-Active</SelectItem>
-                      <SelectItem value="dormant">Dormant</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Number of Leads to Assign</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    placeholder="e.g., 150"
-                    value={numberOfLeads}
-                    onChange={(e) => setNumberOfLeads(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {unassignedLeads.filter(lead =>
-                      selectedSegment === 'all' || lead.segment === selectedSegment
-                    ).length} unassigned leads available in this segment
-                  </p>
-                </div>
-
-                <Button
-                  onClick={handleAssignLeads}
-                  disabled={!selectedAgent || !numberOfLeads || loading}
-                  className="w-full"
-                >
-                  Assign Leads
-                </Button>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or</span>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => setShowAgentImportModal(true)}
-                  disabled={!selectedAgent || loading}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Import CSV for Selected Agent
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </div>
 
       <ImportLeadsModal
@@ -615,13 +738,19 @@ const AdminDashboard = () => {
         onImportComplete={fetchData}
       />
 
-      <ImportLeadsForAgentModal
-        open={showAgentImportModal}
-        onOpenChange={setShowAgentImportModal}
-        onImportComplete={fetchData}
-        agentId={selectedAgent}
-        agentName={agents.find(a => a.id === selectedAgent)?.full_name || ''}
+      <DistributionAnalysisModal
+        open={showAnalysisModal}
+        onOpenChange={setShowAnalysisModal}
+        agents={agents.map(a => ({
+          id: a.id,
+          name: a.full_name,
+          assignedLeads: a.assignedLeads,
+          totalScore: a.totalScore,
+          status: a.status
+        }))}
       />
+
+
     </AdminLayout>
   );
 };

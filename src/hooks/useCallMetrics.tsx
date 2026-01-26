@@ -90,9 +90,9 @@ export const useCallMetrics = () => {
       // Deduplication function: Groups calls by phone_number and removes duplicates within 10 minutes
       const deduplicateCalls = (calls: any[]): any[] => {
         if (!calls || calls.length === 0) return [];
-        
+
         const callGroups = new Map<string, any[]>();
-        
+
         calls.forEach((call) => {
           const key = `${call.user_id}_${call.phone_number || 'unknown'}`;
           if (!callGroups.has(key)) {
@@ -117,33 +117,33 @@ export const useCallMetrics = () => {
           });
 
           let lastKeptCall: any = null;
-          
+
           group.forEach((call) => {
             const callTime = new Date(call.start_time || call.created_at).getTime();
-            
+
             if (!lastKeptCall) {
               lastKeptCall = call;
               deduplicated.push(call);
             } else {
               const lastKeptTime = new Date(lastKeptCall.start_time || lastKeptCall.created_at).getTime();
               const timeDiff = callTime - lastKeptTime;
-              
+
               if (timeDiff > DEDUP_WINDOW_MS) {
                 lastKeptCall = call;
                 deduplicated.push(call);
               } else {
-                const shouldReplace = 
+                const shouldReplace =
                   (call.status === 'converted' && lastKeptCall.status !== 'converted') ||
-                  (call.status === 'converted' && lastKeptCall.status === 'converted' && 
-                   (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
-                  (call.status === 'connected' && lastKeptCall.status !== 'converted' && 
-                   (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
-                  (call.status === lastKeptCall.status && 
-                   (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
-                  (call.status === lastKeptCall.status && 
-                   (Number(call.duration_seconds) || 0) === (Number(lastKeptCall.duration_seconds) || 0) &&
-                   callTime > lastKeptTime);
-                
+                  (call.status === 'converted' && lastKeptCall.status === 'converted' &&
+                    (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
+                  (call.status === 'connected' && lastKeptCall.status !== 'converted' &&
+                    (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
+                  (call.status === lastKeptCall.status &&
+                    (Number(call.duration_seconds) || 0) > (Number(lastKeptCall.duration_seconds) || 0)) ||
+                  (call.status === lastKeptCall.status &&
+                    (Number(call.duration_seconds) || 0) === (Number(lastKeptCall.duration_seconds) || 0) &&
+                    callTime > lastKeptTime);
+
                 if (shouldReplace) {
                   const index = deduplicated.indexOf(lastKeptCall);
                   if (index > -1) {
@@ -162,7 +162,7 @@ export const useCallMetrics = () => {
 
       const deduplicatedTodayCalls = deduplicateCalls(todayCalls || []);
       const todayCallsMade = deduplicatedTodayCalls.length;
-      
+
       // Calculate connects from deduplicated calls: unique phone numbers that actually connected
       // A call is considered "connected" if:
       // 1. Status is 'converted' (definitely answered)
@@ -191,7 +191,7 @@ export const useCallMetrics = () => {
 
       const deduplicatedYesterdayCalls = deduplicateCalls(yesterdayCalls || []);
       const yesterdayCallsMade = deduplicatedYesterdayCalls.length;
-      
+
       // Calculate connects from deduplicated calls for yesterday
       const yesterdayConnects = deduplicatedYesterdayCalls.filter(call => {
         if (call.status === 'converted') return true;
@@ -200,6 +200,37 @@ export const useCallMetrics = () => {
         }
         return false;
       }).length;
+
+      // --------------------------------------------------------------------------
+      // FETCH VERIFIED DEPOSITS & CONVERSIONS FROM `telemarketing_calls`
+      // --------------------------------------------------------------------------
+      // This ensures we show the REAL data verified by the Admin Tool
+      const { data: todayDeposits } = await supabase
+        .from('telemarketing_calls')
+        .select('actual_deposit_amount, deposit_verified_at')
+        .eq('agent_id', user.id)
+        .gte('call_date', todayStart.toISOString())
+        .lte('call_date', todayEnd.toISOString())
+        .not('actual_deposit_amount', 'is', null)
+        .gt('actual_deposit_amount', 0); // Only get successful deposits
+
+      const { data: yesterdayDeposits } = await supabase
+        .from('telemarketing_calls')
+        .select('actual_deposit_amount, deposit_verified_at')
+        .eq('agent_id', user.id)
+        .gte('call_date', yesterdayStart.toISOString())
+        .lte('call_date', yesterdayEnd.toISOString())
+        .not('actual_deposit_amount', 'is', null)
+        .gt('actual_deposit_amount', 0);
+
+      // Sum up deposits
+      const todayTotalValue = (todayDeposits || []).reduce((sum, item) => sum + (Number(item.actual_deposit_amount) || 0), 0);
+      const yesterdayTotalValue = (yesterdayDeposits || []).reduce((sum, item) => sum + (Number(item.actual_deposit_amount) || 0), 0);
+
+      const todayConversions = (todayDeposits || []).length;
+      const yesterdayConversions = (yesterdayDeposits || []).length;
+
+      console.log(`[useCallMetrics] Found ${todayConversions} verified conversions (Value: ${todayTotalValue}) for today.`);
 
       setTodayMetrics({
         ...(todayData || {
@@ -216,7 +247,9 @@ export const useCallMetrics = () => {
           updated_at: new Date().toISOString()
         }),
         calls_made: todayCallsMade, // Override with deduplicated count
-        connects: todayConnects // Override with deduplicated connects count
+        connects: todayConnects,     // Override with deduplicated connects count
+        conversions: todayConversions, // Override with REAL verified conversions
+        total_deposit_value: todayTotalValue // Override with REAL verified value
       });
 
       setYesterdayMetrics({
@@ -234,7 +267,9 @@ export const useCallMetrics = () => {
           updated_at: new Date().toISOString()
         }),
         calls_made: yesterdayCallsMade, // Override with deduplicated count
-        connects: yesterdayConnects // Override with deduplicated connects count
+        connects: yesterdayConnects,     // Override with deduplicated connects count
+        conversions: yesterdayConversions, // Override
+        total_deposit_value: yesterdayTotalValue // Override
       });
 
     } catch (err) {
@@ -269,7 +304,7 @@ export const useCallMetrics = () => {
       fetchMetrics().catch(err => {
         console.warn('[useCallMetrics] Failed to refresh metrics (non-critical):', err);
       });
-      
+
       return data;
     } catch (err) {
       console.error('[useCallMetrics] Error creating call activity:', err);
@@ -290,7 +325,7 @@ export const useCallMetrics = () => {
 
       // Refresh metrics after updating activity
       await fetchMetrics();
-      
+
       return data;
     } catch (err) {
       console.error('Error updating call activity:', err);

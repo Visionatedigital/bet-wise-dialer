@@ -46,7 +46,7 @@ serve(async (req) => {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
         const { data: callsToVerify, error: fetchError } = await fetch(
-            `${supabaseUrl}/rest/v1/telemarketing_calls?disposition=eq.interested&promised_deposit_amount=not.is.null&deposit_verified_at=is.null&call_date=gte.${sevenDaysAgo.toISOString()}&select=id,player_id,agent_id,call_date,promised_deposit_amount`,
+            `${supabaseUrl}/rest/v1/telemarketing_calls?disposition=eq.interested&promised_deposit_amount=not.is.null&deposit_verified_at=is.null&call_date=gte.${sevenDaysAgo.toISOString()}&select=id,agent_id,call_date,promised_deposit_amount,telemarketing_leads(player_id)`,
             {
                 headers: {
                     apiKey: supabaseServiceKey,
@@ -60,7 +60,12 @@ serve(async (req) => {
             throw new Error(`Failed to fetch calls: ${JSON.stringify(fetchError)}`);
         }
 
-        const calls = callsToVerify || [];
+        // Map the nested lead data to flat structure
+        const calls = (callsToVerify || []).map((c: any) => ({
+            ...c,
+            player_id: c.telemarketing_leads?.player_id
+        })).filter((c: any) => c.player_id); // Ensure we have a player_id
+
         console.log(`Found ${calls.length} calls to verify`);
 
         if (calls.length === 0) {
@@ -91,16 +96,39 @@ serve(async (req) => {
                     }
                 );
 
+                // Fetch activity summary (betting patterns)
+                const activityResponse = await fetch(
+                    `${bangbetApiBase}/api/players/${call.player_id}/activity-summary?since=${call.call_date}`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${bangbetApiKey}`,
+                            "Content-Type": "application/json",
+                        },
+                    }
+                );
+
                 if (!depositResponse.ok) {
                     console.error(`Failed to fetch deposits for player ${call.player_id}`);
                     continue;
                 }
 
                 const depositData = await depositResponse.json();
-                const deposits = depositData.data?.deposits || [];
                 const totalDeposited = depositData.data?.total_deposited || 0;
 
-                // Update the call record with actual deposit amount
+                let wagered = 0;
+                let betsCount = 0;
+                let products: string[] = [];
+
+                if (activityResponse.ok) {
+                    const activityData = await activityResponse.json();
+                    if (activityData.success && activityData.data) {
+                        wagered = activityData.data.total_wagered_since || 0;
+                        betsCount = activityData.data.total_bets_since || 0;
+                        products = activityData.data.products_used || [];
+                    }
+                }
+
+                // Update the call record with actual deposit amount and betting patterns
                 const updateResponse = await fetch(
                     `${supabaseUrl}/rest/v1/telemarketing_calls?id=eq.${call.id}`,
                     {
@@ -113,6 +141,10 @@ serve(async (req) => {
                         body: JSON.stringify({
                             actual_deposit_amount: totalDeposited,
                             deposit_verified_at: new Date().toISOString(),
+                            post_call_wagered_amount: wagered,
+                            post_call_bets_count: betsCount,
+                            post_call_products: products,
+                            player_activity_last_checked_at: new Date().toISOString()
                         }),
                     }
                 );
@@ -122,7 +154,7 @@ serve(async (req) => {
                     if (totalDeposited > 0) {
                         totalDepositsFound++;
                     }
-                    console.log(`Verified player ${call.player_id}: Promised ${call.promised_deposit_amount}, Actual ${totalDeposited}`);
+                    console.log(`Verified player ${call.player_id}: Deposited ${totalDeposited}, Wagered ${wagered}`);
                 }
             } catch (error) {
                 console.error(`Error processing call ${call.id}:`, error);

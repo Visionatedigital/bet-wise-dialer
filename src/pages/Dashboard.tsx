@@ -118,8 +118,13 @@ function DashboardContent() {
         .then(() => {
           // Wait a bit for the connection to stabilize before sending initial context
           setTimeout(() => {
-            const initialContext = `New call started with lead ${currentLead?.name || 'Unknown'} in campaign ${currentLead?.campaign || 'No Campaign'
-              }. Monitor the conversation and provide real-time suggestions to help close the deal.`;
+            const initialContext = `New call started with lead ${currentLead?.name || 'Unknown'} in campaign ${currentLead?.campaign || 'No Campaign'}.
+            Key Stats:
+            - Last Deposit: ${currentLead?.lastDepositUgx || 0} UGX
+            - Preferred Product: ${currentLead?.preferredProduct || 'Unknown'}
+            - Segment: ${currentLead?.segment || 'Unknown'}
+            
+            Monitor the conversation and use these stats to provide real-time suggestions to help close the deal.`;
             console.log('[Dashboard] Sending initial context to AI:', initialContext);
             sendAISnippet(initialContext);
           }, 1000);
@@ -221,6 +226,7 @@ function DashboardContent() {
         priority: lead.priority as "high" | "medium" | "low",
         slaMinutes: lead.sla_minutes || 0,
         assignedAt: lead.assigned_at,
+        preferredProduct: lead.preferred_product || undefined
       }));
 
       setQueueLeads(formattedLeads);
