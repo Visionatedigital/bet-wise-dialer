@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CallScriptViewer } from "./CallScriptViewer";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
+import { CenterDialerModal } from "./CenterDialerModal";
 
 interface TelemarketingLead {
     id: string;
@@ -44,14 +45,16 @@ interface CustomerDetails {
 interface CustomerProfileProps {
     leadId: string;
     onClose: () => void;
+    onNextLead?: () => void;
 }
 
-export function CustomerProfile({ leadId, onClose }: CustomerProfileProps) {
+export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfileProps) {
     const [lead, setLead] = useState<TelemarketingLead | null>(null);
     const [customerDetails, setCustomerDetails] = useState<CustomerDetails | null>(null);
     const [loading, setLoading] = useState(true);
     const { toast } = useToast();
     const { startCall, isCallActive } = useSoftphone();
+    const [showDialer, setShowDialer] = useState(false);
 
     useEffect(() => {
         loadLeadAndCustomer();
@@ -67,24 +70,25 @@ export function CustomerProfile({ leadId, onClose }: CustomerProfileProps) {
                 .single();
 
             if (leadError) throw leadError;
+            const row = leadData as any;
 
             // Map leads table to TelemarketingLead interface
             const mappedLead: TelemarketingLead = {
-                id: leadData.id,
-                player_id: leadData.id.substring(0, 8).toUpperCase(),
-                phone: leadData.phone,
-                player_name: leadData.name,
-                vip_level: leadData.segment,
-                preferred_product: leadData.intent,
+                id: row.id,
+                player_id: row.id.substring(0, 8).toUpperCase(),
+                phone: row.phone,
+                player_name: row.name,
+                vip_level: row.segment,
+                preferred_product: row.intent,
                 language_preference: "English", // Default
-                status: leadData.status || "new",
-                priority: leadData.priority,
-                follow_up_at: leadData.next_action_due,
-                last_outcome: leadData.last_activity,
+                status: row.status || "new",
+                priority: row.priority,
+                follow_up_at: row.next_action_due,
+                last_outcome: row.last_activity,
                 notes: null,
                 campaign: {
-                    name: leadData.campaign || "Unknown",
-                    code: leadData.campaign_id || "GEN"
+                    name: row.campaign || "Unknown",
+                    code: row.campaign_id || "GEN"
                 }
             };
 
@@ -109,9 +113,9 @@ export function CustomerProfile({ leadId, onClose }: CustomerProfileProps) {
                         phone: mappedLead.phone,
                         name: mappedLead.player_name || "Unknown",
                         vip_level: mappedLead.vip_level || "bronze",
-                        current_balance: leadData.last_deposit_ugx || 0,
-                        total_deposits: (leadData.last_deposit_ugx || 0) * 5, // Mock estimate
-                        lifetime_value: (leadData.last_deposit_ugx || 0) * 10,
+                        current_balance: (leadData as any).last_deposit_ugx || 0,
+                        total_deposits: ((leadData as any).last_deposit_ugx || 0) * 5, // Mock estimate
+                        lifetime_value: ((leadData as any).last_deposit_ugx || 0) * 10,
                         days_inactive: 5,
                         preferred_product: mappedLead.preferred_product || "Sports",
                         last_login: new Date().toISOString()
@@ -125,9 +129,9 @@ export function CustomerProfile({ leadId, onClose }: CustomerProfileProps) {
                     phone: mappedLead.phone,
                     name: mappedLead.player_name || "Unknown",
                     vip_level: mappedLead.vip_level || "bronze",
-                    current_balance: leadData.last_deposit_ugx || 0,
-                    total_deposits: (leadData.last_deposit_ugx || 0) * 5,
-                    lifetime_value: (leadData.last_deposit_ugx || 0) * 10,
+                    current_balance: (leadData as any).last_deposit_ugx || 0,
+                    total_deposits: ((leadData as any).last_deposit_ugx || 0) * 5,
+                    lifetime_value: ((leadData as any).last_deposit_ugx || 0) * 10,
                     days_inactive: 5,
                     preferred_product: mappedLead.preferred_product || "Sports",
                     last_login: new Date().toISOString()
@@ -148,16 +152,7 @@ export function CustomerProfile({ leadId, onClose }: CustomerProfileProps) {
 
     const handleCall = () => {
         if (!lead) return;
-
-        startCall({
-            id: lead.id,
-            name: lead.player_name || "Unknown",
-            phone: lead.phone,
-            campaign: lead.campaign.name || "Unknown"
-        });
-
-        // We can close the profile dialog if desired, or keep it open.
-        onClose();
+        setShowDialer(true);
     };
 
     if (loading) {
@@ -193,7 +188,7 @@ export function CustomerProfile({ leadId, onClose }: CustomerProfileProps) {
             <div className="flex gap-2">
                 <Button
                     onClick={handleCall}
-                    className="flex-1"
+                    className="flex-1 bg-[#FFDE00] hover:bg-[#FFDE00]/90 text-black font-bold"
                 >
                     <Phone className="mr-2 h-4 w-4" />
                     Call Now
@@ -294,6 +289,24 @@ export function CustomerProfile({ leadId, onClose }: CustomerProfileProps) {
             </Tabs>
 
 
+            {/* Center Dialer Modal */}
+            <CenterDialerModal
+                isOpen={showDialer}
+                onClose={() => setShowDialer(false)}
+                leadName={lead.player_name || "Unknown"}
+                phoneNumber={lead.phone}
+                leadId={lead.player_id}
+                leadDbId={lead.id}
+                onFeedbackSuccess={() => {
+                    setShowDialer(false);
+                    if (onNextLead) {
+                        // Small delay for UX transition
+                        setTimeout(() => onNextLead(), 300);
+                    } else {
+                        onClose();
+                    }
+                }}
+            />
         </div >
     );
 }
