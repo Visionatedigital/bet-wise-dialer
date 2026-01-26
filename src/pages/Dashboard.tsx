@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { QueueCard } from "@/components/dashboard/QueueCard";
 import { AfterCallSummary } from "@/components/dashboard/AfterCallSummary";
 import { AgentKPIs } from "@/components/dashboard/AgentKPIs";
 import { CallHistoryModal } from "@/components/dashboard/CallHistoryModal";
@@ -10,52 +9,40 @@ import { useRealtimeAI } from "@/hooks/useRealtimeAI";
 import { type Lead } from "@/types/lead";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Lightbulb, MessageSquare, FileText, CheckSquare, Radio, History } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Lightbulb, MessageSquare, FileText, History, LayoutDashboard, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Softphone } from "@/components/dashboard/Softphone";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
-import { NotificationDropdown } from "@/components/layout/NotificationDropdown";
 import { toast } from "sonner";
-import { getCategoryFromSegment, getSequenceForCategory } from "@/data/aiScriptsMock";
-import type { CallSentiment } from "@/utils/RealtimeAI";
 import { safeDisplayName } from "@/lib/formatters";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
+import { LeadsKanban } from "@/components/dashboard/LeadsKanban";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { CustomerProfile } from "@/components/telemarketing/CustomerProfile";
 
 function DashboardContent() {
   const { user } = useAuth();
   const { updateStatus } = useAgentStatus();
-  const { showSoftphone, setShowSoftphone } = useSoftphone();
+  const { showSoftphone, setShowSoftphone, startCall } = useSoftphone();
   const [currentLead, setCurrentLead] = useState<Lead | null>(null);
-  const [currentLeadIndex, setCurrentLeadIndex] = useState(0);
-  const [queueLeads, setQueueLeads] = useState<Lead[]>([]);
+  const [allLeads, setAllLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [showACS, setShowACS] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [callNotes, setCallNotes] = useState("");
-  const [complianceChecked, setComplianceChecked] = useState({
-    introduction: false,
-    dataProtection: false,
-    responsibleGaming: false,
-    recordingConsent: false
-  });
-  const hasRestoredIndex = useRef(false);
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [isCallActive, setIsCallActive] = useState(false);
   const [callTranscript, setCallTranscript] = useState<string>('');
-
-  const suggestionTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const sentimentTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [selectedLeadForProfile, setSelectedLeadForProfile] = useState<string | null>(null);
+  const autoSaveTimerRef = useRef<any>(null);
 
-  // Real-time AI coach (OpenAI Realtime)
+  // Real-time AI coach
   const {
     isConnected: isAIConnected,
     isConnecting: isAIConnecting,
@@ -67,20 +54,15 @@ function DashboardContent() {
     sendContext: sendAISnippet,
   } = useRealtimeAI();
 
-  // Initialize AudioContext and set agent status to online
+  // Initialize AudioContext and set agent status
   useEffect(() => {
     const ctx = new AudioContext({ sampleRate: 24000 });
     setAudioContext(ctx);
-
-    // Set agent status to online when dashboard loads
     updateStatus('online');
-    console.log('[Dashboard] Agent status set to online');
 
     return () => {
       ctx.close();
-      // Set agent status to offline when dashboard unmounts
       updateStatus('offline');
-      console.log('[Dashboard] Agent status set to offline');
     };
   }, [updateStatus]);
 
@@ -91,614 +73,215 @@ function DashboardContent() {
   useEffect(() => {
     const loadCampaignScript = async () => {
       if (!currentLead?.segment) return;
+      try {
+        const { data, error } = await supabase
+          .from('campaigns')
+          .select('ai_script, suggestions')
+          .eq('target_segment' as any, currentLead.segment as any)
+          .eq('status' as any, 'active' as any)
+          .maybeSingle();
 
-      const { data, error } = await supabase
-        .from('campaigns')
-        .select('ai_script, suggestions')
-        .eq('target_segment', currentLead.segment)
-        .eq('status', 'active')
-        .single();
+        if (error) throw error;
 
-      if (data) {
-        setCampaignScript(data.ai_script);
-        const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
-        setCampaignSuggestions(suggestions);
-        console.log('[Dashboard] Loaded campaign script for segment:', currentLead.segment);
+        if (data) {
+          const scriptData = data as any;
+          setCampaignScript(scriptData.ai_script);
+          setCampaignSuggestions(Array.isArray(scriptData.suggestions) ? scriptData.suggestions : []);
+        } else {
+          setCampaignScript(null);
+          setCampaignSuggestions([]);
+        }
+      } catch (err) {
+        console.error('Error loading script:', err);
       }
     };
-
     loadCampaignScript();
   }, [currentLead?.segment]);
 
-  // Connect / disconnect AI coach based on call lifecycle (driven by Softphone)
+  // AI Coach connection logic
   useEffect(() => {
     if (isCallActive) {
-      console.log('[Dashboard] Call active, connecting AI coach...');
-      connectAI()
-        .then(() => {
-          // Wait a bit for the connection to stabilize before sending initial context
-          setTimeout(() => {
-            const initialContext = `New call started with lead ${currentLead?.name || 'Unknown'} in campaign ${currentLead?.campaign || 'No Campaign'
-              }. Monitor the conversation and provide real-time suggestions to help close the deal.`;
-            console.log('[Dashboard] Sending initial context to AI:', initialContext);
-            sendAISnippet(initialContext);
-          }, 1000);
-        })
-        .catch((err) => {
-          console.error('[Dashboard] Failed to connect AI coach:', err);
-          toast.error('Failed to connect AI coach. Suggestions may not be available.');
-        });
+      connectAI().then(() => {
+        setTimeout(() => {
+          const initialContext = `New call started with lead ${currentLead?.name || 'Unknown'}. Campaign: ${currentLead?.campaign || 'Default'}`;
+          sendAISnippet(initialContext);
+        }, 1000);
+      }).catch(err => {
+        console.error('AI coach failed:', err);
+        toast.error('AI suggestions unavailable');
+      });
     } else {
-      console.log('[Dashboard] Call ended, disconnecting AI coach...');
       clearSuggestions();
       disconnectAI();
     }
-  }, [isCallActive, currentLead?.name, currentLead?.campaign, connectAI, disconnectAI, clearSuggestions, sendAISnippet]);
-
-  useEffect(() => {
-    if (user) {
-      fetchLeads();
-    }
-  }, [user]);
-
-  // Auto-save notes every 30 seconds
-  useEffect(() => {
-    if (callNotes && currentCallId) {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-
-      autoSaveTimerRef.current = setTimeout(async () => {
-        await saveCallNotes();
-      }, 30000); // 30 seconds
-
-      return () => {
-        if (autoSaveTimerRef.current) {
-          clearTimeout(autoSaveTimerRef.current);
-        }
-      };
-    }
-  }, [callNotes, currentCallId]);
-
-  // Persist lead index whenever it changes
-  useEffect(() => {
-    if (!user?.id) return;
-    if (!hasRestoredIndex.current) return;
-    console.log('[Leads] Saving currentLeadIndex to localStorage:', currentLeadIndex);
-    localStorage.setItem(`lead_index_${user.id}`, currentLeadIndex.toString());
-  }, [currentLeadIndex, user?.id]);
-
-  // Robust restoration after leads load
-  useEffect(() => {
-    if (!user?.id) return;
-    if (hasRestoredIndex.current) return;
-    if (queueLeads.length === 0) return;
-    const savedIndex = localStorage.getItem(`lead_index_${user.id}`);
-    const restoredIndex = savedIndex ? parseInt(savedIndex) : 0;
-    const validIndex = Math.min(Math.max(0, restoredIndex), queueLeads.length - 1);
-    console.log('[Leads] Restoring index after leads load:', { savedIndex, restoredIndex, validIndex, total: queueLeads.length });
-    setCurrentLeadIndex(validIndex);
-    setCurrentLead(queueLeads[validIndex]);
-    hasRestoredIndex.current = true;
-    if (savedIndex && restoredIndex === validIndex && restoredIndex > 0) {
-      toast.success(`Restored position: Lead ${validIndex + 1} of ${queueLeads.length}`);
-    }
-  }, [queueLeads, user?.id]);
+  }, [isCallActive, currentLead?.name, connectAI, disconnectAI, clearSuggestions, sendAISnippet]);
 
   const fetchLeads = async () => {
     try {
       setLoading(true);
+      if (!user?.id) return;
 
-      console.log('[Dashboard] Fetching leads for agent:', user?.id);
+      // Fetch all leads assigned to this agent
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('user_id', user.id as any)
+        .order('updated_at', { ascending: false });
 
-      // Use optimized database function that filters uncalled leads on the server side
-      const { data: uncalledLeads, error } = await supabase
-        .rpc('get_agent_uncalled_leads', { agent_id: user?.id as string });
+      if (error) throw error;
 
-      if (error) {
-        console.error('[Dashboard] RPC error:', error);
-        throw error;
-      }
-
-      console.log('[Dashboard] Fetched uncalled leads:', uncalledLeads?.length || 0);
-
-      const formattedLeads: Lead[] = (uncalledLeads || []).map(lead => ({
+      const formattedLeads: Lead[] = (data || []).map(lead => ({
         id: lead.id,
         name: safeDisplayName(lead.name),
         phone: lead.phone,
-        segment: lead.segment as "dormant" | "semi-active" | "vip",
+        segment: lead.segment as any,
         lastActivity: lead.last_activity || "Never",
         lastDepositUgx: Number(lead.last_deposit_ugx) || 0,
-        lastBetDate: lead.last_bet_date || undefined,
-        intent: lead.intent || undefined,
+        lastBetDate: lead.last_bet_date,
+        intent: lead.intent,
         score: lead.score || 0,
         tags: lead.tags || [],
         ownerUserId: lead.user_id,
-        nextAction: lead.next_action || undefined,
-        nextActionDue: lead.next_action_due || undefined,
+        nextActionDue: lead.next_action_due,
         campaign: lead.campaign || "No Campaign",
-        campaignId: lead.campaign_id || undefined,
-        priority: lead.priority as "high" | "medium" | "low",
-        slaMinutes: lead.sla_minutes || 0,
-        assignedAt: lead.assigned_at,
+        priority: lead.priority as any,
+        status: lead.status || 'unassigned',
+        trait: lead.trait || null
       }));
 
-      setQueueLeads(formattedLeads);
-
-      // Restore saved lead index from localStorage
-      if (formattedLeads.length > 0 && !currentLead && user?.id) {
-        const savedIndex = localStorage.getItem(`lead_index_${user.id}`);
-        const restoredIndex = savedIndex ? parseInt(savedIndex) : 0;
-
-        // Ensure the index is valid
-        const validIndex = Math.min(Math.max(0, restoredIndex), formattedLeads.length - 1);
-
-        console.log('[Leads] Restoring index inside fetchLeads:', { savedIndex, restoredIndex, validIndex, total: formattedLeads.length });
-        setCurrentLeadIndex(validIndex);
-        setCurrentLead(formattedLeads[validIndex]);
-        hasRestoredIndex.current = true;
-
-        if (savedIndex && restoredIndex === validIndex && restoredIndex > 0) {
-          toast.success(`Restored position: Lead ${validIndex + 1} of ${formattedLeads.length}`);
-        }
-      }
+      setAllLeads(formattedLeads);
     } catch (error: any) {
-      console.error('[Dashboard] Error fetching leads:', error);
-      console.error('[Dashboard] Error details:', {
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code
-      });
-      toast.error(`Failed to load leads: ${error?.message || 'Unknown error'}`);
+      console.error('Error fetching leads:', error);
+      toast.error(`Failed to load leads: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleNextLead = () => {
-    if (currentLeadIndex < queueLeads.length - 1) {
-      const nextIndex = currentLeadIndex + 1;
-      setCurrentLeadIndex(nextIndex);
-      setCurrentLead(queueLeads[nextIndex]);
-      toast.success(`Moved to next lead: ${safeDisplayName(queueLeads[nextIndex].name)}`);
-    } else {
-      toast.info("You're at the last lead");
-    }
-  };
+  useEffect(() => {
+    if (user) fetchLeads();
+  }, [user]);
 
-  const handlePreviousLead = () => {
-    if (currentLeadIndex > 0) {
-      const prevIndex = currentLeadIndex - 1;
-      setCurrentLeadIndex(prevIndex);
-      setCurrentLead(queueLeads[prevIndex]);
-      toast.success(`Moved to previous lead: ${queueLeads[prevIndex].name}`);
-    } else {
-      toast.info("You're at the first lead");
+  // Auto-save notes every 30 seconds
+  useEffect(() => {
+    if (callNotes && currentCallId) {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(async () => {
+        await saveCallNotes();
+      }, 30000);
+      return () => {
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      };
     }
-  };
-
-  const nextLead = queueLeads[currentLeadIndex + 1] || null;
+  }, [callNotes, currentCallId]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input/textarea
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      switch (e.key.toLowerCase()) {
-        case 'n':
-          e.preventDefault();
-          handleNextLead();
-          break;
-        case 's':
-          e.preventDefault();
-          saveCallNotes();
-          break;
-        case 'c':
-          e.preventDefault();
-          if (nextLead) {
-            handleCallLead(nextLead);
-          }
-          break;
-        // R for record will be handled by Softphone component
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveCallNotes();
       }
     };
-
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [currentLeadIndex, queueLeads, nextLead, currentCallId, callNotes]);
+  }, [currentCallId, callNotes]);
 
-  const saveCallNotes = async () => {
-    if (!currentCallId || !callNotes.trim()) return;
-
+  const handleStatusChange = async (leadId: string, newStatus: string) => {
     try {
       const { error } = await supabase
-        .from('call_activities')
-        .update({ notes: callNotes })
-        .eq('id', currentCallId);
+        .from('leads')
+        .update({ status: newStatus === 'unassigned' ? null : (newStatus as any) } as any)
+        .eq('id', leadId as any);
 
       if (error) throw error;
 
-      toast.success('Notes saved successfully');
-      console.log('[Dashboard] Notes saved');
+      setAllLeads(prev => prev.map(l =>
+        l.id === leadId ? { ...l, status: newStatus } : l
+      ));
+
+      toast.success(`Lead moved to ${newStatus.replace('_', ' ')}`);
     } catch (error) {
-      console.error('[Dashboard] Error saving notes:', error);
-      toast.error('Failed to save notes');
+      console.error('Error updating status:', error);
+      toast.error('Failed to update status');
     }
   };
 
+  const handleSelectLead = (lead: Lead) => {
+    setSelectedLeadForProfile(lead.id);
+  };
+
   const handleCallLead = async (lead: Lead) => {
-    const index = queueLeads.findIndex(l => l.id === lead.id);
-    if (index !== -1) {
-      setCurrentLeadIndex(index);
-    }
     setCurrentLead(lead);
-    setCallDuration(0);
-    setCallNotes("");
-
-    // Update agent status to on-call
+    setShowSoftphone(true);
     await updateStatus('on-call');
-
-    // Start Global Softphone Call
     startCall({
       id: lead.id,
       name: lead.name,
       phone: lead.phone,
-      campaign: lead.campaign || "Unknown"
-    });
-
-    // Reset compliance checklist
-    setComplianceChecked({
-      introduction: false,
-      dataProtection: false,
-      responsibleGaming: false,
-      recordingConsent: false
+      campaign: lead.campaign || "No Campaign"
     });
   };
 
-  const handleCallEnd = async () => {
-    // Save final notes and transcript before showing summary
-    if (currentCallId) {
-      if (callNotes.trim() || callTranscript.trim()) {
-        await saveCallNotes();
-      }
-
-      // Update call end time, duration, status, and transcript
-      try {
-        // Fetch the call start time to calculate duration
-        const { data: callData, error: fetchError } = await supabase
-          .from('call_activities')
-          .select('start_time')
-          .eq('id', currentCallId)
-          .single();
-
-        if (fetchError) throw fetchError;
-
-        const endTime = new Date();
-        const startTime = new Date(callData.start_time);
-        const durationSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
-
-        const updateData: any = {
-          end_time: endTime.toISOString(),
-          duration_seconds: durationSeconds,
-          status: 'completed'
-        };
-
-        // Save transcript if available
-        if (callTranscript.trim()) {
-          updateData.transcript = callTranscript.trim();
-          console.log('[Dashboard] Saving transcript, length:', callTranscript.length);
-        }
-
-        const { error } = await supabase
-          .from('call_activities')
-          .update(updateData)
-          .eq('id', currentCallId);
-
-        if (error) throw error;
-
-        setCallDuration(durationSeconds);
-        const savedItems = [];
-        if (callNotes.trim()) savedItems.push('notes');
-        if (callTranscript.trim()) savedItems.push('transcript');
-        toast.success(`Call ${savedItems.join(' and ')} saved`);
-        console.log('[Dashboard] Call ended, duration:', durationSeconds, 'seconds');
-      } catch (error) {
-        console.error('[Dashboard] Error ending call:', error);
-        toast.error('Failed to save call data');
-      }
+  const saveCallNotes = async () => {
+    if (!currentCallId || !callNotes.trim()) return;
+    try {
+      const { error } = await supabase
+        .from('call_activities')
+        .update({ notes: callNotes } as any)
+        .eq('id' as any, currentCallId as any);
+      if (error) throw error;
+      toast.success('Notes saved');
+    } catch (error) {
+      toast.error('Failed to save notes');
     }
-
-    // Set agent status back to online after call ends
-    await updateStatus('online');
-
-    // Reset transcript
-    setCallTranscript('');
-
-    setShowACS(true);
-    setCurrentCallId(null);
   };
+
+  const showSidebar = !!currentLead || showSoftphone;
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight font-serif">Agent Dashboard</h1>
-          <p className="text-muted-foreground">
-            Your workspace for managing calls and leads ??? {new Date().toLocaleDateString('en-UG', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              timeZone: 'Africa/Kampala'
-            })}
-          </p>
-        </div>
-        {!loading && queueLeads.length > 0 && (
-          <div className="text-right">
-            <div className="text-2xl font-bold">{queueLeads.length}</div>
-            <p className="text-xs text-muted-foreground">Uncalled Leads in Queue</p>
+    <div className="flex flex-col h-[calc(100vh-80px)] w-full space-y-6 overflow-hidden">
+      {/* KPIs at the top */}
+      <div className="shrink-0 w-full mb-2">
+        <AgentKPIs />
+      </div>
+
+      <div className="flex-1 flex gap-6 min-w-0 min-h-0 w-full overflow-hidden">
+        {/* Main Content - Kanban Board */}
+        <div className="flex-1 min-w-0 flex flex-col bg-card/30 rounded-2xl border border-border/40 p-4 min-h-0 transition-all duration-300 w-full">
+          <div className="flex items-center justify-between mb-4 shrink-0">
+            <div className="flex items-center gap-2">
+              <LayoutDashboard className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold uppercase tracking-tight">Leads Pipeline</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold">
+                {allLeads.length} Total Leads
+              </Badge>
+              <Button variant="ghost" size="sm" onClick={fetchLeads} className="h-8 hover:bg-primary/5">
+                Refresh
+              </Button>
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* KPIs */}
-      <AgentKPIs />
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left Column - Softphone & Queue */}
-        <div className="lg:col-span-1 space-y-6">
-          {/* Persistent Softphone */}
-          <Softphone
-            currentLead={currentLead || undefined}
-            onNextLead={handleNextLead}
-            hasNextLead={currentLeadIndex < queueLeads.length - 1}
-          />
-
-          <QueueCard
-            nextLead={nextLead}
-            queueLength={queueLeads.length}
-            onCallLead={handleCallLead}
-          />
-
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-muted/50 rounded p-2 text-center">
-                  <kbd className="bg-background px-1 rounded">N</kbd> Next Lead
-                </div>
-                <div className="bg-muted/50 rounded p-2 text-center">
-                  <kbd className="bg-background px-1 rounded">S</kbd> Save Notes
-                </div>
-                <div className="bg-muted/50 rounded p-2 text-center">
-                  <kbd className="bg-background px-1 rounded">R</kbd> Record
-                </div>
-                <div className="bg-muted/50 rounded p-2 text-center">
-                  <kbd className="bg-background px-1 rounded">C</kbd> Call
-                </div>
+          <div className="flex-1 min-h-0 min-w-0 w-full">
+            {loading ? (
+              <div className="h-full flex items-center justify-center text-muted-foreground animate-pulse">
+                Loading pipeline...
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right Column - Script & AI Sidekick */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Script & Compliance */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Live Script & Compliance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="pitch" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="pitch">Pitch</TabsTrigger>
-                  <TabsTrigger value="faq">FAQ</TabsTrigger>
-                  <TabsTrigger value="objections">Objections</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="pitch" className="space-y-4">
-                  <LivePitchScript
-                    leadName={currentLead?.name || ''}
-                    campaign={currentLead?.campaign || 'Default'}
-                    leadIntent={currentLead?.intent}
-                    isCallActive={isCallActive}
-                    audioContext={audioContext || undefined}
-                    onTranscriptForAI={sendAISnippet}
-                    onTranscriptChange={setCallTranscript}
-                  />
-                </TabsContent>
-
-                <TabsContent value="faq" className="space-y-4">
-                  <div className="space-y-3 text-sm">
-                    <div className="bg-accent/50 rounded-lg p-3">
-                      <strong>Q: How do I make a deposit?</strong><br />
-                      A: You can deposit using Mobile Money (MTN, Airtel), bank transfer, or visit any of our agent locations.
-                    </div>
-                    <div className="bg-accent/50 rounded-lg p-3">
-                      <strong>Q: What's the minimum deposit?</strong><br />
-                      A: The minimum deposit is UGX 10,000 for new customers.
-                    </div>
-                    <div className="bg-accent/50 rounded-lg p-3">
-                      <strong>Q: How long do withdrawals take?</strong><br />
-                      A: Mobile Money withdrawals are instant. Bank transfers take 1-2 business days.
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="objections" className="space-y-4">
-                  <div className="space-y-3 text-sm">
-                    <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-                      <strong>Objection:</strong> "I don't have time to bet"<br />
-                      <strong>Response:</strong> "I understand you're busy! That's why our mobile app makes it quick and easy - you can place bets in under 30 seconds."
-                    </div>
-                    <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-                      <strong>Objection:</strong> "I'm not interested in bonuses"<br />
-                      <strong>Response:</strong> "No problem at all! Even without bonuses, we offer the best odds in Uganda and instant payouts."
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* AI Sidekick */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Lightbulb className="h-5 w-5 text-warning" />
-                AI Coach
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="campaign" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="campaign">Campaign Script</TabsTrigger>
-                  <TabsTrigger value="realtime">
-                    Real-time AI
-                    {suggestions.length > 0 && (
-                      <Badge variant="secondary" className="ml-2">
-                        {suggestions.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                </TabsList>
-
-                {/* Campaign Script Tab */}
-                <TabsContent value="campaign" className="space-y-4 mt-4">
-                  {campaignScript ? (
-                    <>
-                      <div className="bg-accent/10 border border-accent/20 rounded-lg p-3 mb-4">
-                        <h4 className="font-medium mb-2">Campaign Objective</h4>
-                        <p className="text-sm whitespace-pre-line">{campaignScript}</p>
-                      </div>
-
-                      {campaignSuggestions.length > 0 && (
-                        <div className="space-y-3">
-                          <h4 className="font-medium text-sm">Key Talking Points</h4>
-                          {campaignSuggestions.map((suggestion: any, index: number) => {
-                            const bgColor =
-                              suggestion.type === 'action' ? 'bg-primary/10 border-primary/20' :
-                                suggestion.type === 'compliance' ? 'bg-destructive/10 border-destructive/20' :
-                                  suggestion.type === 'info' ? 'bg-blue-50 border-blue-200' :
-                                    'bg-accent/10 border-accent/20';
-
-                            return (
-                              <div key={index} className={`${bgColor} border rounded-lg p-3 text-sm`}>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Badge variant="outline" className="text-xs">
-                                    {suggestion.type}
-                                  </Badge>
-                                  <span className="text-xs text-muted-foreground">
-                                    Trigger: {suggestion.trigger}
-                                  </span>
-                                </div>
-                                <p className="font-medium mt-1">{suggestion.message}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p className="mb-2">No campaign script available</p>
-                      <p className="text-sm">Select a lead with a campaign to see scripts</p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* Real-time AI Tab */}
-                <TabsContent value="realtime" className="space-y-4 mt-4">
-                  {/* Connection Status */}
-                  {isCallActive && (
-                    <div className="flex items-center gap-2 text-sm mb-2">
-                      {isAIConnecting && (
-                        <Badge variant="outline" className="animate-pulse">
-                          Connecting AI...
-                        </Badge>
-                      )}
-                      {isAIConnected && (
-                        <Badge variant="default" className="bg-green-500">
-                          AI Connected
-                        </Badge>
-                      )}
-                      {!isAIConnected && !isAIConnecting && isCallActive && (
-                        <Badge variant="destructive">
-                          AI Disconnected
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-                  {/* Sentiment Orb with Suggestions */}
-                  <CallSentimentOrb
-                    sentiment={callSentiment}
-                    isActive={isCallActive}
-                    suggestions={suggestions}
-                  />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* Call Notes */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  Call Notes
-                </CardTitle>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={saveCallNotes}
-                    disabled={!currentCallId || !callNotes.trim()}
-                  >
-                    Save Now
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowCallHistory(true)}
-                  >
-                    <History className="h-4 w-4 mr-2" />
-                    History
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                placeholder="Type your call notes here... (Auto-saves every 30s)"
-                value={callNotes}
-                onChange={(e) => setCallNotes(e.target.value)}
-                rows={4}
-                className="resize-none"
+            ) : (
+              <LeadsKanban
+                leads={allLeads}
+                onStatusChange={handleStatusChange}
+                onSelectLead={handleSelectLead}
+                selectedLeadId={currentLead?.id}
               />
-              <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
-                <span>
-                  {currentCallId ? 'Auto-saves every 30 seconds' : 'Start a call to save notes'}
-                </span>
-                <span>{callNotes.length} characters</span>
-              </div>
-            </CardContent>
-          </Card>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* After Call Summary Modal */}
       <AfterCallSummary
         open={showACS}
         onOpenChange={setShowACS}
@@ -706,11 +289,27 @@ function DashboardContent() {
         callDuration={callDuration}
       />
 
-      {/* Call History Modal */}
       <CallHistoryModal
         open={showCallHistory}
         onOpenChange={setShowCallHistory}
       />
+
+      {/* Customer Profile Modal */}
+      <Dialog open={!!selectedLeadForProfile} onOpenChange={() => setSelectedLeadForProfile(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 border-none shadow-2xl">
+          <DialogTitle className="sr-only">Customer Profile</DialogTitle>
+          <DialogDescription className="sr-only">
+            Detailed view of the customer profile and betting habits
+          </DialogDescription>
+          {selectedLeadForProfile && (
+            <CustomerProfile
+              leadId={selectedLeadForProfile}
+              onClose={() => setSelectedLeadForProfile(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
@@ -722,4 +321,3 @@ export default function Dashboard() {
     </DashboardLayout>
   );
 }
-

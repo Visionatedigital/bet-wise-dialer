@@ -191,12 +191,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen w-full bg-dashboard-bg">
+      <div className="flex min-h-screen w-full bg-dashboard-bg overflow-x-hidden">
         <AppSidebar />
 
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 min-w-0 flex flex-col">
           {/* Top Header */}
-          <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <header className="sticky top-0 z-30 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="flex h-14 items-center gap-4 px-4">
               <SidebarTrigger className="md:hidden" />
 
@@ -300,9 +300,32 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 p-6">
+          <main className="flex-1 min-h-0 min-w-0 p-6">
             {children}
           </main>
+
+          {/* Global Softphone Container */}
+          {showSoftphone && (
+            <div className="fixed bottom-6 right-6 z-[50] w-[380px] bg-background shadow-[0_20px_50px_rgba(0,0,0,0.2)] rounded-3xl border border-border overflow-hidden animate-in slide-in-from-bottom-5 duration-300">
+              {/* Close Button Header */}
+              <div className="flex justify-end p-2 bg-muted/20 border-b border-border/50">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full hover:bg-destructive hover:text-white transition-colors"
+                  onClick={() => setShowSoftphone(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="p-1">
+                <Softphone
+                  currentLead={activeLead || undefined}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Compliance Footer */}
           <footer className="border-t bg-muted/30 px-6 py-3">
@@ -316,28 +339,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </footer>
         </div>
       </div>
-
-      {
-        showSoftphone && !isEmbeddedPage && (
-          <div className="fixed bottom-4 right-4 z-[50] w-[350px] shadow-2xl rounded-xl border-border animate-in slide-in-from-bottom-5 fade-in duration-300">
-            {/* Close button overlay */}
-            <div className="absolute top-2 right-2 z-[60]">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 rounded-full bg-background/80 backdrop-blur hover:bg-destructive hover:text-destructive-foreground shadow-sm"
-                onClick={() => setShowSoftphone(false)}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-
-            <Softphone
-              currentLead={activeLead || undefined}
-            />
-          </div>
-        )
-      }
 
     </SidebarProvider >
   );

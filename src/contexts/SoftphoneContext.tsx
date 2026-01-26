@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useRef } from "react";
 
 export interface SoftphoneLead {
     id?: string;
@@ -21,6 +21,19 @@ interface SoftphoneContextType {
     autoDialTrigger: number;
     // Events for other components to listen to
     registerHandlers: (handlers: { onCallStart: () => void; onCallEnd: () => void }) => void;
+    // Call Controls (exposed by Softphone component)
+    hangup: () => void;
+    toggleMute: () => void;
+    toggleHold: () => void;
+    sendDtmf: (digit: string) => void;
+    connectionQuality: 'good' | 'fair' | 'poor';
+    registerControls: (controls: {
+        hangup: () => void;
+        toggleMute: () => void;
+        toggleHold: () => void;
+        sendDtmf: (digit: string) => void;
+    }) => void;
+    setConnectionQuality: (quality: 'good' | 'fair' | 'poor') => void;
 }
 
 const SoftphoneContext = createContext<SoftphoneContextType | undefined>(undefined);
@@ -36,6 +49,19 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
     // Simple event bus for start call
     // The Softphone component will listen to changes in activeLead + triggers
 
+    const [connectionQuality, setConnectionQuality] = useState<'good' | 'fair' | 'poor'>('good');
+    const controlsRef = useRef<{
+        hangup: () => void;
+        toggleMute: () => void;
+        toggleHold: () => void;
+        sendDtmf: (digit: string) => void;
+    }>({
+        hangup: () => console.warn("Hangup not implemented"),
+        toggleMute: () => console.warn("Mute not implemented"),
+        toggleHold: () => console.warn("Hold not implemented"),
+        sendDtmf: () => console.warn("DTMF not implemented"),
+    });
+
     const startCall = (lead: SoftphoneLead) => {
         console.log("[SoftphoneContext] Starting call for:", lead);
         setActiveLead(lead);
@@ -48,6 +74,21 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
     const registerHandlers = (_handlers: any) => {
         // Placeholder if we need reverse communication
     };
+
+    const registerControls = (controls: {
+        hangup: () => void;
+        toggleMute: () => void;
+        toggleHold: () => void;
+        sendDtmf: (digit: string) => void;
+    }) => {
+        controlsRef.current = controls;
+    };
+
+    // Proxy functions to current controls
+    const hangup = () => controlsRef.current.hangup();
+    const toggleMute = () => controlsRef.current.toggleMute();
+    const toggleHold = () => controlsRef.current.toggleHold();
+    const sendDtmf = (digit: string) => controlsRef.current.sendDtmf(digit);
 
     return (
         <SoftphoneContext.Provider
@@ -63,7 +104,14 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
                 minimized,
                 setMinimized,
                 autoDialTrigger,
-                registerHandlers
+                registerHandlers,
+                hangup,
+                toggleMute,
+                toggleHold,
+                sendDtmf,
+                connectionQuality,
+                setConnectionQuality,
+                registerControls
             }}
         >
             {children}
