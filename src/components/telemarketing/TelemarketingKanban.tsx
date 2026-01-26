@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,26 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { MOCK_TELEMARKETING_LEADS } from "@/data/mockTelemarketingLeads";
 import { Softphone } from "@/components/dashboard/Softphone";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
+import {
+    DndContext,
+    closestCorners,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+    DragOverEvent,
+    DragStartEvent,
+    defaultDropAnimationSideEffects,
+    DropAnimation,
+    DragOverlay,
+} from "@dnd-kit/core";
+import {
+    arrayMove,
+    SortableContext,
+    verticalListSortingStrategy,
+    useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface TelemarketingLead {
     id: string;
@@ -27,27 +47,47 @@ interface TelemarketingLead {
         favorite_teams?: string[];
         casino_favorite?: string;
     } | null;
+    trait?: string | null;
 }
 
 
 const KANBAN_COLUMNS = [
-    { id: "unreachable", title: "Unreachable", color: "bg-red-500" },
-    { id: "not_interested", title: "Not Interested", color: "bg-gray-500" }, // Changed color to gray for better contrast
-    { id: "interested", title: "Interested", color: "bg-green-500" },
-    { id: "no_answer", title: "No Answer", color: "bg-yellow-500" }
+    { id: "unassigned", title: "Unassigned", color: "bg-blue-50 text-blue-700 border-blue-100" },
+    { id: "unreachable", title: "Unreachable", color: "bg-red-50 text-red-700 border-red-100" },
+    { id: "not_interested", title: "Not Interested", color: "bg-slate-50 text-slate-600 border-slate-100" },
+    { id: "interested", title: "Interested", color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+    { id: "no_answer", title: "No Answer", color: "bg-amber-50 text-amber-700 border-amber-100" }
 ];
 
 export function TelemarketingKanban() {
     const [leads, setLeads] = useState<TelemarketingLead[]>([]);
     const [selectedLead, setSelectedLead] = useState<string | null>(null);
+    const [activeLeadId, setActiveLeadId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const { showSoftphone } = useSoftphone();
     const { toast } = useToast();
 
+    const mapLead = (lead: any): TelemarketingLead => ({
+        id: lead.id,
+        player_id: lead.id.substring(0, 8).toUpperCase(),
+        phone: lead.phone,
+        player_name: lead.name,
+        vip_level: lead.segment,
+        preferred_product: lead.intent || 'Sports',
+        status: lead.status || '',
+        priority: lead.priority,
+        follow_up_at: lead.next_action_due,
+        notes: null,
+        betting_habits: {
+            favorite_teams: [],
+            casino_favorite: null
+        },
+        trait: lead.trait
+    });
+
     useEffect(() => {
         loadLeads();
 
-        // Subscribe to real-time updates
         const subscription = supabase
             .channel("leads_changes")
             .on(
@@ -57,9 +97,17 @@ export function TelemarketingKanban() {
                     schema: "public",
                     table: "leads"
                 },
-                () => {
-                    console.log("Real-time update received!");
-                    loadLeads();
+                (payload) => {
+                    console.log("Real-time update received!", payload);
+                    if (payload.eventType === 'UPDATE') {
+                        setLeads(prev => prev.map(lead =>
+                            lead.id === payload.new.id ? mapLead(payload.new) : lead
+                        ));
+                    } else if (payload.eventType === 'INSERT') {
+                        setLeads(prev => [mapLead(payload.new), ...prev].slice(0, 200));
+                    } else if (payload.eventType === 'DELETE') {
+                        setLeads(prev => prev.filter(lead => lead.id !== payload.old.id));
+                    }
                 }
             )
             .subscribe();
@@ -75,29 +123,17 @@ export function TelemarketingKanban() {
             const { data, error } = await supabase
                 .from('leads')
                 .select('*')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(200);
 
             if (error) throw error;
 
-            const mappedLeads: TelemarketingLead[] = (data || []).map((lead: any) => ({
-                id: lead.id,
-                player_id: lead.id.substring(0, 8).toUpperCase(), // Generate a short ID
-                phone: lead.phone,
-                player_name: lead.name,
-                vip_level: lead.segment,
-                preferred_product: lead.intent || 'Sports',
-                status: lead.status || '', // Only show if status is set
-                priority: lead.priority, // Don't default to 'medium', allow null for no strength
-                follow_up_at: lead.next_action_due,
-                notes: null, // Notes are in call activities
-                betting_habits: {
-                    favorite_sport: "Football",
-                    favorite_teams: [],
-                    casino_favorite: null
-                }
-            }));
-
-            setLeads(mappedLeads);
+            if (!data || data.length === 0) {
+                console.log("No leads from Supabase, using mock data");
+                setLeads(MOCK_TELEMARKETING_LEADS.map(l => ({ ...l, status: l.status || '' })));
+            } else {
+                setLeads(data.map(mapLead));
+            }
         } catch (error) {
             console.error("Error loading leads:", error);
             toast({
@@ -110,8 +146,124 @@ export function TelemarketingKanban() {
         }
     };
 
-    const getLeadsByStatus = (status: string) => {
-        return leads.filter(lead => lead.status === status);
+    // Remove leadsByStatus function as it's now handled by useMemo grouping logic below
+
+    const groupedLeads = useMemo(() => {
+        const grouped: Record<string, TelemarketingLead[]> = {
+            unassigned: [],
+            unreachable: [],
+            not_interested: [],
+            interested: [],
+            no_answer: []
+        };
+
+        leads.forEach(lead => {
+            let status = lead.status;
+
+            // Map common status variants to our columns
+            if (!status || status === '' || status === 'unassigned' || status === 'pending') {
+                status = 'unassigned';
+            } else if (status === 'called_no_answer') {
+                status = 'no_answer';
+            }
+
+            if (grouped[status]) {
+                grouped[status].push(lead);
+            } else {
+                // Default fallback
+                grouped['unassigned'].push(lead);
+            }
+        });
+        return grouped;
+    }, [leads]);
+
+    const activeLead = useMemo(() =>
+        activeLeadId ? leads.find(l => l.id === activeLeadId) : null
+        , [activeLeadId, leads]);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        })
+    );
+
+    const handleDragStart = (event: DragStartEvent) => {
+        setActiveLeadId(event.active.id as string);
+    };
+
+    const handleDragEnd = async (event: DragEndEvent) => {
+        const { active, over } = event;
+        setActiveLeadId(null);
+        if (!over) return;
+
+        const activeId = active.id as string;
+        const overId = over.id as string;
+
+        // Find the lead being dragged
+        const lead = leads.find(l => l.id === activeId);
+        if (!lead) return;
+
+        // Check if over a column or another card
+        let newStatus = overId;
+        if (!KANBAN_COLUMNS.find(c => c.id === overId)) {
+            // If dropped over a card, find that card's column
+            const overLead = leads.find(l => l.id === overId);
+            if (overLead) {
+                newStatus = overLead.status || 'unassigned';
+            }
+        }
+
+        // If status hasn't changed, don't update
+        const currentStatus = lead.status || 'unassigned';
+        if (newStatus === currentStatus) return;
+
+        console.log(`[Kanban] Moving lead ${activeId} from ${currentStatus} to ${newStatus}`);
+
+        // Optimistically update local state
+        setLeads(prev => prev.map(l =>
+            l.id === activeId ? { ...l, status: newStatus === 'unassigned' ? '' : newStatus } : l
+        ));
+
+        // Update Supabase
+        try {
+            const { error } = await supabase
+                .from('leads')
+                .update({ status: newStatus === 'unassigned' ? null : newStatus } as any)
+                .eq('id', activeId as any);
+
+            if (error) throw error;
+            toast({
+                title: "Status Updated",
+                description: `Lead moved to ${newStatus.replace('_', ' ')}`,
+            });
+        } catch (error) {
+            console.error("Error updating lead status:", error);
+            // Revert on error
+            setLeads(prev => prev.map(l =>
+                l.id === activeId ? { ...l, status: currentStatus === 'unassigned' ? '' : currentStatus } : l
+            ));
+            toast({
+                title: "Error",
+                description: "Failed to update lead status",
+                variant: "destructive"
+            });
+        }
+    };
+
+    const handleNextLead = () => {
+        if (!selectedLead) return;
+        const currentIndex = leads.findIndex(l => l.id === selectedLead);
+        if (currentIndex !== -1 && currentIndex < leads.length - 1) {
+            setSelectedLead(leads[currentIndex + 1].id);
+        } else {
+            toast({
+                title: "Queue Completed",
+                description: "You have reached the end of the current list.",
+            });
+            setSelectedLead(null);
+        }
     };
 
     if (loading) {
@@ -122,19 +274,7 @@ export function TelemarketingKanban() {
         <>
             <div className="space-y-6">
                 {/* Page Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-black tracking-tight font-serif">Kanban Board</h1>
-                        <p className="text-muted-foreground">
-                            Manage your telemarketing leads • {new Date().toLocaleDateString('en-UG', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                timeZone: 'Africa/Kampala'
-                            })}
-                        </p>
-                    </div>
+                <div className="flex items-center justify-end">
                     <Button variant="outline">
                         <Filter className="mr-2 h-4 w-4" />
                         Filter
@@ -143,33 +283,65 @@ export function TelemarketingKanban() {
 
                 <div className="grid grid-cols-12 gap-6 h-[calc(100vh-12rem)]">
                     {/* Kanban Columns - Scrollable */}
-                    <div className={`${showSoftphone ? 'col-span-9' : 'col-span-12'} overflow-x-auto pb-4 transition-all duration-300`}>
-                        <div className="flex gap-4 min-w-max h-full">
-                            {KANBAN_COLUMNS.map(column => (
-                                <div key={column.id} className="w-80 flex flex-col h-full">
-                                    <Card className="mb-2 shrink-0">
-                                        <CardHeader className={`${column.color} text-white py-3`}>
-                                            <CardTitle className="text-sm font-medium">
+                    <div className={`${showSoftphone ? 'col-span-9' : 'col-span-12'} overflow-x-auto pb-4 transition-all duration-300 scrollbar-hide`}>
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCorners}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
+                        >
+                            <div className="flex gap-4 min-w-max h-full">
+                                {KANBAN_COLUMNS.map(column => (
+                                    <div key={column.id} className="w-64 flex flex-col h-full">
+                                        <div className={`mb-4 py-2 px-4 rounded-xl border ${column.color} flex items-center justify-between shrink-0 shadow-sm`}>
+                                            <span className="text-xs font-bold uppercase tracking-wider">
                                                 {column.title}
-                                                <Badge variant="secondary" className="ml-2">
-                                                    {getLeadsByStatus(column.id).length}
-                                                </Badge>
-                                            </CardTitle>
-                                        </CardHeader>
-                                    </Card>
+                                            </span>
+                                            <Badge variant="outline" className="ml-2 bg-white/50 border-none font-bold">
+                                                {groupedLeads[column.id]?.length || 0}
+                                            </Badge>
+                                        </div>
 
-                                    <div className="space-y-2 overflow-y-auto flex-1 pr-2">
-                                        {getLeadsByStatus(column.id).map(lead => (
-                                            <LeadCard
-                                                key={lead.id}
-                                                lead={lead}
-                                                onClick={() => setSelectedLead(lead.id)}
-                                            />
-                                        ))}
+                                        <SortableContext
+                                            id={column.id}
+                                            items={(groupedLeads[column.id] || []).map(l => l.id)}
+                                            strategy={verticalListSortingStrategy}
+                                        >
+                                            <div
+                                                id={column.id}
+                                                className="space-y-2 overflow-y-auto flex-1 pr-1 min-h-[100px] scrollbar-hide"
+                                            >
+                                                {(groupedLeads[column.id] || []).map(lead => (
+                                                    <LeadCard
+                                                        key={lead.id}
+                                                        lead={lead}
+                                                        onClick={() => setSelectedLead(lead.id)}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </SortableContext>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+
+                            <DragOverlay dropAnimation={{
+                                duration: 250,
+                                easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                                sideEffects: defaultDropAnimationSideEffects({
+                                    styles: {
+                                        active: {
+                                            opacity: '0.4',
+                                        },
+                                    },
+                                }),
+                            }}>
+                                {activeLead ? (
+                                    <div className="w-60">
+                                        <LeadCard lead={activeLead} onClick={() => { }} isOverlay />
+                                    </div>
+                                ) : null}
+                            </DragOverlay>
+                        </DndContext>
                     </div>
 
                     {/* Right Sidebar - Sticky Softphone - Conditionally Shown */}
@@ -192,6 +364,7 @@ export function TelemarketingKanban() {
                         <CustomerProfile
                             leadId={selectedLead}
                             onClose={() => setSelectedLead(null)}
+                            onNextLead={handleNextLead}
                         />
                     )}
                 </DialogContent>
@@ -203,9 +376,29 @@ export function TelemarketingKanban() {
 interface LeadCardProps {
     lead: TelemarketingLead;
     onClick: () => void;
+    isOverlay?: boolean;
 }
 
-function LeadCard({ lead, onClick }: LeadCardProps) {
+const LeadCard = memo(({ lead, onClick, isOverlay }: LeadCardProps) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({
+        id: lead.id,
+        disabled: isOverlay
+    });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging && !isOverlay ? 0.3 : 1,
+        zIndex: isDragging ? 50 : 1,
+    };
+
     // Map priority to Lead Strength (Hot/Warm/Cold)
     const getLeadStrength = (priority: string | null) => {
         if (!priority) return null;
@@ -246,15 +439,23 @@ function LeadCard({ lead, onClick }: LeadCardProps) {
 
     return (
         <Card
-            className="cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={onClick}
+            ref={setNodeRef}
+            style={style}
+            {...attributes}
+            {...listeners}
+            className={`cursor-grab active:cursor-grabbing hover:shadow-lg transition-shadow overflow-hidden ${isDragging ? 'shadow-2xl border-primary ring-2 ring-primary/20' : ''}`}
+            onClick={(e) => {
+                // Prevent click when dragging
+                if (isDragging) return;
+                onClick();
+            }}
         >
             <CardContent className="p-4 space-y-2">
                 <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium text-sm font-mono">
-                            {lead.player_id}
+                        <span className="font-bold text-sm tracking-tight">
+                            Customer
                         </span>
                     </div>
                     {strength && lead.status === 'interested' && (
@@ -275,7 +476,22 @@ function LeadCard({ lead, onClick }: LeadCardProps) {
                     </div>
                 )}
 
-                {lead.preferred_product && !personalizationPreview && (
+                {(lead.trait || lead.vip_level) && (
+                    <div className="flex items-center gap-2 mt-2">
+                        {lead.vip_level && (
+                            <Badge variant="secondary" className="text-[10px] uppercase font-bold text-slate-500 bg-slate-100 border-slate-200 px-2 py-0.5">
+                                {lead.vip_level}
+                            </Badge>
+                        )}
+                        {lead.trait && (
+                            <Badge variant="outline" className="text-[10px] font-bold bg-green-50 text-green-700 border-green-200 px-2 py-0.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
+                                {lead.trait}
+                            </Badge>
+                        )}
+                    </div>
+                )}
+
+                {lead.preferred_product && !personalizationPreview && !lead.trait && (
                     <Badge variant="outline" className="text-xs">
                         {lead.preferred_product}
                     </Badge>
@@ -288,6 +504,6 @@ function LeadCard({ lead, onClick }: LeadCardProps) {
                     </div>
                 )}
             </CardContent>
-        </Card>
+        </Card >
     );
-}
+});

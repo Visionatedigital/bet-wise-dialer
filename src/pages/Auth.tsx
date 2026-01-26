@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { z } from "zod";
-import loginBackground from "@/assets/images.jpeg";
+import loginBackground from "@/assets/bangbet-login-bg.png";
 import bangbetLogo from "@/assets/bangbet-logo.png";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -57,22 +57,22 @@ const Auth = () => {
           userId: session?.user?.id,
           userEmail: session?.user?.email
         });
-        
+
         // Detect password recovery event
         if (event === 'PASSWORD_RECOVERY') {
           console.log('[Auth] PASSWORD_RECOVERY event detected - showing reset form');
           setIsResettingPassword(true);
         }
-        
+
         // If user just signed in via recovery link (SIGNED_IN event with session but no password set yet)
         // Check if this might be a recovery session by checking if user came from a recovery flow
         if (event === 'SIGNED_IN' && session) {
           const hash = window.location.hash;
           const search = window.location.search;
-          
+
           // Check URL for recovery indicators
-          if (hash.includes('type=recovery') || hash.includes('recovery') || 
-              search.includes('recovery') || hash.includes('#recovery=true')) {
+          if (hash.includes('type=recovery') || hash.includes('recovery') ||
+            search.includes('recovery') || hash.includes('#recovery=true')) {
             console.log('[Auth] SIGNED_IN with recovery token - showing reset form');
             setIsResettingPassword(true);
           } else {
@@ -103,22 +103,22 @@ const Auth = () => {
     const search = window.location.search;
     const hashParams = new URLSearchParams(hash.substring(1));
     const queryParams = new URLSearchParams(search);
-    
+
     // Check hash first, then query params
     const type = hashParams.get('type') || queryParams.get('type');
     const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
     const refreshToken = hashParams.get('refresh_token') || queryParams.get('refresh_token');
     const error = hashParams.get('error') || queryParams.get('error');
     const errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
-    
+
     // Log full URL for debugging
     console.log('[Auth] Full URL:', window.location.href);
     console.log('[Auth] Full URL hash:', hash);
     console.log('[Auth] Full URL search:', search);
     console.log('[Auth] Hash params:', Object.fromEntries(hashParams.entries()));
     console.log('[Auth] Query params:', Object.fromEntries(queryParams.entries()));
-    console.log('[Auth] Extracted values:', { 
-      type, 
+    console.log('[Auth] Extracted values:', {
+      type,
       hasAccessToken: !!accessToken,
       hasRefreshToken: !!refreshToken,
       error,
@@ -126,30 +126,30 @@ const Auth = () => {
       hasSession: !!session,
       hasUser: !!user
     });
-    
+
     // Check for errors in the URL
     if (error) {
       console.error('[Auth] Error in URL hash:', error, errorDescription);
       setError(`Password reset error: ${errorDescription || error}`);
       toast.error(`Password reset failed: ${errorDescription || error}`);
     }
-    
+
     // PRIORITY: Check if this is a password recovery flow FIRST
     // Check multiple ways the recovery token might appear
-    const isRecovery = type === 'recovery' || 
-                       hash.includes('type=recovery') || 
-                       hash.includes('recovery') ||
-                       search.includes('recovery') ||
-                       hash.includes('#recovery=true') ||
-                       (accessToken && (hash.includes('recovery') || search.includes('recovery')));
-    
+    const isRecovery = type === 'recovery' ||
+      hash.includes('type=recovery') ||
+      hash.includes('recovery') ||
+      search.includes('recovery') ||
+      hash.includes('#recovery=true') ||
+      (accessToken && (hash.includes('recovery') || search.includes('recovery')));
+
     // Also check if we have a recovery flag in sessionStorage (user clicked reset link)
     const recoveryInitiated = sessionStorage.getItem('passwordRecoveryInitiated');
-    
+
     if (isRecovery || recoveryInitiated === 'true') {
       console.log('[Auth] Password recovery detected - showing reset form');
       setIsResettingPassword(true);
-      
+
       // If we have tokens but no session yet, manually exchange them
       if (accessToken && refreshToken && !session) {
         console.log('[Auth] Manually exchanging recovery tokens for session...');
@@ -160,7 +160,7 @@ const Auth = () => {
               access_token: accessToken,
               refresh_token: refreshToken
             });
-            
+
             if (exchangeError) {
               console.error('[Auth] Error exchanging tokens:', exchangeError);
               setError(`Failed to process recovery link: ${exchangeError.message}`);
@@ -193,7 +193,7 @@ const Auth = () => {
         // Check if this session was created recently (within last 5 minutes)
         const recoveryTimestamp = sessionStorage.getItem('passwordRecoveryTimestamp');
         const isRecent = recoveryTimestamp && (Date.now() - parseInt(recoveryTimestamp)) < 5 * 60 * 1000; // 5 minutes
-        
+
         if (isRecent) {
           console.log('[Auth] Session exists with recent recovery flag - showing reset form');
           console.log('[Auth] Session user:', session.user.email);
@@ -209,14 +209,14 @@ const Auth = () => {
         // Check if we have a recovery flag and wait for session
         const recoveryTimestamp = sessionStorage.getItem('passwordRecoveryTimestamp');
         const isRecent = recoveryTimestamp && (Date.now() - parseInt(recoveryTimestamp)) < 5 * 60 * 1000; // 5 minutes
-        
+
         if (!isRecent) {
           // Recovery was too long ago
           sessionStorage.removeItem('passwordRecoveryInitiated');
           sessionStorage.removeItem('passwordRecoveryTimestamp');
           return;
         }
-        
+
         console.log('[Auth] Recovery mode but no tokens - waiting for session from Supabase...');
         // Supabase might establish session in the background
         let attempts = 0;
@@ -238,11 +238,11 @@ const Auth = () => {
           });
         }, 500);
       }
-      
+
       // Don't redirect even if user exists - we need to update password first
       return;
     }
-    
+
     // Only redirect to dashboard if NOT in recovery mode
     // Also check if we're in the middle of signing out (user might be cleared but state not updated yet)
     // Add a small delay to prevent race condition with signOut
@@ -267,7 +267,7 @@ const Auth = () => {
     try {
       const validation = authSchema.omit({ fullName: true }).parse(signInData);
       const { error } = await signIn(validation.email, validation.password);
-      
+
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
           setError("Invalid email or password");
@@ -295,7 +295,7 @@ const Auth = () => {
     try {
       const validation = authSchema.parse(signUpData);
       const result = await signUp(validation.email, validation.password, validation.fullName, validation.role);
-      
+
       if (result.error) {
         if (result.error.message.includes("User already registered")) {
           setError("An account with this email already exists");
@@ -323,13 +323,13 @@ const Auth = () => {
     try {
       // Use the full URL without hash - Supabase will add its own tokens to the hash
       const redirectUrl = `${window.location.origin}/auth`;
-      
+
       console.log('[Auth] Sending password reset email with redirect URL:', redirectUrl);
-      
+
       // Store flag that recovery was initiated (with timestamp for expiration)
       sessionStorage.setItem('passwordRecoveryInitiated', 'true');
       sessionStorage.setItem('passwordRecoveryTimestamp', Date.now().toString());
-      
+
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo: redirectUrl,
       });
@@ -376,7 +376,7 @@ const Auth = () => {
     try {
       // First, ensure we have a valid session
       const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-      
+
       if (sessionError || !currentSession) {
         console.error('[Auth] No session found for password update:', sessionError);
         setError("Session expired. Please request a new password reset link.");
@@ -406,7 +406,7 @@ const Auth = () => {
       }
 
       console.log('[Auth] Password update response:', updateData);
-      
+
       // Verify the password was actually updated
       if (!updateData?.user) {
         console.error('[Auth] Password update returned no user data');
@@ -417,25 +417,25 @@ const Auth = () => {
       }
 
       console.log('[Auth] Password updated successfully for user:', updateData.user.id);
-      
+
       // Clear recovery flags from sessionStorage
       sessionStorage.removeItem('passwordRecoveryInitiated');
       sessionStorage.removeItem('passwordRecoveryTimestamp');
-      
+
       // Verify the password change by attempting to sign in (optional verification)
       // Get the user's email from the session
       const userEmail = currentSession.user.email;
-      
+
       if (userEmail) {
         // Sign out the recovery session first
         await supabase.auth.signOut();
-        
+
         // Try to sign in with the new password to verify it worked
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: userEmail,
           password: newPassword
         });
-        
+
         if (signInError) {
           console.error('[Auth] Verification sign-in failed:', signInError);
           // Password might not have been updated, but don't show error to user
@@ -448,10 +448,10 @@ const Auth = () => {
       } else {
         toast.success("Password updated successfully! Redirecting...");
       }
-      
+
       // Clear the URL hash to remove the recovery token
       window.history.replaceState(null, '', window.location.pathname);
-      
+
       // Redirect to dashboard (user is now signed in with new password)
       setTimeout(() => {
         navigate("/dashboard");
@@ -469,14 +469,14 @@ const Auth = () => {
   if (isResettingPassword) {
     // Check if we have a session - if not, show a helpful message
     const hasValidSession = session && session.user;
-    
+
     return (
-      <div 
+      <div
         className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat relative"
         style={{ backgroundImage: `url(${loginBackground})` }}
       >
         <div className="absolute inset-0 bg-black/20" />
-        
+
         <div className="relative z-10 w-full max-w-md mx-auto px-4">
           <Card className="w-full bg-black/40 backdrop-blur-sm border-gray-600">
             <CardHeader>
@@ -486,7 +486,7 @@ const Auth = () => {
               {!hasValidSession && (
                 <Alert className="mb-4 border-yellow-500 bg-yellow-500/10">
                   <AlertDescription className="text-yellow-400 text-sm">
-                    <strong>No active session detected.</strong> This usually means the redirect URL isn't configured in Supabase. 
+                    <strong>No active session detected.</strong> This usually means the redirect URL isn't configured in Supabase.
                     Please ensure <code className="text-xs bg-black/30 px-1 rounded">http://localhost:8083/auth</code> is added to your Supabase project's Redirect URLs.
                     <br /><br />
                     You can still try to update your password if you have a valid recovery session.
@@ -527,8 +527,8 @@ const Auth = () => {
                     </AlertDescription>
                   </Alert>
                 )}
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   className="w-full bg-green-500 hover:bg-green-600 text-white"
                   disabled={isLoading || (!hasValidSession && !session)}
                 >
@@ -558,19 +558,18 @@ const Auth = () => {
   }
 
   return (
-    <div 
-      className="min-h-screen flex items-center justify-center bg-center bg-no-repeat relative"
-      style={{ 
+    <div
+      className="min-h-screen flex items-center justify-center bg-no-repeat relative"
+      style={{
         backgroundImage: `url(${loginBackground})`,
-        backgroundSize: "contain",
+        backgroundSize: "cover",
+        backgroundPosition: "right top",
         backgroundColor: "#00963f"
       }}
     >
-      <div className="absolute inset-0 bg-black/20" />
-      
-      <div className="relative z-10 w-full max-w-6xl mx-auto px-4 flex items-center justify-center">
-        <div className="flex-1 flex justify-center lg:justify-end">
-          <Card className="w-full max-w-md bg-black/40 backdrop-blur-sm border-gray-600">
+      <div className="relative z-10 w-full max-w-6xl mx-auto px-4 flex items-center justify-end">
+        <div className="flex-1 flex justify-center lg:justify-end lg:mr-10">
+          <Card className="w-full max-w-md bg-black/70 backdrop-blur-sm border-gray-600">
             <CardHeader>
               <CardTitle className="text-white text-center text-2xl">Welcome</CardTitle>
             </CardHeader>
@@ -611,8 +610,8 @@ const Auth = () => {
                         required
                       />
                     </div>
-                    <Button 
-                      type="submit" 
+                    <Button
+                      type="submit"
                       className="w-full bg-green-500 hover:bg-green-600 text-white"
                       disabled={isLoading}
                     >
@@ -648,7 +647,7 @@ const Auth = () => {
                       <Label htmlFor="signup-role" className="text-white">Role</Label>
                       <Select
                         value={signUpData.role}
-                        onValueChange={(value: "agent" | "management" | "admin") => 
+                        onValueChange={(value: "agent" | "management" | "admin") =>
                           setSignUpData(prev => ({ ...prev, role: value }))
                         }
                       >
@@ -686,8 +685,8 @@ const Auth = () => {
                         required
                       />
                     </div>
-                    <Button 
-                      type="submit" 
+                    <Button
+                      type="submit"
                       className="w-full bg-green-500 hover:bg-green-600 text-white"
                       disabled={isLoading}
                     >
@@ -704,7 +703,7 @@ const Auth = () => {
                   </AlertDescription>
                 </Alert>
               )}
-              
+
               {success && (
                 <Alert className="mt-4 border-green-500 bg-green-500/10">
                   <AlertDescription className="text-green-400">

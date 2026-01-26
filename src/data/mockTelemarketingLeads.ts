@@ -16,7 +16,8 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: null,
             favorite_teams: null,
             casino_favorite: "roulette"
-        }
+        },
+        trait: "Casino Whale 🎰"
     },
     {
         id: "5",
@@ -33,7 +34,8 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: "football",
             favorite_teams: ["Liverpool"],
             casino_favorite: null
-        }
+        },
+        trait: "Loyal Punter 🦁"
     },
     // Call Back Later
     {
@@ -51,7 +53,8 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: "football",
             favorite_teams: ["Chelsea", "Real Madrid"],
             casino_favorite: null
-        }
+        },
+        trait: "High Roller 💎"
     },
     {
         id: "7",
@@ -68,7 +71,8 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: null,
             favorite_teams: null,
             casino_favorite: "aviator"
-        }
+        },
+        trait: "Aviator Pilot ✈️"
     },
     // Not Interested
     {
@@ -86,7 +90,8 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: "football",
             favorite_teams: ["Tottenham"],
             casino_favorite: null
-        }
+        },
+        trait: "Churn Risk ⚠️"
     },
     // Interested
     {
@@ -104,7 +109,8 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: "football",
             favorite_teams: ["Manchester City"],
             casino_favorite: null
-        }
+        },
+        trait: "Super Striker ⚽"
     },
     {
         id: "9",
@@ -121,7 +127,8 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: null,
             favorite_teams: null,
             casino_favorite: "slots"
-        }
+        },
+        trait: "Bonus Hunter 🎁"
     },
     // Converted
     {
@@ -139,7 +146,8 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: null,
             favorite_teams: null,
             casino_favorite: "aviator"
-        }
+        },
+        trait: "Aviator King 👑"
     },
     {
         id: "11",
@@ -156,7 +164,8 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: "football",
             favorite_teams: ["Barcelona", "Bayern Munich"],
             casino_favorite: null
-        }
+        },
+        trait: "Big Spender 💸"
     },
     // Unreachable
     {
@@ -174,6 +183,7 @@ export const MOCK_TELEMARKETING_LEADS = [
             favorite_sport: "tennis",
             favorite_teams: null,
             casino_favorite: null
-        }
+        },
+        trait: "Dormant 💤"
     }
 ];

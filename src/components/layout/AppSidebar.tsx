@@ -39,7 +39,7 @@ const navigationItems = [
     description: "Agent workspace & queue"
   },
   {
-    title: "Kanban",
+    title: "Leads",
     url: "/kanban",
     icon: CheckSquare,
     description: "Lead management board"
@@ -48,7 +48,7 @@ const navigationItems = [
     title: "WhatsApp",
     url: "/whatsapp",
     icon: ({ className }: LucideProps) => (
-      <img src={WhatsAppLogo} alt="" className={className} style={{ filter: 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(86deg) brightness(118%) contrast(119%)' }} />
+      <img src={WhatsAppLogo} alt="" className={className} style={{ filter: 'brightness(0)' }} />
     ),
     description: "WhatsApp messaging"
   },
@@ -106,22 +106,23 @@ export function AppSidebar() {
   const isActive = (path: string) => currentPath === path;
   const getNavClasses = ({ isActive }: { isActive: boolean }) =>
     isActive
-      ? "bg-sidebar-accent text-sidebar-primary font-medium"
-      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground";
+      ? "bg-[#333333]/20 text-[#333333] font-bold"
+      : "text-[#333333]/80 hover:bg-[#333333]/10 hover:text-[#333333] font-medium";
 
   return (
     <Sidebar
       collapsible="icon"
+      className="bg-[#FFE600] text-[#333333] border-r border-[#E6CF00] [&_[data-sidebar=sidebar]]:bg-[#FFE600]"
     >
-      <SidebarHeader className="border-b border-sidebar-border p-4">
+      <SidebarHeader className="border-b border-[#333333]/10 p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#333333] text-[#FFE600]">
             <Phone className="h-4 w-4" />
           </div>
           {!isCollapsed && (
             <div>
-              <h1 className="text-lg font-semibold text-sidebar-foreground">Bangbet</h1>
-              <p className="text-xs text-sidebar-foreground/60">Telemarketing</p>
+              <h1 className="text-lg font-black text-[#333333] tracking-tight uppercase">Bangbet</h1>
+              <p className="text-xs text-[#333333]/70 font-medium">Telemarketing</p>
             </div>
           )}
         </div>
@@ -129,7 +130,7 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/70">
+          <SidebarGroupLabel className="text-[#333333]/50 font-bold uppercase tracking-wider text-[10px]">
             Navigation
           </SidebarGroupLabel>
 
@@ -164,7 +165,7 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={signOut}
-                  className="text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                  className="text-[#333333]/80 hover:bg-[#333333]/10 hover:text-[#333333] font-medium"
                   title={isCollapsed ? "Sign out" : undefined}
                 >
                   <LogOut className="h-4 w-4" />

@@ -24,5 +24,6 @@ export interface Lead {
   updated_at?: string;
   status?: string | null;
   preferredProduct?: string | null;
+  trait?: string | null;
 }
 
