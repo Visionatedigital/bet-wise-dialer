@@ -81,7 +81,6 @@ const AdminDashboard = () => {
         .from('leads')
         .select('user_id, assigned_at, lead_score')
         .not('user_id', 'is', null)
-        .gte('assigned_at', start.toISOString())
         .limit(50000); // Increase limit to capture full distribution stats
 
       if (leadAggError) throw leadAggError;
@@ -417,28 +416,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const [verifyingDeposits, setVerifyingDeposits] = useState(false);
 
-  const handleVerifyDeposits = async () => {
-    setVerifyingDeposits(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('fetch-player-deposits');
-      if (error) throw error;
-
-      if (data?.success) {
-        const msg = `Found ${data.deposits_found} deposits from ${data.verified_count} checked calls! (Probable Rev: ${data.conversion_rate}%)`;
-        toast.success(msg);
-        if (data.deposits_found > 0) fetchData(); // Refresh stats
-      } else {
-        toast.info(data?.message || "Verification completed");
-      }
-    } catch (err) {
-      console.error("Verification failed:", err);
-      toast.error("Failed to verify deposits");
-    } finally {
-      setVerifyingDeposits(false);
-    }
-  };
 
   return (
     <AdminLayout>
@@ -481,24 +459,26 @@ const AdminDashboard = () => {
               <Download className="h-5 w-5" />
               Request New Leads <Badge variant="secondary" className="ml-2 bg-purple-100 text-purple-700 hover:bg-purple-100"><Brain className="w-3 h-3 mr-1" /> AI Active</Badge>
             </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto text-xs bg-slate-900 text-white hover:bg-slate-800 border-none"
-              onClick={handleAnalyzeLeads}
-            >
-              {analyzing ? (
-                <>
-                  <RefreshCw className="h-3 w-3 animate-spin mr-1" />
-                  Stop Analysis
-                </>
-              ) : (
-                <>
-                  <Brain className="h-3 w-3 mr-1" />
-                  Analyze Existing Leads
-                </>
-              )}
-            </Button>
+            <div className="ml-auto flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs bg-slate-900 text-white hover:bg-slate-800 border-none"
+                onClick={handleAnalyzeLeads}
+              >
+                {analyzing ? (
+                  <>
+                    <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+                    Stop Analysis
+                  </>
+                ) : (
+                  <>
+                    <Brain className="h-3 w-3 mr-1" />
+                    Analyze Existing Leads
+                  </>
+                )}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">

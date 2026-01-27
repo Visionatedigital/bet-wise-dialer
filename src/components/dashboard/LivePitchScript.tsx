@@ -22,9 +22,9 @@ const complianceItems = [
   { key: 'recordingConsent', label: 'Obtained call recording consent' }
 ];
 
-export const LivePitchScript = ({ 
-  leadName, 
-  campaign, 
+export const LivePitchScript = ({
+  leadName,
+  campaign,
   leadIntent,
   isCallActive,
   audioContext,
@@ -45,7 +45,7 @@ export const LivePitchScript = ({
   // Initialize speech tracking
   const transcriptBufferRef = useRef<string[]>([]);
   const transcriptTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   const { fullTranscript, isConnected, sendAudioData } = useSpeechTracking({
     isCallActive,
     onTranscriptUpdate: (transcript) => {
@@ -53,12 +53,12 @@ export const LivePitchScript = ({
       if (onTranscriptForAI && transcript.trim()) {
         // Buffer transcripts and send in batches every 2 seconds for better AI analysis
         transcriptBufferRef.current.push(transcript);
-        
+
         // Clear existing timer
         if (transcriptTimerRef.current) {
           clearTimeout(transcriptTimerRef.current);
         }
-        
+
         // Send buffered transcripts after 2 seconds of silence or immediately if buffer is large
         transcriptTimerRef.current = setTimeout(() => {
           if (transcriptBufferRef.current.length > 0) {
@@ -78,7 +78,7 @@ export const LivePitchScript = ({
       onTranscriptChange(fullTranscript);
     }
   }, [fullTranscript, onTranscriptChange]);
-  
+
   // Cleanup timer on unmount
   useEffect(() => {
     return () => {
@@ -98,16 +98,16 @@ export const LivePitchScript = ({
 
     const setupAudioCapture = async () => {
       try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        mediaStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             sampleRate: 24000,
             channelCount: 1,
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true
-          } 
+          }
         });
-        
+
         audioSource = audioContext.createMediaStreamSource(mediaStream);
         processor = audioContext.createScriptProcessor(4096, 1, 1);
 
@@ -118,7 +118,7 @@ export const LivePitchScript = ({
 
         audioSource.connect(processor);
         processor.connect(audioContext.destination);
-        
+
         console.log('[LivePitchScript] Audio capture started');
       } catch (error) {
         console.error('[LivePitchScript] Error setting up audio capture:', error);
@@ -145,7 +145,7 @@ export const LivePitchScript = ({
 
   const scriptSentences = scriptText.match(/[^.!?]+[.!?]+/g) || [scriptText];
   const scriptWords = scriptText.split(' ');
-  
+
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
 
   // Typewriter effect on initial load
@@ -174,7 +174,7 @@ export const LivePitchScript = ({
     console.log('[LivePitchScript] 📝 Processing transcript:', fullTranscript);
 
     // Normalize text for comparison
-    const normalizeText = (text: string) => 
+    const normalizeText = (text: string) =>
       text.toLowerCase().replace(/[.,!?;:]/g, '').trim();
 
     const transcriptNormalized = normalizeText(fullTranscript);
@@ -183,10 +183,10 @@ export const LivePitchScript = ({
     // Find how much of the script has been spoken
     let longestMatch = 0;
     let matchedWordCount = 0;
-    
+
     const transcriptWords = transcriptNormalized.split(/\s+/).filter(w => w.length > 0);
     const scriptWordsNormalized = scriptNormalized.split(/\s+/).filter(w => w.length > 0);
-    
+
     // Find the longest matching sequence
     for (let i = 0; i < scriptWordsNormalized.length; i++) {
       let matches = 0;
@@ -247,36 +247,34 @@ export const LivePitchScript = ({
           const isPastSentence = sentenceIdx < currentSentenceIndex;
           const startWordIndex = wordIndex;
           wordIndex += sentenceWords.length;
-          
+
           return (
             <div
               key={sentenceIdx}
-              className={`transition-all duration-500 ease-out ${
-                isCurrentSentence
+              className={`transition-all duration-500 ease-out ${isCurrentSentence
                   ? 'scale-105 origin-left'
                   : 'scale-100'
-              }`}
+                }`}
             >
               <p className="flex flex-wrap gap-1">
                 {sentenceWords.map((word, wordIdx) => {
                   const globalWordIdx = startWordIndex + wordIdx;
                   const isCurrentWord = globalWordIdx === currentWordIndex;
                   const isSpoken = globalWordIdx < currentWordIndex;
-                  
+
                   return (
                     <span
                       key={wordIdx}
-                      className={`inline-block transition-all duration-300 ease-out ${
-                        isCurrentWord 
-                          ? 'text-[#32CD32] font-semibold scale-[1.3] backdrop-blur-sm bg-gradient-to-br from-[#32CD32]/10 via-transparent to-[#32CD32]/5 px-2 py-1 rounded-lg border border-[#32CD32]/30 shadow-[0_0_20px_rgba(50,205,50,0.3),inset_0_0_10px_rgba(50,205,50,0.1)] origin-center' 
-                          : isSpoken 
-                            ? 'text-muted-foreground/60' 
+                      className={`inline-block transition-all duration-300 ease-out ${isCurrentWord
+                          ? 'text-[#32CD32] font-semibold scale-[1.3] backdrop-blur-sm bg-gradient-to-br from-[#32CD32]/10 via-transparent to-[#32CD32]/5 px-2 py-1 rounded-lg border border-[#32CD32]/30 shadow-[0_0_20px_rgba(50,205,50,0.3),inset_0_0_10px_rgba(50,205,50,0.1)] origin-center'
+                          : isSpoken
+                            ? 'text-muted-foreground/60'
                             : isCurrentSentence
                               ? 'text-foreground font-medium'
                               : isPastSentence
                                 ? 'text-muted-foreground/40'
                                 : 'text-foreground/80'
-                      }`}
+                        }`}
                       style={{
                         transformOrigin: 'center',
                       }}
@@ -311,10 +309,10 @@ export const LivePitchScript = ({
         <div ref={scriptRef} className="mb-3">
           {renderHighlightedScript()}
         </div>
-        
+
         {leadIntent && (
           <div className="bg-primary/10 border border-primary/20 rounded p-2 mt-3">
-            <strong className="text-sm">Customer Intent:</strong> 
+            <strong className="text-sm">Customer Intent:</strong>
             <span className="text-sm ml-2">{leadIntent}</span>
           </div>
         )}
@@ -326,22 +324,22 @@ export const LivePitchScript = ({
           <CheckSquare className="h-4 w-4" />
           Compliance Checklist
         </Label>
-        
+
         <div className="space-y-2">
           {complianceItems.map((item) => (
             <div key={item.key} className="flex items-center space-x-2">
               <Checkbox
                 id={item.key}
                 checked={complianceChecked[item.key as keyof typeof complianceChecked]}
-                onCheckedChange={(checked) => 
+                onCheckedChange={(checked) =>
                   setComplianceChecked(prev => ({
                     ...prev,
                     [item.key]: checked as boolean
                   }))
                 }
               />
-              <Label 
-                htmlFor={item.key} 
+              <Label
+                htmlFor={item.key}
                 className="text-sm cursor-pointer"
               >
                 {item.label}
@@ -349,7 +347,7 @@ export const LivePitchScript = ({
             </div>
           ))}
         </div>
-        
+
         {allComplianceChecked && (
           <Badge className="bg-success text-success-foreground">
             ✓ All compliance items checked

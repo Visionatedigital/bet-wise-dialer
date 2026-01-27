@@ -10,6 +10,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { SoftphoneProvider } from "@/contexts/SoftphoneContext";
+import { Softphone } from "@/components/dashboard/Softphone";
 
 // Lazy load pages for better initial load performance
 const RoleBasedDashboard = lazy(() => import("@/components/RoleBasedDashboard").then(m => ({ default: m.RoleBasedDashboard })));
@@ -85,6 +86,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <SoftphoneProvider>
+              <Softphone />
               <BrowserRouter>
                 <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                   <Routes>

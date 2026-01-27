@@ -87,7 +87,8 @@ export function Softphone({
     activeLead: contextActiveLead,
     autoDialTrigger,
     registerControls,
-    setConnectionQuality: setContextConnectionQuality
+    setConnectionQuality: setContextConnectionQuality,
+    showSoftphone
   } = useSoftphone();
 
   // Effective lead is either the prop (if passed) or the context active lead
@@ -103,6 +104,7 @@ export function Softphone({
   const callIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const sipStatusRef = useRef<ConnectionStatus>('disconnected');
   const sipRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const qualityIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Auto-dial when trigger increments
   useEffect(() => {
@@ -249,7 +251,8 @@ export function Softphone({
       console.log('[WebRTC-INIT] ???? Creating client instance...');
       const client = new AT.Client(tokenData.token);
       // Simulate jitter/quality for UI
-      const qualityInterval = setInterval(() => {
+      if (qualityIntervalRef.current) clearInterval(qualityIntervalRef.current);
+      qualityIntervalRef.current = setInterval(() => {
         const qualities: ('good' | 'fair' | 'poor')[] = ['good', 'good', 'good', 'fair', 'good'];
         const randomQuality = qualities[Math.floor(Math.random() * qualities.length)];
         setContextConnectionQuality(randomQuality);
@@ -258,10 +261,6 @@ export function Softphone({
       webrtcClientRef.current = client;
       console.log('[WebRTC-INIT] ??? Client instance created');
       console.log('[WebRTC-INIT] Client object:', client);
-
-      return () => {
-        clearInterval(qualityInterval);
-      };
 
       // Set up event listeners
       console.log('[WebRTC-INIT] ???? Registering event listeners...');
@@ -272,7 +271,11 @@ export function Softphone({
         console.log('[WebRTC-EVENT] Timestamp:', new Date().toISOString());
         console.log('========================================');
         setIsWebRTCReady(true);
-        toast.success("WebRTC connected!");
+        // Explicit "popup" notification for user
+        toast.success("System Ready: Dialer Connected", {
+          description: "WebRTC Phone Link Established",
+          duration: 5000,
+        });
       });
 
       client.on('notready', () => {
@@ -387,8 +390,14 @@ export function Softphone({
     console.log('[Softphone] Environment detection:', {
       isTauri,
       hasTauriWindow: typeof window !== 'undefined' && '__TAURI__' in window,
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+      hasUser: !!user
     });
+
+    if (!user) {
+      console.log('[Softphone] No user logged in, skipping initialization');
+      return;
+    }
 
     if (isTauri) {
       console.log('[Softphone] ??? Running in Tauri desktop - using SIP mode');
@@ -398,6 +407,11 @@ export function Softphone({
         .then(() => {
           console.log('[Softphone] ??? SIP client initialized successfully');
           setSipConnectionStatus('connected');
+          // Explicit "popup" notification for user
+          toast.success("Dialer System Ready", {
+            description: "SIP Phone Connected & Active",
+            duration: 5000,
+          });
         })
         .catch(err => {
           console.error('[Softphone] ??? SIP pre-initialization failed, will retry on first call:', err);
@@ -423,8 +437,12 @@ export function Softphone({
         clearTimeout(sipRetryTimeoutRef.current);
         sipRetryTimeoutRef.current = null;
       }
+      if (qualityIntervalRef.current) {
+        clearInterval(qualityIntervalRef.current);
+        qualityIntervalRef.current = null;
+      }
     };
-  }, [isTauri]);
+  }, [isTauri, user]);
 
   // Background auto-retry loop for SIP connectivity in Tauri
   useEffect(() => {
@@ -994,9 +1012,9 @@ export function Softphone({
 
   return (
     <>
-      {/* CARD INTERFACE - Only shown when NOT in a call */}
-      {callStatus === "idle" && (
-        <Card className="shadow-none border-none bg-transparent">
+      {/* CARD INTERFACE - Only shown when NOT in a call AND explicitly shown */}
+      {showSoftphone && callStatus === "idle" && (
+        <Card className="fixed bottom-4 right-4 w-80 z-50 shadow-2xl border-none bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <CardHeader className="pb-2 border-b">
             <CardTitle className="text-sm font-semibold flex items-center justify-between">
               <div className="flex items-center gap-2">

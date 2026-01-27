@@ -14,7 +14,7 @@ import {
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-mock-scenario",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-mock-scenario, x-supabase-client-platform",
 };
 
 serve(async (req) => {

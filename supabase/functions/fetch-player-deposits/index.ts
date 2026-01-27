@@ -46,7 +46,7 @@ serve(async (req) => {
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
         const { data: callsToVerify, error: fetchError } = await fetch(
-            `${supabaseUrl}/rest/v1/telemarketing_calls?disposition=eq.interested&promised_deposit_amount=not.is.null&deposit_verified_at=is.null&call_date=gte.${sevenDaysAgo.toISOString()}&select=id,agent_id,call_date,promised_deposit_amount,telemarketing_leads(player_id)`,
+            `${supabaseUrl}/rest/v1/telemarketing_calls?disposition=eq.interested&promised_deposit_amount=not.is.null&deposit_verified_at=is.null&call_date=gte.${sevenDaysAgo.toISOString()}&select=id,agent_id,call_date,promised_deposit_amount,telemarketing_leads(id,player_id)`,
             {
                 headers: {
                     apiKey: supabaseServiceKey,
@@ -63,7 +63,8 @@ serve(async (req) => {
         // Map the nested lead data to flat structure
         const calls = (callsToVerify || []).map((c: any) => ({
             ...c,
-            player_id: c.telemarketing_leads?.player_id
+            player_id: c.telemarketing_leads?.player_id,
+            lead_id: c.telemarketing_leads?.id
         })).filter((c: any) => c.player_id); // Ensure we have a player_id
 
         console.log(`Found ${calls.length} calls to verify`);
@@ -118,6 +119,7 @@ serve(async (req) => {
                 let wagered = 0;
                 let betsCount = 0;
                 let products: string[] = [];
+                let topProduct = null;
 
                 if (activityResponse.ok) {
                     const activityData = await activityResponse.json();
@@ -125,11 +127,14 @@ serve(async (req) => {
                         wagered = activityData.data.total_wagered_since || 0;
                         betsCount = activityData.data.total_bets_since || 0;
                         products = activityData.data.products_used || [];
+                        if (products.length > 0) {
+                            topProduct = products[0]; // Simple heuristic: first product or most frequent
+                        }
                     }
                 }
 
-                // Update the call record with actual deposit amount and betting patterns
-                const updateResponse = await fetch(
+                // 1. Update the call record
+                const updateCallResponse = await fetch(
                     `${supabaseUrl}/rest/v1/telemarketing_calls?id=eq.${call.id}`,
                     {
                         method: "PATCH",
@@ -149,7 +154,40 @@ serve(async (req) => {
                     }
                 );
 
-                if (updateResponse.ok) {
+                // 2. Update the parent LEAD record (Feedback Loop)
+                if (call.lead_id && updateCallResponse.ok) {
+                    const updateLeadBody: any = {
+                        last_activity: new Date().toISOString()
+                    };
+
+                    if (totalDeposited > 0) {
+                        updateLeadBody.last_deposit_ugx = totalDeposited;
+                    }
+                    if (topProduct) {
+                        updateLeadBody.preferred_product = topProduct;
+                    }
+
+                    const updateLeadResponse = await fetch(
+                        `${supabaseUrl}/rest/v1/leads?id=eq.${call.lead_id}`,
+                        {
+                            method: "PATCH",
+                            headers: {
+                                apiKey: supabaseServiceKey,
+                                Authorization: `Bearer ${supabaseServiceKey}`,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(updateLeadBody),
+                        }
+                    );
+
+                    if (!updateLeadResponse.ok) {
+                        console.error(`Failed to update lead ${call.lead_id} from feedback loop`);
+                    } else {
+                        console.log(`Feedback Loop: Updated lead ${call.lead_id} with deposit: ${totalDeposited}, prod: ${topProduct}`);
+                    }
+                }
+
+                if (updateCallResponse.ok) {
                     verifiedCount++;
                     if (totalDeposited > 0) {
                         totalDepositsFound++;
