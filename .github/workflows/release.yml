@@ -37,7 +37,9 @@ jobs:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Install frontend dependencies
-        run: npm install
+        run: |
+          rm bun.lockb
+          npm install
 
       - name: Build and upload release assets
         uses: tauri-apps/tauri-action@v0
