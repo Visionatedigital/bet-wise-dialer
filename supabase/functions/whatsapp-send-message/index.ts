@@ -15,17 +15,17 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    
+
     // Manager-based phone number mapping
     const PHILIMON_MANAGER_ID = 'a99ff448-86f3-411a-91d1-d86d8a7572bc';
     const OLIVIOUS_MANAGER_ID = '244ebc76-658d-43e7-903e-d7b13d2900e0';
-    
+
     // Get authorization header
     const authHeader = req.headers.get('Authorization') || '';
 
     // Parse body early to support public fallback
     let body: any = {};
-    try { body = await req.json(); } catch (_) {}
+    try { body = await req.json(); } catch (_) { }
     const { conversationId, phoneNumber, message, agentId, mediaUrl, mediaType, templateName, templateLanguage, templateParams } = body;
 
     let supabase;
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     } else if (phoneNumber) {
       // Normalize phone number - add + prefix if missing
       const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
-      
+
       // Look for existing conversation or create new one
       const { data: existing } = await supabase
         .from('whatsapp_conversations')
@@ -162,10 +162,11 @@ Deno.serve(async (req) => {
     console.log('[Step 3] 24h window check passed, template required:', requiresTemplate);
 
     // Determine phone_number_id and access token
-    const PHONE_NUMBER_ID_1 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
-    const PHONE_NUMBER_ID_2 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID_2')!;
-    const ACCESS_TOKEN_1 = Deno.env.get('WHATSAPP_ACCESS_TOKEN')!;
-    const ACCESS_TOKEN_2 = Deno.env.get('WHATSAPP_ACCESS_TOKEN_2')!;
+    // Determine phone_number_id and access token
+    const PHONE_NUMBER_ID_1 = "1006029089252398";
+    const PHONE_NUMBER_ID_2 = "1006029089252398";
+    const ACCESS_TOKEN_1 = "EAAvY7GTesc0BQo3UJMxB3Lgk2LqattGF9bZB3nfiQtkwifq7ZBGWOIdeNFcii9lxGM64HPCpAKN8w49ZCLQThZBZBoruZAJp1N1DFJM47jIxwAhkmUFwnDedpD9GZCcYx1GH64PrS47Hz1iXCQaBiioDi5GhCOxkfAmdvkPq3vmLgTIJwVMhOculWX9nlrRxgZDZD";
+    const ACCESS_TOKEN_2 = "EAAvY7GTesc0BQo3UJMxB3Lgk2LqattGF9bZB3nfiQtkwifq7ZBGWOIdeNFcii9lxGM64HPCpAKN8w49ZCLQThZBZBoruZAJp1N1DFJM47jIxwAhkmUFwnDedpD9GZCcYx1GH64PrS47Hz1iXCQaBiioDi5GhCOxkfAmdvkPq3vmLgTIJwVMhOculWX9nlrRxgZDZD";
 
     // Check if conversation has phone_number_id stored
     const { data: convWithPhone } = await supabase
@@ -217,7 +218,7 @@ Deno.serve(async (req) => {
     // Send message via WhatsApp Business API
     // Strip + from phone number to match Meta's format
     const cleanPhone = conversation.contact_phone.replace(/^\+/, '');
-    
+
     let whatsappPayload: any = {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
@@ -232,11 +233,11 @@ Deno.serve(async (req) => {
         language: { code: templateLanguage || 'en' },
         components: Array.isArray(templateParams) && templateParams.length > 0
           ? [
-              {
-                type: 'body',
-                parameters: templateParams.map((p: string) => ({ type: 'text', text: String(p) }))
-              }
-            ]
+            {
+              type: 'body',
+              parameters: templateParams.map((p: string) => ({ type: 'text', text: String(p) }))
+            }
+          ]
           : undefined,
       };
     } else if (mediaUrl && mediaType) {
@@ -246,32 +247,32 @@ Deno.serve(async (req) => {
         ? 'document'
         : mediaType.startsWith('image/') ? 'image' :
           mediaType.startsWith('video/') ? 'video' :
-          mediaType.startsWith('audio/') ? 'audio' : 'document';
-      
+            mediaType.startsWith('audio/') ? 'audio' : 'document';
+
       whatsappPayload.type = mediaTypeCategory;
-      
+
       // Audio messages don't support captions in WhatsApp
       if (mediaTypeCategory === 'audio') {
         // Send audio by link - ensure we use the exact MIME type WhatsApp expects
         // For ogg files, use audio/ogg; codecs=opus for PTT
         let finalMimeType = mediaType;
         const isOgg = /ogg/i.test(mediaType) || /\.ogg(\?.*)?$/i.test(mediaUrl);
-        
+
         if (isOgg && !mediaType.includes('codecs=opus')) {
           finalMimeType = 'audio/ogg; codecs=opus';
         }
-        
-        console.log('[WhatsApp Send] Sending audio:', { 
-          link: mediaUrl, 
+
+        console.log('[WhatsApp Send] Sending audio:', {
+          link: mediaUrl,
           originalType: mediaType,
           finalType: finalMimeType,
           isOgg
         });
-        
+
         whatsappPayload.audio = {
           link: mediaUrl
         };
-        
+
         // Only add PTT flag for OGG files
         if (isOgg) {
           whatsappPayload.audio.ptt = true;
@@ -296,7 +297,7 @@ Deno.serve(async (req) => {
         body: message,
       };
     }
-    
+
     const whatsappResponse = await fetch(
       `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
       {
@@ -318,9 +319,9 @@ Deno.serve(async (req) => {
       const errorDetails = whatsappData.error || {};
       const code = errorDetails.code || whatsappData.errors?.[0]?.code || null;
       const message = errorDetails.message || whatsappData.errors?.[0]?.message || 'Unknown error';
-      
+
       console.error('[WhatsApp API Error] Code:', code, 'Message:', message);
-      
+
       if (code === 131047) {
         return new Response(
           JSON.stringify({
@@ -331,7 +332,7 @@ Deno.serve(async (req) => {
           { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
+
       if (code === 135000) {
         return new Response(
           JSON.stringify({
@@ -342,7 +343,7 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
+
       // Return detailed error for debugging
       throw new Error(`WhatsApp API error [${code}]: ${message}`);
     }
@@ -352,12 +353,12 @@ Deno.serve(async (req) => {
     // Save message to database
     // Map template names to their actual content for display
     const templateDisplayContent = templateName === 'test_template_1' ? 'hello' : (templateName ? `Template: ${templateName}` : null);
-    
+
     // For audio messages, show voice message indicator; for other media with caption show both
-    const displayContent = templateDisplayContent || 
-                          (mediaType?.startsWith('audio/') ? '🎤 Voice message' : message) || 
-                          (mediaUrl ? '📎 Media' : '');
-    
+    const displayContent = templateDisplayContent ||
+      (mediaType?.startsWith('audio/') ? '🎤 Voice message' : message) ||
+      (mediaUrl ? '📎 Media' : '');
+
     const { data: savedMessage, error: messageError } = await supabase
       .from('whatsapp_messages')
       .insert({

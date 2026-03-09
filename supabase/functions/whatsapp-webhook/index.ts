@@ -15,13 +15,13 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const verifyToken = Deno.env.get('WHATSAPP_WEBHOOK_VERIFY_TOKEN')!;
-    
+
     // Manager-based phone number mapping
     const PHILIMON_MANAGER_ID = 'a99ff448-86f3-411a-91d1-d86d8a7572bc';
     const OLIVIOUS_MANAGER_ID = '244ebc76-658d-43e7-903e-d7b13d2900e0';
-    const PHONE_NUMBER_ID_1 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
-    const PHONE_NUMBER_ID_2 = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID_2')!;
-    
+    const PHONE_NUMBER_ID_1 = "1006029089252398";
+    const PHONE_NUMBER_ID_2 = "1006029089252398";
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Handle webhook verification
@@ -67,25 +67,23 @@ Deno.serve(async (req) => {
           if (!fromPhone.startsWith('+')) {
             fromPhone = '+' + fromPhone;
           }
-          
+
           let messageText = message.text?.body || '';
           let mediaUrl = null;
           let mediaType = null;
-          
+
           // Handle audio/voice messages
           if (message.type === 'audio' && message.audio) {
             const mediaId = message.audio.id;
             const mimeType = message.audio.mime_type;
-            
+
             console.log('Processing audio message:', { mediaId, mimeType });
-            
+
             try {
               // Get WhatsApp access token
               const phoneNumberId = value.metadata?.phone_number_id;
-              const accessToken = phoneNumberId === PHONE_NUMBER_ID_1 
-                ? Deno.env.get('WHATSAPP_ACCESS_TOKEN')!
-                : Deno.env.get('WHATSAPP_ACCESS_TOKEN_2')!;
-              
+              const accessToken = "EAAvY7GTesc0BQo3UJMxB3Lgk2LqattGF9bZB3nfiQtkwifq7ZBGWOIdeNFcii9lxGM64HPCpAKN8w49ZCLQThZBZBoruZAJp1N1DFJM47jIxwAhkmUFwnDedpD9GZCcYx1GH64PrS47Hz1iXCQaBiioDi5GhCOxkfAmdvkPq3vmLgTIJwVMhOculWX9nlrRxgZDZD";
+
               // Step 1: Get media URL from WhatsApp
               const mediaInfoResponse = await fetch(
                 `https://graph.facebook.com/v22.0/${mediaId}`,
@@ -95,60 +93,60 @@ Deno.serve(async (req) => {
                   },
                 }
               );
-              
+
               const mediaInfo = await mediaInfoResponse.json();
               console.log('Media info:', mediaInfo);
-              
+
               if (!mediaInfo.url) {
                 throw new Error('No media URL in response');
               }
-              
+
               // Step 2: Download media file
               const mediaDownloadResponse = await fetch(mediaInfo.url, {
                 headers: {
                   'Authorization': `Bearer ${accessToken}`,
                 },
               });
-              
+
               if (!mediaDownloadResponse.ok) {
                 throw new Error(`Failed to download media: ${mediaDownloadResponse.status}`);
               }
-              
+
               const mediaBlob = await mediaDownloadResponse.blob();
               console.log('Downloaded media, size:', mediaBlob.size);
-              
+
               // Step 3: Upload to Supabase storage
               const fileExt = mimeType?.includes('ogg') ? 'ogg' : mimeType?.includes('mp4') ? 'm4a' : 'opus';
               const fileName = `incoming/${Date.now()}-${mediaId}.${fileExt}`;
-              
+
               const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('whatsapp-media')
                 .upload(fileName, mediaBlob, {
                   contentType: mimeType || 'audio/ogg',
                   cacheControl: '3600',
                 });
-              
+
               if (uploadError) {
                 console.error('Error uploading to storage:', uploadError);
                 throw uploadError;
               }
-              
+
               // Get public URL
               const { data: { publicUrl } } = supabase.storage
                 .from('whatsapp-media')
                 .getPublicUrl(fileName);
-              
+
               mediaUrl = publicUrl;
               mediaType = mimeType || 'audio/ogg';
               messageText = '🎤 Voice message';
-              
+
               console.log('Media uploaded:', { mediaUrl, mediaType });
             } catch (error) {
               console.error('Error processing audio:', error);
               messageText = '🎤 Voice message (failed to download)';
             }
           }
-          
+
           const messageId = message.id;
           const timestamp = new Date(parseInt(message.timestamp) * 1000);
 
@@ -181,7 +179,7 @@ Deno.serve(async (req) => {
               last_message_at: timestamp,
               unread_count: (existingConv.unread_count || 0) + 1,
             };
-            
+
             // Set phone_number_id if not already set
             if (!existingConv.phone_number_id && phoneNumberId) {
               updateData.phone_number_id = phoneNumberId;
@@ -195,11 +193,11 @@ Deno.serve(async (req) => {
           } else {
             // New conversation - determine which team/agent to assign
             const phoneNumberId = value.metadata?.phone_number_id;
-            const targetManagerId = phoneNumberId === PHONE_NUMBER_ID_1 
-              ? PHILIMON_MANAGER_ID 
-              : phoneNumberId === PHONE_NUMBER_ID_2 
-              ? OLIVIOUS_MANAGER_ID 
-              : null;
+            const targetManagerId = phoneNumberId === PHONE_NUMBER_ID_1
+              ? PHILIMON_MANAGER_ID
+              : phoneNumberId === PHONE_NUMBER_ID_2
+                ? OLIVIOUS_MANAGER_ID
+                : null;
 
             if (!targetManagerId) {
               console.error('Unknown phone_number_id:', phoneNumberId);
@@ -221,7 +219,7 @@ Deno.serve(async (req) => {
               console.error('No agent found for manager:', targetManagerId);
               continue;
             }
-            
+
             agentId = teamAgent.id;
             console.log('Assigning new conversation to agent:', agentId);
 

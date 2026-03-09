@@ -72,19 +72,19 @@ Deno.serve(async (req) => {
     // Manager-based phone number mapping
     const PHILIMON_MANAGER_ID = 'a99ff448-86f3-411a-91d1-d86d8a7572bc';
     const OLIVIOUS_MANAGER_ID = '244ebc76-658d-43e7-903e-d7b13d2900e0';
-    
+
     let phoneNumberId: string;
     let displayPhoneNumber: string;
-    
+
     if (agentProfile?.manager_id === PHILIMON_MANAGER_ID || user.id === PHILIMON_MANAGER_ID) {
-      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
+      phoneNumberId = "1006029089252398";
       displayPhoneNumber = '256792170575';
     } else if (agentProfile?.manager_id === OLIVIOUS_MANAGER_ID || user.id === OLIVIOUS_MANAGER_ID) {
-      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID_2')!;
+      phoneNumberId = "1006029089252398";
       displayPhoneNumber = '256792170572';
     } else {
       // Default to first phone number
-      phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')!;
+      phoneNumberId = "1006029089252398";
       displayPhoneNumber = '256792170575';
     }
 
