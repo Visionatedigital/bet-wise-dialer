@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Bangbet Dialer",
+    "slug": "betsure-dialer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "betsure",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFE600"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bangbet.dialer.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFE600",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      },
+      "package": "com.bangbet.dialer.mobile",
+      "softwareKeyboardLayoutMode": "pan",
+      "usesCleartextTraffic": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-updates"
+    ],
+    "updates": {
+      "url": "https://u.expo.dev/e4c54cdb-c72a-4c0b-a615-0e62f9ecda21"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e4c54cdb-c72a-4c0b-a615-0e62f9ecda21"
+      }
+    },
+    "owner": "visionatedigital"
+  }
+}

@@ -1,0 +1,83 @@
+export interface User {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  role: "agent" | "management" | "admin";
+  approved?: boolean;
+  status?: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export interface Lead {
+  id: string;
+  name: string;
+  phone: string;
+  segment: string;
+  priority: "high" | "medium" | "low";
+  status?: string | null;
+  last_activity?: string | null;
+  last_deposit_ugx?: number | null;
+  last_bet_date?: string | null;
+  intent?: string | null;
+  score?: number | null;
+  lead_score?: number | null;
+  lifetime_value?: number | null;
+  deposit_count?: number | null;
+  betting_patterns?: Record<string, any> | null;
+  analysis_notes?: string | null;
+  assigned_at?: string | null;
+  assigned_by?: string | null;
+  tags?: string[] | null;
+  user_id?: string | null;
+  next_action?: string | null;
+  next_action_due?: string | null;
+  campaign?: string | null;
+  campaign_id?: string | null;
+  campaign_name?: string | null;
+  trait?: string | null;
+  preferred_product?: string | null;
+  last_contact_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CallActivity {
+  id: string;
+  user_id: string;
+  phone_number: string;
+  lead_name: string;
+  call_type: string;
+  status: string;
+  duration_seconds: number;
+  deposit_amount: number | null;
+  notes: string | null;
+  campaign_id: string | null;
+  created_at: string;
+}
+
+export interface Callback {
+  id: string;
+  user_id: string;
+  lead_name: string;
+  phone_number: string;
+  notes: string | null;
+  status: string;
+  scheduled_for: string;
+  created_at: string;
+}
+
+export interface DailyMetrics {
+  id: string;
+  user_id: string;
+  date: string;
+  calls_made: number;
+  connects: number;
+  conversions: number;
+  total_handle_time_seconds: number;
+  total_deposit_value: number;
+}
