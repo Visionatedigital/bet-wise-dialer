@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole } from './useUserRole';
 
@@ -25,13 +25,7 @@ export function useMonitorData() {
 
   const fetchAgents = async () => {
     try {
-      // Call the secure function to fetch agent data, filtered by manager if needed
-      const managerFilter = (isManagement && !isAdmin && user) ? user.id : null;
-      const { data, error } = await supabase.rpc('get_agent_monitor_data', { 
-        manager_filter: managerFilter 
-      });
-
-      if (error) throw error;
+      const data = await api.get<any[]>('/monitor');
 
       const now = new Date();
       const formatHMS = (secs: number) => {
@@ -74,8 +68,8 @@ export function useMonitorData() {
           campaign: agent.last_campaign_name || 'No Campaign',
           avatar,
           score: 0,
-          calls: agent.calls_today || 0,
-          assignedLeads: agent.assigned_leads || 0,
+          calls: parseInt(agent.calls_today) || 0,
+          assignedLeads: parseInt(agent.assigned_leads) || 0,
           managerId: agent.manager_id,
         } as AgentData;
       });
@@ -89,50 +83,14 @@ export function useMonitorData() {
   };
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || (!isManagement && !isAdmin)) return;
 
     fetchAgents();
 
-    // Subscribe to profile changes
-    const profileChannel = supabase
-      .channel('profiles-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-        },
-        () => {
-          fetchAgents();
-        }
-      )
-      .subscribe();
+    // Refresh every 15 seconds for updates instead of websockets
+    const interval = setInterval(fetchAgents, 15000);
 
-    // Subscribe to call activity changes
-    const callChannel = supabase
-      .channel('call-activities-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'call_activities',
-        },
-        () => {
-          fetchAgents();
-        }
-      )
-      .subscribe();
-
-    // Refresh every 30 seconds for duration updates
-    const interval = setInterval(fetchAgents, 30000);
-
-    return () => {
-      supabase.removeChannel(profileChannel);
-      supabase.removeChannel(callChannel);
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [user, isManagement, isAdmin]);
 
   return { agents, loading, refetch: fetchAgents };

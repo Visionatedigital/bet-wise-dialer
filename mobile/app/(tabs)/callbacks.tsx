@@ -5,6 +5,7 @@ import { usePendingCallbacks } from "../../src/hooks/useCallbacks";
 import { api } from "../../src/api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { colors } from "../../src/theme/colors";
+import { leadDisplayName } from "../../src/utils/leadDisplayName";
 
 export default function CallbacksScreen() {
   const { data: callbacks, isLoading, refetch } = usePendingCallbacks();
@@ -40,7 +41,7 @@ export default function CallbacksScreen() {
             <View style={[styles.card, isOverdue(item.scheduled_for) && styles.cardOverdue]}>
               <View style={styles.row}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{item.lead_name}</Text>
+                  <Text style={styles.name}>{leadDisplayName(item.phone_number)}</Text>
                   <Text style={[styles.time, isOverdue(item.scheduled_for) && { color: colors.status.error }]}>
                     {isOverdue(item.scheduled_for) ? "OVERDUE — " : ""}
                     {new Date(item.scheduled_for).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
@@ -53,7 +54,7 @@ export default function CallbacksScreen() {
               {item.notes && <Text style={styles.notes} numberOfLines={2}>{item.notes}</Text>}
               <TouchableOpacity
                 style={styles.doneBtn}
-                onPress={() => Alert.alert("Mark as Done", `Complete callback for ${item.lead_name}?`, [
+                onPress={() => Alert.alert("Mark as Done", `Complete callback for ${leadDisplayName(item.phone_number)}?`, [
                   { text: "Cancel", style: "cancel" },
                   { text: "Done", onPress: () => markDone(item.id) },
                 ])}

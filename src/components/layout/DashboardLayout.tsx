@@ -12,6 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { NotificationDropdown } from "./NotificationDropdown";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
+import { AdminSidebar } from "./AdminSidebar";
+import { ManagementSidebar } from "./ManagementSidebar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +33,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { status, updateStatus } = useAgentStatus();
-  const { isAdmin, isManagement } = useUserRole();
+  const { isAdmin, isManagement, role } = useUserRole();
+
   const { currentVersion } = useAutoUpdate();
   const [queueCount, setQueueCount] = useState(0);
   const [todayCallsCount, setTodayCallsCount] = useState(0);
@@ -192,7 +195,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full bg-dashboard-bg overflow-x-hidden">
-        <AppSidebar />
+
+        {isAdmin && (localStorage.getItem('adminViewMode') === 'admin' || !localStorage.getItem('adminViewMode')) ? (
+          <AdminSidebar />
+        ) : isManagement && (localStorage.getItem('adminViewMode') === 'management' || (!localStorage.getItem('adminViewMode') && role === 'management')) ? (
+          <ManagementSidebar />
+        ) : (
+          <AppSidebar />
+        )}
+
 
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Top Header */}

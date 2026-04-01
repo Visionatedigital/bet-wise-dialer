@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface WhatsAppConversation {
@@ -20,16 +19,8 @@ export const useWhatsAppConversations = () => {
     if (!user) return;
     
     try {
-      // Use Edge Function for server-side processing
-      const { data, error } = await supabase.functions.invoke('whatsapp-get-conversations');
-
-      if (error) {
-        console.error('Error fetching conversations:', error);
-        setLoading(false);
-        return;
-      }
-
-      setConversations(data?.conversations || []);
+      // Stubbed out WhatsApp functionality, to be implemented on the Node backend
+      setConversations([]);
     } catch (error) {
       console.error('Error fetching conversations:', error);
     }
@@ -38,27 +29,6 @@ export const useWhatsAppConversations = () => {
 
   useEffect(() => {
     fetchConversations();
-
-    if (!user) return;
-
-    // Subscribe to realtime updates
-    const channel = supabase
-      .channel('whatsapp_conversations_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'whatsapp_conversations',
-          filter: `agent_id=eq.${user.id}`,
-        },
-        fetchConversations
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, [user, fetchConversations]);
 
   return { conversations, loading };

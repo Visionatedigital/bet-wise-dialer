@@ -840,39 +840,56 @@ export function Softphone({
 
   async function initializeSipClient() {
     try {
-      console.log('[Softphone] ???? Initializing SIP client...');
+      console.log('[Softphone] 🔄 Initializing SIP client with PBX server...');
       setSipConnectionStatus('connecting');
 
-      const { data, error } = await supabase.functions.invoke('get-sip-credentials');
+      // ─────────────────────────────────────────────────────────
+      // IMPORTANT: We no longer fetch credentials from Supabase.
+      // Instead, each agent has a fixed PBX extension on our server.
+      //
+      // Extension assignment (add more as needed):
+      //   Extension 1001 → password: BangbetPass1001!
+      //   Extension 1002 → password: BangbetPass1002!
+      //   (etc.)
+      //
+      // We use the user's ID to consistently assign the same
+      // extension to the same person every time they log in.
+      // ─────────────────────────────────────────────────────────
+      const pbxHost = import.meta.env.VITE_PBX_HOST || '192.168.100.200';
 
-      if (error) {
-        console.error('[Softphone] ??? Failed to get SIP credentials:', error);
-        setSipConnectionStatus('error');
-        throw error;
-      }
+      // Determine extension number from user ID hash (same logic as before for consistency)
+      const userId = user?.id || '0';
+      const hashChars = userId.replace(/-/g, '').substring(0, 8);
+      const hashValue = parseInt(hashChars, 16) || 0;
+      
+      // We map each hash bucket to an extension
+      // Right now we only have 1001 — add more extensions in FreePBX and list them here
+      const extensions = [
+        { ext: '1001', password: 'BangbetPass1001!' },
+        // { ext: '1002', password: 'BangbetPass1002!' },  // Uncomment when you create ext 1002
+      ];
+      const assigned = extensions[hashValue % extensions.length];
 
-      if (!data?.username || !data?.password) {
-        console.error('[Softphone] ??? Missing SIP credentials in response:', data);
-        setSipConnectionStatus('error');
-        throw new Error('SIP credentials not available');
-      }
+      const sipUsername = `${assigned.ext}@${pbxHost}`;
+      const sipPassword = assigned.password;
 
-      console.log('[Softphone] ??? Got credentials, initializing SIP client...');
+      console.log('[Softphone] 📞 Connecting as extension:', assigned.ext, 'on PBX:', pbxHost);
+
       sipClientRef.current = new SipClient();
-      const initialized = await sipClientRef.current.initialize(data.username, data.password);
+      const initialized = await sipClientRef.current.initialize(sipUsername, sipPassword);
 
       if (initialized) {
-        console.log('[Softphone] ??? SIP client ready and registered');
+        console.log('[Softphone] ✅ SIP client ready and registered with PBX');
         setSipConnectionStatus('connected');
-        toast.success('SIP phone connected');
+        toast.success(`SIP phone connected (ext. ${assigned.ext})`);
         return true;
       } else {
-        console.error('[Softphone] ??? SIP initialization returned false');
+        console.error('[Softphone] ❌ SIP initialization returned false');
         setSipConnectionStatus('error');
         return false;
       }
     } catch (error) {
-      console.error('[Softphone] ??? SIP initialization failed:', error);
+      console.error('[Softphone] ❌ SIP initialization failed:', error);
       setSipConnectionStatus('error');
       toast.error('SIP connection failed - will retry on first call');
       sipClientRef.current = null; // Reset so we can retry

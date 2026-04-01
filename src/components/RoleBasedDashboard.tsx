@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserRole } from '@/hooks/useUserRole';
+
+
 import Dashboard from '@/pages/Dashboard';
 import AdminDashboard from '@/pages/AdminDashboard';
 import ManagementDashboard from '@/pages/ManagementDashboard';
@@ -9,55 +12,24 @@ import { DashboardSelectionDialog } from './DashboardSelectionDialog';
 
 export const RoleBasedDashboard = () => {
   const { user } = useAuth();
+  const { role, loading } = useUserRole();
   const navigate = useNavigate();
   const location = useLocation();
-  const [role, setRole] = useState<'admin' | 'management' | 'agent' | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showDashboardSelection, setShowDashboardSelection] = useState(false);
 
   useEffect(() => {
-    const fetchUserRole = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
+    if (!loading && role === 'admin') {
+      const savedViewMode = localStorage.getItem('adminViewMode');
+      const hasSeenDialog = sessionStorage.getItem('dashboardDialogShown');
+      
+      // Show dialog if no saved preference OR if they haven't seen it this session
+      if (!savedViewMode || !hasSeenDialog) {
+        setShowDashboardSelection(true);
+        sessionStorage.setItem('dashboardDialogShown', 'true');
       }
+    }
+  }, [role, loading]);
 
-      try {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching user role:', error);
-          setRole('agent'); // Default to agent
-        } else {
-          const userRole = data.role as 'admin' | 'management' | 'agent';
-          setRole(userRole);
-          
-          // Show dashboard selection for admins on every sign-in
-          if (userRole === 'admin') {
-            const savedViewMode = localStorage.getItem('adminViewMode');
-            const hasSeenDialog = sessionStorage.getItem('dashboardDialogShown');
-            
-            // Show dialog if no saved preference OR if they haven't seen it this session
-            if (!savedViewMode || !hasSeenDialog) {
-              setShowDashboardSelection(true);
-              sessionStorage.setItem('dashboardDialogShown', 'true');
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error:', error);
-        setRole('agent');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUserRole();
-  }, [user]);
 
   const handleDashboardSelection = (dashboard: 'agent' | 'management' | 'admin') => {
     localStorage.setItem('adminViewMode', dashboard);

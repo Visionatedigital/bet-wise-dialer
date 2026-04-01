@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export type AgentStatus = 'online' | 'on-call' | 'break' | 'offline';
@@ -14,67 +14,49 @@ export function useAgentStatus() {
 
     // Fetch initial status
     const fetchStatus = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('status')
-        .eq('id', user.id)
-        .single();
-
-      if (!error && data) {
-        setStatus((data as any).status as AgentStatus);
+      try {
+        const profile = await api.get<any>(`/profiles/${user.id}`);
+        if (profile && profile.status) {
+          setStatus(profile.status as AgentStatus);
+        }
+      } catch (error) {
+        console.error('Error fetching agent status:', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchStatus();
-
-    // Subscribe to status changes
-    const channel = supabase
-      .channel('profile-status')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${user.id}`,
-        },
-        (payload) => {
-          setStatus(payload.new.status as AgentStatus);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    
+    // Poll for status changes every 30s instead of websockets
+    const interval = setInterval(fetchStatus, 30000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const updateStatus = useCallback(
     async (newStatus: AgentStatus) => {
-    if (!user) return;
+      if (!user) return;
 
-      // Avoid spamming Supabase with identical status updates
       if (newStatus === status) {
         console.log('[AgentStatus] Skipping status update (no change):', newStatus);
         return;
       }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ 
-        status: newStatus,
-        current_call_start: newStatus === 'on-call' ? new Date().toISOString() : null,
-        last_status_change: new Date().toISOString()
-      } as any)
-      .eq('id', user.id);
-
-    if (!error) {
+      // Optimistic update
+      const prevStatus = status;
       setStatus(newStatus);
-      console.log('[AgentStatus] Updated status to:', newStatus);
-    } else {
-      console.error('[AgentStatus] Failed to update status:', error);
-    }
+
+      try {
+        await api.patch(`/profiles/${user.id}`, { 
+          status: newStatus,
+          current_call_start: newStatus === 'on-call' ? new Date().toISOString() : null,
+        });
+        console.log('[AgentStatus] Updated status to:', newStatus);
+      } catch (error) {
+        console.error('[AgentStatus] Failed to update status:', error);
+        // Rollback
+        setStatus(prevStatus);
+      }
     },
     [user, status]
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 export interface RecentCall {
@@ -26,37 +26,23 @@ export function useRecentCalls() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { data, error } = await supabase
-        .from("call_activities")
-        .select("*")
-        .eq("user_id", user.id)
-        .gte("start_time", today.toISOString())
-        .order("start_time", { ascending: false })
-        .limit(20);
-
-      if (error) {
-        console.error("Error fetching recent calls:", error);
-      } else {
+      try {
+        const data = await api.get<RecentCall[]>(
+          `/call-activities?user_id=${user.id}&start_date=${today.toISOString()}&limit=20`
+        );
         setCalls(data || []);
+      } catch (error) {
+        console.error("Error fetching recent calls:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchCalls();
 
-    // Set up real-time subscription
-    const subscription = supabase
-      .channel('recent-calls-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'call_activities', filter: `user_id=eq.${user.id}` },
-        () => fetchCalls()
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    // Replaced real-time subscription with polling
+    const interval = setInterval(fetchCalls, 30000);
+    return () => clearInterval(interval);
   }, [user]);
 
   return { calls, loading };

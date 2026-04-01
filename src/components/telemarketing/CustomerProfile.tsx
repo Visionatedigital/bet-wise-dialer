@@ -3,7 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Phone, User, Calendar, TrendingUp, DollarSign, Target } from "lucide-react";
+import { Phone, User, Calendar, TrendingUp, DollarSign, Target, Sparkles } from "lucide-react";
+import WhatsAppLogo from "@/assets/whatsapp-logo.svg";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CallScriptViewer } from "./CallScriptViewer";
@@ -22,6 +24,7 @@ interface TelemarketingLead {
     priority: string;
     follow_up_at: string | null;
     last_outcome: string | null;
+    next_action: string | null;
     notes: string | null;
     campaign: {
         name: string;
@@ -56,6 +59,8 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
     const { startCall, isCallActive } = useSoftphone();
     const [showDialer, setShowDialer] = useState(false);
 
+    const navigate = useNavigate();
+
     useEffect(() => {
         loadLeadAndCustomer();
     }, [leadId]);
@@ -85,6 +90,7 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
                 priority: row.priority,
                 follow_up_at: row.next_action_due,
                 last_outcome: row.last_activity,
+                next_action: row.next_action,
                 notes: null,
                 campaign: {
                     name: row.campaign || "Unknown",
@@ -155,6 +161,14 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
         setShowDialer(true);
     };
 
+    const handleWhatsApp = () => {
+        if (!lead) return;
+        // Format phone number: remove any non-digit characters if necessary
+        // Most WhatsApp APIs expect international format without + or leading zeros for some providers
+        // But the NewConversationDialog uses the input as is.
+        navigate(`/whatsapp?phone=${encodeURIComponent(lead.phone)}`);
+    };
+
     if (loading) {
         return <div className="p-6">Loading...</div>;
     }
@@ -175,8 +189,14 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
             {/* Header */}
             <div className="flex items-start justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold">{lead.player_name || "Unknown"}</h2>
-                    <p className="text-muted-foreground">{lead.player_id}</p>
+                    <h2 className="text-2xl font-black tracking-tight font-mono">
+                        {lead.phone.length > 6
+                            ? `${lead.phone.substring(0, 4)} **** ${lead.phone.substring(lead.phone.length - 2)}`
+                            : lead.phone}
+                    </h2>
+                    <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                        {lead.player_name || "Unknown Customer"} • {lead.player_id}
+                    </p>
                 </div>
                 <div className="flex gap-2">
                     <Badge className={vipColor}>{lead.vip_level?.toUpperCase()}</Badge>
@@ -185,16 +205,20 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
             </div>
 
             {/* Quick Actions */}
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2">
                 <Button
                     onClick={handleCall}
-                    className="flex-1 bg-[#FFDE00] hover:bg-[#FFDE00]/90 text-black font-bold"
+                    className="w-full bg-[#FFDE00] hover:bg-[#FFDE00]/90 text-black font-bold h-11"
                 >
                     <Phone className="mr-2 h-4 w-4" />
                     Call Now
                 </Button>
-                <Button variant="outline" onClick={onClose}>
-                    Close
+                <Button
+                    onClick={handleWhatsApp}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold h-11"
+                >
+                    <img src={WhatsAppLogo} alt="" className="mr-2 h-4 w-4" style={{ filter: 'brightness(0) invert(1)' }} />
+                    WhatsApp Now
                 </Button>
             </div>
 
@@ -206,31 +230,33 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
                 </TabsList>
 
                 <TabsContent value="profile" className="space-y-4">
-                    {/* Contact Information */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Contact Information</CardTitle>
+                    {/* AI Actionable Plan (Notes) */}
+                    <Card className="border-blue-200 bg-blue-50/30">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-bold flex items-center gap-2 text-blue-700">
+                                <Sparkles className="h-4 w-4" />
+                                AI Actionable Plan
+                            </CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-2">
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Phone:</span>
-                                {/* Masked Phone Number */}
-                                <span className="font-medium">
-                                    {lead.phone.length > 6
-                                        ? `${lead.phone.substring(0, 4)} **** ${lead.phone.substring(lead.phone.length - 2)}`
-                                        : lead.phone}
-                                </span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Language:</span>
-                                <span className="font-medium capitalize">{lead.language_preference || "English"}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Priority:</span>
-                                <Badge variant={lead.priority === "high" ? "destructive" : "secondary"}>
-                                    {lead.priority}
-                                </Badge>
-                            </div>
+                        <CardContent className="space-y-3">
+                            {lead.next_action ? (
+                                <p className="text-sm font-medium text-blue-900 italic leading-relaxed">
+                                    "{lead.next_action}"
+                                </p>
+                            ) : (
+                                <p className="text-sm text-blue-600/70 italic">
+                                    AI summary pending...
+                                </p>
+                            )}
+
+                            {lead.last_outcome && (
+                                <div className="pt-2 border-t border-blue-100">
+                                    <span className="text-[10px] uppercase font-bold text-blue-400 tracking-wider">Last Agent Note</span>
+                                    <p className="text-xs text-blue-800 mt-1 leading-relaxed">
+                                        {lead.last_outcome}
+                                    </p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -251,29 +277,8 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
                         </CardContent>
                     </Card>
 
-                    {/* Notes */}
-                    {lead.notes && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Notes</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-sm">{lead.notes}</p>
-                            </CardContent>
-                        </Card>
-                    )}
 
-                    {/* Last Outcome */}
-                    {lead.last_outcome && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Last Outcome</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-sm">{lead.last_outcome}</p>
-                            </CardContent>
-                        </Card>
-                    )}
+
                 </TabsContent>
 
                 <TabsContent value="script">

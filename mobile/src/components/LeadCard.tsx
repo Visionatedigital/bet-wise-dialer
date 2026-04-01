@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Lead } from "../types";
 import { StatusBadge } from "./StatusBadge";
 import { colors } from "../theme/colors";
+import { leadDisplayName } from "../utils/leadDisplayName";
 
 interface Props {
   lead: Lead;
@@ -30,11 +31,11 @@ export function LeadCard({ lead, onPress }: Props) {
       <View style={styles.row}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
-            {(lead.name || "?")[0].toUpperCase()}
+            {leadDisplayName(lead.phone)[0].toUpperCase()}
           </Text>
         </View>
         <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={1}>{lead.name}</Text>
+          <Text style={styles.name} numberOfLines={1}>{leadDisplayName(lead.phone)}</Text>
           <Text style={styles.phone}>{maskPhone(lead.phone)}</Text>
         </View>
         <View style={styles.right}>

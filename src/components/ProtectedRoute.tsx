@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 
@@ -12,8 +11,6 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
-  const [approved, setApproved] = useState<boolean | null>(null);
-  const [checkingApproval, setCheckingApproval] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -21,38 +18,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     }
   }, [user, loading, navigate]);
 
-  useEffect(() => {
-    const checkApprovalStatus = async () => {
-      if (!user) {
-        setCheckingApproval(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('approved')
-          .eq('id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Error checking approval status:', error);
-          setApproved(false);
-        } else {
-          setApproved(data?.approved ?? false);
-        }
-      } catch (error) {
-        console.error('Error checking approval:', error);
-        setApproved(false);
-      } finally {
-        setCheckingApproval(false);
-      }
-    };
-
-    checkApprovalStatus();
-  }, [user]);
-
-  if (loading || checkingApproval) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -67,7 +33,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     return null;
   }
 
-  if (approved === false) {
+  if (user.approved === false) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="max-w-md w-full space-y-4">

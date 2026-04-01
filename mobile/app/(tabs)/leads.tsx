@@ -13,6 +13,7 @@ import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useLeads } from "../../src/hooks/useLeads";
 import { colors } from "../../src/theme/colors";
+import { leadDisplayName } from "../../src/utils/leadDisplayName";
 
 // Matches desktop KANBAN_COLUMNS exactly
 const CATEGORIES = [
@@ -53,7 +54,7 @@ export default function LeadsScreen() {
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
-        (l) => l.name?.toLowerCase().includes(q) || l.phone?.includes(q)
+        (l) => leadDisplayName(l.phone).toLowerCase().includes(q) || l.phone?.includes(q)
       );
     }
     return list;
@@ -175,7 +176,7 @@ export default function LeadsScreen() {
                   <View style={[styles.priorityDot, {
                     backgroundColor: lead.priority === "high" ? "#ef4444" : lead.priority === "medium" ? "#f59e0b" : "#10b981"
                   }]} />
-                  <Text style={styles.leadName} numberOfLines={1}>{lead.name}</Text>
+                  <Text style={styles.leadName} numberOfLines={1}>{leadDisplayName(lead.phone)}</Text>
                 </View>
                 <View style={styles.leadMeta}>
                   <Feather name="phone" size={11} color={colors.text.muted} />

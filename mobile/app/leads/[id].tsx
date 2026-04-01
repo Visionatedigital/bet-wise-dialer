@@ -11,6 +11,7 @@ import { StatusBadge } from "../../src/components/StatusBadge";
 import { api } from "../../src/api/client";
 import { parseCallbackIntent } from "../../src/utils/parseCallbackIntent";
 import { colors } from "../../src/theme/colors";
+import { leadDisplayName } from "../../src/utils/leadDisplayName";
 
 const DISPOSITIONS = [
   { value: "interested", label: "Interested", icon: "thumbs-up" as const, color: "#10b981", bg: "#dcfce7" },
@@ -134,12 +135,12 @@ export default function LeadDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: lead.name, headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default }, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
+      <Stack.Screen options={{ headerShown: true, title: leadDisplayName(lead.phone), headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default }, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
       <ScrollView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.avatarLg}><Text style={styles.avatarText}>{lead.name[0].toUpperCase()}</Text></View>
-          <Text style={styles.name}>{lead.name}</Text>
+          <View style={styles.avatarLg}><Text style={styles.avatarText}>{leadDisplayName(lead.phone)[0].toUpperCase()}</Text></View>
+          <Text style={styles.name}>{leadDisplayName(lead.phone)}</Text>
           <Text style={styles.phone}>{maskPhone(lead.phone)}</Text>
           <View style={styles.badges}>
             <StatusBadge label={lead.status || lead.last_activity || "unassigned"} />
@@ -150,7 +151,7 @@ export default function LeadDetailScreen() {
 
         <TouchableOpacity style={styles.callButton} onPress={handleCall} activeOpacity={0.8}>
           <Feather name="phone-outgoing" size={18} color="#fff" />
-          <Text style={styles.callText}>Call {lead.name.split(" ")[0]}</Text>
+          <Text style={styles.callText}>Call {leadDisplayName(lead.phone)}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.logButton} onPress={() => setShowOutcome(true)} activeOpacity={0.8}>
@@ -202,10 +203,10 @@ export default function LeadDetailScreen() {
             {/* Lead context */}
             <View style={m.leadContext}>
               <View style={m.leadContextAvatar}>
-                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>{lead.name[0]}</Text>
+                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>{leadDisplayName(lead.phone)[0]}</Text>
               </View>
               <View>
-                <Text style={m.leadContextName}>{lead.name}</Text>
+                <Text style={m.leadContextName}>{leadDisplayName(lead.phone)}</Text>
                 <Text style={m.leadContextPhone}>{maskPhone(lead.phone)}</Text>
               </View>
             </View>

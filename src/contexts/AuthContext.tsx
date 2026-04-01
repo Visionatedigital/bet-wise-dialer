@@ -1,13 +1,20 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/supabase/client';
 
 // Check if running in Tauri
 const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
+interface BangbetUser {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  avatar_url?: string;
+  approved?: boolean;
+}
+
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: BangbetUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName?: string, role?: string) => Promise<{ error: any; message?: string }>;
@@ -25,62 +32,55 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<BangbetUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
-
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    // Determine if we have a valid token on load
+    const token = localStorage.getItem('bangbet_token');
+    if (!token) {
       setLoading(false);
-    });
+      return;
+    }
 
-    return () => subscription.unsubscribe();
+    // Fetch user details
+    api.get<BangbetUser>('/auth/me')
+      .then((userData) => {
+        setUser(userData);
+      })
+      .catch((err) => {
+        console.warn('[Auth] Initial check failed (token possibly expired)', err);
+        localStorage.removeItem('bangbet_token');
+        setUser(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    try {
+      const response = await api.post<{ token: string; user: BangbetUser }>('/auth/login', { email, password });
+      localStorage.setItem('bangbet_token', response.token);
+      setUser(response.user);
+      return { error: null };
+    } catch (err: any) {
+      console.error('[Auth] Sign in error:', err);
+      return { error: err.message || 'Login failed' };
+    }
   };
 
   const signUp = async (email: string, password: string, fullName?: string, role?: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-          role: role || 'agent'
-        }
-      }
-    });
-    
-    // Return specific message for pending approval
-    if (!error) {
+    try {
+      const resp = await api.post<{ message: string }>('/auth/signup', { email, password, full_name: fullName, role });
       return { 
         error: null,
-        message: 'Account created successfully! Your account is pending approval. An administrator will review and approve your access.'
+        message: resp.message || 'Account created successfully! Your account is pending approval.'
       };
+    } catch (err: any) {
+      console.error('[Auth] Sign up error:', err);
+      return { error: err.message || 'Signup failed' };
     }
-    
-    return { error };
   };
 
   const signOut = async () => {
@@ -90,66 +90,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Clear admin view mode on logout first
       localStorage.removeItem('adminViewMode');
       
-      // Clear WebRTC token on logout
-      if (user?.id) {
-        try {
-          await supabase.from('webrtc_tokens').delete().eq('user_id', user.id);
-        } catch (e) {
-          console.warn('[Auth] Error clearing WebRTC token:', e);
-        }
-      }
+      // Attempt to hit logout route (if token is still valid)
+      await api.post('/auth/logout').catch(() => {});
       
-      // Manually clear user state immediately to prevent race condition
+      // Clear token completely
+      localStorage.removeItem('bangbet_token');
+      
       setUser(null);
-      setSession(null);
       
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('[Auth] Sign out error:', error);
-        // Even if there's an error, we've cleared local state, so continue with redirect
-      } else {
-        console.log('[Auth] Sign out successful');
-      }
-      
-      // Wait a brief moment to ensure auth state has propagated
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Force clear any remaining session data
-      await supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          console.warn('[Auth] Session still exists after signOut, forcing clear');
-          setUser(null);
-          setSession(null);
-        }
-      });
-      
-      // Clear all localStorage items that might cause issues
-      localStorage.removeItem('adminViewMode');
       // Set a flag to prevent Auth page from redirecting back
       sessionStorage.setItem('signingOut', 'true');
-      // Clear sessionStorage after a delay to allow redirect
       setTimeout(() => {
         sessionStorage.removeItem('signingOut');
       }, 1000);
       
-      // In Tauri, use window.location for reliable navigation
-      // In browser, we could use React Router, but window.location is more reliable
       if (isTauri) {
-        // For Tauri, we need to use window.location to ensure proper navigation
         window.location.href = '/auth';
       } else {
         window.location.replace('/auth');
       }
     } catch (error) {
       console.error('[Auth] Sign out failed:', error);
-      // Clear state even on error
       setUser(null);
-      setSession(null);
+      localStorage.removeItem('bangbet_token');
       localStorage.removeItem('adminViewMode');
       sessionStorage.clear();
       
-      // Even if there's an error, redirect to auth page
       if (isTauri) {
         window.location.href = '/auth';
       } else {
@@ -160,7 +126,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value = {
     user,
-    session,
     loading,
     signIn,
     signUp,

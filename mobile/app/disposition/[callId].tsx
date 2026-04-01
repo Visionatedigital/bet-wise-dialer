@@ -5,6 +5,7 @@ import { api } from "../../src/api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { parseCallbackIntent } from "../../src/utils/parseCallbackIntent";
 import { colors } from "../../src/theme/colors";
+import { leadDisplayName } from "../../src/utils/leadDisplayName";
 
 const DISPOSITIONS = [
   { value: "interested", label: "Interested", color: colors.status.success, bg: "#dcfce7" },
@@ -46,8 +47,8 @@ export default function DispositionScreen() {
       <Stack.Screen options={{ headerShown: true, title: "Log Outcome", headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default }, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.leadInfo}>
-          <View style={styles.leadAvatar}><Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>{(params.leadName || "?")[0].toUpperCase()}</Text></View>
-          <Text style={styles.leadName}>{params.leadName}</Text>
+          <View style={styles.leadAvatar}><Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>{leadDisplayName(params.phone)[0].toUpperCase()}</Text></View>
+          <Text style={styles.leadName}>{leadDisplayName(params.phone)}</Text>
           <Text style={styles.leadPhone}>{params.phone}</Text>
         </View>
 

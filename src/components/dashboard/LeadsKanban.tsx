@@ -1,7 +1,8 @@
 import { useState, useMemo, memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Phone, User, Calendar } from "lucide-react";
+import { Phone, User, Calendar, Sparkles, MessageSquare } from "lucide-react";
 import { type Lead } from "@/types/lead";
 import {
     DndContext,
@@ -222,14 +223,38 @@ const LeadCard = memo(({ lead, onClick, isOverlay, isSelected }: LeadCardProps) 
         return `***${lastFour}`;
     };
 
+    const getStatusColors = (status: string | null) => {
+        const s = status?.toLowerCase() || 'unassigned';
+        switch (s) {
+            case 'unassigned':
+            case 'pending':
+                return "bg-blue-50/50 border-blue-100 hover:border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/40";
+            case 'no_answer':
+            case 'called_no_answer':
+                return "bg-amber-50/50 border-amber-100 hover:border-amber-200 dark:bg-amber-950/20 dark:border-amber-900/40";
+            case 'unreachable':
+                return "bg-red-50/50 border-red-100 hover:border-red-200 dark:bg-red-950/20 dark:border-red-900/40";
+            case 'interested':
+                return "bg-emerald-50/50 border-emerald-100 hover:border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/40";
+            case 'not_interested':
+                return "bg-slate-50/50 border-slate-100 hover:border-slate-200 dark:bg-slate-900/20 dark:border-slate-800/40";
+            default:
+                return "bg-blue-50/50 border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/40";
+        }
+    };
+
     return (
         <Card
             ref={setNodeRef}
             style={style}
             {...attributes}
             {...listeners}
-            className={`cursor-grab active:cursor-grabbing hover:shadow-md transition-all duration-200 overflow-hidden border-2 rounded-xl ${isSelected ? 'border-primary ring-2 ring-primary/10' : 'border-border/50'
-                } ${isDragging ? 'shadow-xl scale-105' : ''}`}
+            className={cn(
+                "cursor-grab active:cursor-grabbing hover:shadow-md transition-all duration-200 overflow-hidden border-2 rounded-xl",
+                getStatusColors(lead.status),
+                isSelected ? 'ring-2 ring-primary/20 border-primary' : '',
+                isDragging ? 'shadow-xl scale-105 opacity-50' : ''
+            )}
             onClick={(e) => {
                 if (isDragging) return;
                 onClick();
@@ -257,11 +282,38 @@ const LeadCard = memo(({ lead, onClick, isOverlay, isSelected }: LeadCardProps) 
                         </Badge>
                     )}
                     {lead.trait && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 h-5 bg-green-50 text-green-700 border-green-200 font-semibold">
+                        <Badge variant="secondary" className="text-[10px] px-2 h-5 bg-green-100 text-green-800 border-green-200 font-bold rounded-full shadow-sm">
                             {lead.trait}
                         </Badge>
                     )}
                 </div>
+
+                {(lead.nextAction || (lead.lastActivity && lead.lastActivity !== "Never")) && (
+                    <div className="mt-2 rounded-lg border border-slate-200/50 dark:border-slate-800/50 bg-white/40 dark:bg-black/20 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800/50">
+                        {lead.nextAction && (
+                            <div className="p-2 space-y-1.5 bg-blue-50/30 dark:bg-blue-900/10">
+                                <div className="flex items-center gap-1.5 text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                                    <Sparkles className="h-2.5 w-2.5" />
+                                    AI Strategy
+                                </div>
+                                <p className="text-[10px] leading-tight text-slate-700 dark:text-slate-300 italic font-medium line-clamp-2">
+                                    "{lead.nextAction}"
+                                </p>
+                            </div>
+                        )}
+                        {lead.lastActivity && lead.lastActivity !== "Never" && (
+                            <div className="p-2 space-y-1">
+                                <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                    <MessageSquare className="h-2.5 w-2.5" />
+                                    Last Note
+                                </div>
+                                <p className="text-[10px] leading-tight text-slate-600 dark:text-slate-400 line-clamp-1">
+                                    {lead.lastActivity}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {lead.nextActionDue && (
                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-2.5 border-t border-muted/30">

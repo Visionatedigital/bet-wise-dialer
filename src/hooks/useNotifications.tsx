@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -24,15 +24,8 @@ export const useNotifications = () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-
+      const data = await api.get<Notification[]>('/notifications?limit=20');
+      
       const typedData = (data || []).map(n => ({
         ...n,
         type: n.type as 'info' | 'success' | 'warning' | 'error'
@@ -49,12 +42,7 @@ export const useNotifications = () => {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', notificationId);
-
-      if (error) throw error;
+      await api.patch(`/notifications/${notificationId}/read`, {});
 
       setNotifications(prev =>
         prev.map(n => (n.id === notificationId ? { ...n, read: true } : n))
@@ -69,13 +57,7 @@ export const useNotifications = () => {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('user_id', user.id)
-        .eq('read', false);
-
-      if (error) throw error;
+      await api.patch('/notifications/read-all', {});
 
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
@@ -93,20 +75,17 @@ export const useNotifications = () => {
     link?: string
   ) => {
     if (!user) return;
-
-    try {
-      const { error } = await supabase.from('notifications').insert({
-        user_id: user.id,
-        title,
-        message,
-        type,
-        link,
-      });
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error creating notification:', error);
-    }
+    // Client-side notification creation is usually done inside the system backend,
+    // but we can stub this for backward compatibility or add a POST endpoint later if needed.
+    // For now we just mock the toast.
+    const toastFn = type === 'error' ? toast.error :
+                   type === 'success' ? toast.success :
+                   type === 'warning' ? toast.warning :
+                   toast.info;
+    
+    toastFn(title, {
+      description: message,
+    });
   };
 
   useEffect(() => {
@@ -114,37 +93,11 @@ export const useNotifications = () => {
 
     fetchNotifications();
 
-    // Set up real-time subscription
-    const channel = supabase
-      .channel('notifications-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const newNotification = payload.new as Notification;
-          setNotifications(prev => [newNotification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-          
-          // Show toast notification
-          const toastFn = newNotification.type === 'error' ? toast.error :
-                         newNotification.type === 'success' ? toast.success :
-                         newNotification.type === 'warning' ? toast.warning :
-                         toast.info;
-          
-          toastFn(newNotification.title, {
-            description: newNotification.message,
-          });
-        }
-      )
-      .subscribe();
+    // Replaced realtime subscription with polling
+    const interval = setInterval(fetchNotifications, 60000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, [user]);
 

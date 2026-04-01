@@ -8,6 +8,7 @@ import { usePendingCallbacks } from "../../src/hooks/useCallbacks";
 import { useRecentCalls } from "../../src/hooks/useRecentCalls";
 import { KpiCard } from "../../src/components/KpiCard";
 import { colors } from "../../src/theme/colors";
+import { leadDisplayName } from "../../src/utils/leadDisplayName";
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length < 6) return phone || "";
@@ -114,7 +115,7 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.activityInfo}>
                     <Text style={styles.activityName} numberOfLines={1}>
-                      {call.lead_name || "Unknown"}
+                      {leadDisplayName(call.phone_number)}
                     </Text>
                     <View style={styles.activityMeta}>
                       <Text style={styles.activityPhone}>{maskPhone(call.phone_number)}</Text>
@@ -151,7 +152,7 @@ export default function HomeScreen() {
           {callbacks!.slice(0, 3).map((cb) => (
             <View key={cb.id} style={styles.cbCard}>
               <View style={styles.cbRow}>
-                <Text style={styles.cbName}>{cb.lead_name}</Text>
+                <Text style={styles.cbName}>{leadDisplayName(cb.phone_number)}</Text>
                 <Text style={styles.cbTime}>
                   {new Date(cb.scheduled_for).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                 </Text>

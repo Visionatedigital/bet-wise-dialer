@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo, memo } from "react";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Phone, User, Calendar, Filter } from "lucide-react";
+import { Phone, User, Calendar, Filter, Sparkles, MessageSquare } from "lucide-react";
 import { CustomerProfile } from "./CustomerProfile";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MOCK_TELEMARKETING_LEADS } from "@/data/mockTelemarketingLeads";
@@ -41,6 +42,7 @@ interface TelemarketingLead {
     status: string;
     priority: string;
     follow_up_at: string | null;
+    next_action: string | null;
     notes: string | null;
     betting_habits: {
         favorite_sport?: string;
@@ -59,6 +61,27 @@ const KANBAN_COLUMNS = [
     { id: "no_answer", title: "No Answer", color: "bg-amber-50 text-amber-700 border-amber-100" }
 ];
 
+const DUMMY_TRAITS = [
+    "Casino Player 🎰",
+    "Aviator Player 🚀",
+    "Man Utd Fan 👹",
+    "Arsenal Fan 🔫",
+    "Chelsea Fan 🦁",
+    "High Roller 💎",
+    "Bonus Hunter 🎁",
+    "Daily Bettor 📅",
+    "Liverpool Fan 🔴",
+    "Real Madrid Fan ⚪"
+];
+
+const getFallbackTrait = (id: string) => {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+        hash = id.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return DUMMY_TRAITS[Math.abs(hash) % DUMMY_TRAITS.length];
+};
+
 export function TelemarketingKanban() {
     const [leads, setLeads] = useState<TelemarketingLead[]>([]);
     const [selectedLead, setSelectedLead] = useState<string | null>(null);
@@ -67,23 +90,26 @@ export function TelemarketingKanban() {
     const { showSoftphone } = useSoftphone();
     const { toast } = useToast();
 
-    const mapLead = (lead: any): TelemarketingLead => ({
-        id: lead.id,
-        player_id: lead.id.substring(0, 8).toUpperCase(),
-        phone: lead.phone,
-        player_name: lead.name,
-        vip_level: lead.segment,
-        preferred_product: lead.intent || 'Sports',
-        status: lead.status || '',
-        priority: lead.priority,
-        follow_up_at: lead.next_action_due,
-        notes: null,
-        betting_habits: {
-            favorite_teams: [],
-            casino_favorite: null
-        },
-        trait: lead.trait
-    });
+    const mapLead = (lead: any): TelemarketingLead => {
+        return {
+            id: lead.id,
+            player_id: lead.id.substring(0, 8).toUpperCase(),
+            phone: lead.phone,
+            player_name: lead.name,
+            vip_level: lead.segment,
+            preferred_product: lead.intent || 'Sports',
+            status: lead.status || '',
+            priority: lead.priority,
+            follow_up_at: lead.next_action_due,
+            next_action: lead.next_action,
+            notes: lead.last_activity,
+            betting_habits: {
+                favorite_teams: [],
+                casino_favorite: null
+            },
+            trait: lead.trait || getFallbackTrait(lead.id)
+        };
+    };
 
     useEffect(() => {
         loadLeads();
@@ -130,7 +156,7 @@ export function TelemarketingKanban() {
 
             if (!data || data.length === 0) {
                 console.log("No leads from Supabase, using mock data");
-                setLeads(MOCK_TELEMARKETING_LEADS.map(l => ({ ...l, status: l.status || '' })));
+                setLeads(MOCK_TELEMARKETING_LEADS.map(l => ({ ...l, status: l.status || '', next_action: null })));
             } else {
                 setLeads(data.map(mapLead));
             }
@@ -437,13 +463,38 @@ const LeadCard = memo(({ lead, onClick, isOverlay }: LeadCardProps) => {
 
     const personalizationPreview = getPersonalizationPreview();
 
+    const getStatusColors = (status: string | null) => {
+        const s = status?.toLowerCase() || 'unassigned';
+        switch (s) {
+            case 'unassigned':
+            case 'pending':
+            case '':
+                return "bg-blue-50/80 border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/40";
+            case 'unreachable':
+                return "bg-red-50/80 border-red-100 dark:bg-red-950/20 dark:border-red-900/40";
+            case 'not_interested':
+                return "bg-slate-50/80 border-slate-100 dark:bg-slate-900/20 dark:border-slate-800/40";
+            case 'interested':
+                return "bg-emerald-50/80 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/40";
+            case 'no_answer':
+            case 'called_no_answer':
+                return "bg-amber-50/80 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/40";
+            default:
+                return "bg-blue-50/80 border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/40";
+        }
+    };
+
     return (
         <Card
             ref={setNodeRef}
             style={style}
             {...attributes}
             {...listeners}
-            className={`cursor-grab active:cursor-grabbing hover:shadow-lg transition-shadow overflow-hidden ${isDragging ? 'shadow-2xl border-primary ring-2 ring-primary/20' : ''}`}
+            className={cn(
+                "cursor-grab active:cursor-grabbing hover:shadow-lg transition-all duration-200 overflow-hidden border-2",
+                getStatusColors(lead.status),
+                isDragging ? 'shadow-2xl scale-105 opacity-50 border-primary ring-2 ring-primary/20' : ''
+            )}
             onClick={(e) => {
                 // Prevent click when dragging
                 if (isDragging) return;
@@ -484,7 +535,7 @@ const LeadCard = memo(({ lead, onClick, isOverlay }: LeadCardProps) => {
                             </Badge>
                         )}
                         {lead.trait && (
-                            <Badge variant="outline" className="text-[10px] font-bold bg-green-50 text-green-700 border-green-200 px-2 py-0.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
+                            <Badge variant="outline" className="text-[10px] font-bold bg-green-100 text-green-800 border-green-200 px-3 py-1 rounded-full shadow-sm whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
                                 {lead.trait}
                             </Badge>
                         )}
@@ -497,8 +548,35 @@ const LeadCard = memo(({ lead, onClick, isOverlay }: LeadCardProps) => {
                     </Badge>
                 )}
 
+                {(lead.next_action || lead.notes) && (
+                    <div className="mt-2 rounded-lg border border-slate-200/50 dark:border-slate-800/50 bg-white/40 dark:bg-black/20 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800/50">
+                        {lead.next_action && (
+                            <div className="p-2 space-y-1.5 bg-blue-50/30 dark:bg-blue-900/10">
+                                <div className="flex items-center gap-1.5 text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                                    <Sparkles className="h-2.5 w-2.5" />
+                                    AI Strategy
+                                </div>
+                                <p className="text-[10px] leading-tight text-slate-700 dark:text-slate-300 italic font-medium line-clamp-2">
+                                    "{lead.next_action}"
+                                </p>
+                            </div>
+                        )}
+                        {lead.notes && (
+                            <div className="p-2 space-y-1">
+                                <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                    <MessageSquare className="h-2.5 w-2.5" />
+                                    Last Note
+                                </div>
+                                <p className="text-[10px] leading-tight text-slate-600 dark:text-slate-400 line-clamp-1">
+                                    {lead.notes}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {lead.follow_up_at && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-muted/20">
                         <Calendar className="h-3 w-3" />
                         <span>{new Date(lead.follow_up_at).toLocaleDateString()}</span>
                     </div>

@@ -1,91 +1,129 @@
-// Supabase Client Configuration
-// Environment variables are loaded from .env file (VITE_ prefix required for Vite)
-// Supports: Supabase Cloud, Local Supabase, and Custom PostgreSQL Server (via PostgREST)
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from './types';
+/**
+ * Custom API Client replacing Supabase
+ * Connects to the local Node.js + Express backend (port 3001)
+ */
 
-// Database connection mode
-export type DatabaseMode = 'supabase-cloud' | 'supabase-local' | 'custom-server';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://192.168.100.200:3001/api';
 
-// Get database configuration from environment variables
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const DATABASE_MODE = (import.meta.env.VITE_DATABASE_MODE || 'supabase-cloud') as DatabaseMode;
-
-// Custom server configuration (for local PostgreSQL server with PostgREST)
-// This allows connecting to a company-hosted PostgreSQL server via PostgREST API
-const CUSTOM_DB_URL = import.meta.env.VITE_CUSTOM_DB_URL; // e.g., http://localhost:3000 or http://company-server:3000
-const CUSTOM_DB_KEY = import.meta.env.VITE_CUSTOM_DB_KEY; // API key for custom server (PostgREST anon key)
-const CUSTOM_DB_SCHEMA = import.meta.env.VITE_CUSTOM_DB_SCHEMA || 'public'; // Database schema name
-
-// Determine which URL and key to use based on mode
-const getDatabaseUrl = (): string => {
-  if (DATABASE_MODE === 'custom-server') {
-    if (!CUSTOM_DB_URL) {
-      throw new Error(
-        'Custom server mode requires VITE_CUSTOM_DB_URL to be set in your .env file.'
-      );
-    }
-    return CUSTOM_DB_URL;
-  }
-  
-  if (!SUPABASE_URL) {
-    throw new Error(
-      'Missing Supabase URL. Please ensure VITE_SUPABASE_URL is set in your .env file.'
-    );
-  }
-  
-  return SUPABASE_URL;
-};
-
-const getDatabaseKey = (): string => {
-  if (DATABASE_MODE === 'custom-server') {
-    if (!CUSTOM_DB_KEY) {
-      throw new Error(
-        'Custom server mode requires VITE_CUSTOM_DB_KEY to be set in your .env file.'
-      );
-    }
-    return CUSTOM_DB_KEY;
-  }
-  
-  if (!SUPABASE_ANON_KEY) {
-    throw new Error(
-      'Missing Supabase API key. Please ensure VITE_SUPABASE_ANON_KEY is set in your .env file.'
-    );
-  }
-  
-  return SUPABASE_ANON_KEY;
-};
-
-const DB_URL = getDatabaseUrl();
-const DB_KEY = getDatabaseKey();
-
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
-
-export const supabase = createClient<Database>(DB_URL, DB_KEY, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-    // For custom servers, auth might be handled differently
-    // If your local server doesn't support Supabase Auth, you may need to implement custom auth
-    detectSessionInUrl: DATABASE_MODE !== 'custom-server',
-  },
-  // For custom servers, we may need to adjust these settings
-  db: {
-    schema: DATABASE_MODE === 'custom-server' ? CUSTOM_DB_SCHEMA : 'public',
-  },
-  global: {
-    headers: DATABASE_MODE === 'custom-server' ? {
-      'apikey': DB_KEY,
+export async function apiRequest<T>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
+  const token = localStorage.getItem('bangbet_token');
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
       'Content-Type': 'application/json',
-    } : undefined,
-  },
-});
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Request failed' }));
+    throw new Error(error.error || error.message || `HTTP ${response.status}`);
+  }
+  
+  return response.json();
+}
 
-// Export environment helpers for use in other parts of the app
-export const getSupabaseUrl = () => DB_URL;
-export const getDatabaseMode = () => DATABASE_MODE;
+export const api = {
+  get: <T>(path: string) => apiRequest<T>(path),
+  post: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(path: string, body: unknown) => apiRequest<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  patch: <T>(path: string, body: unknown) => apiRequest<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
+  delete: <T>(path: string) => apiRequest<T>(path, { method: 'DELETE' }),
+};
+
+// Export environment helpers
+export const getSupabaseUrl = () => API_BASE;
+export const getDatabaseMode = () => 'custom-server';
 export const isProduction = () => import.meta.env.VITE_APP_ENV === 'production';
-export const isCustomServer = () => DATABASE_MODE === 'custom-server';
+export const isCustomServer = () => true;
+
+// Creating a dummy chainable object to prevent frontend crashes on unmigrated pages.
+const dummyChain = {
+  select: () => dummyChain,
+  insert: () => dummyChain,
+  update: () => dummyChain,
+  delete: () => dummyChain,
+  eq: () => dummyChain,
+  neq: () => dummyChain,
+  gt: () => dummyChain,
+  gte: () => dummyChain,
+  lt: () => dummyChain,
+  lte: () => dummyChain,
+  like: () => dummyChain,
+  ilike: () => dummyChain,
+  is: () => dummyChain,
+  in: () => dummyChain,
+  contains: () => dummyChain,
+  containedBy: () => dummyChain,
+  rangeGt: () => dummyChain,
+  rangeGte: () => dummyChain,
+  rangeLt: () => dummyChain,
+  rangeLte: () => dummyChain,
+  rangeAdjacent: () => dummyChain,
+  overlaps: () => dummyChain,
+  textSearch: () => dummyChain,
+  match: () => dummyChain,
+  not: () => dummyChain,
+  or: () => dummyChain,
+  filter: () => dummyChain,
+  order: () => dummyChain,
+  limit: () => dummyChain,
+  range: () => dummyChain,
+  abortSignal: () => dummyChain,
+  single: () => Promise.resolve({ data: null, error: null }),
+  maybeSingle: () => Promise.resolve({ data: null, error: null }),
+  csv: () => Promise.resolve({ data: '', error: null }),
+  then: Object.prototype.hasOwnProperty,
+  catch: Object.prototype.hasOwnProperty,
+  finally: Object.prototype.hasOwnProperty,
+};
+
+// Return a dummy promise resolving empty data by default so components can just await `supabase.from()`
+const createDummyPromise = () => {
+  const promise = Promise.resolve({ data: [], error: null, count: 0 });
+  // Attach query builder methods to the promise
+  Object.keys(dummyChain).forEach(key => {
+    (promise as any)[key] = function() { return this; };
+  });
+  return promise;
+};
+
+// A mock supabase object for gradual migration. 
+export const supabase = {
+  auth: {
+    getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    signInWithPassword: () => Promise.resolve({ data: { user: null }, error: new Error('Use AuthContext') }),
+    signUp: () => Promise.resolve({ data: { user: null }, error: new Error('Use AuthContext') }),
+    signOut: () => Promise.resolve({ error: null }),
+    getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+    resetPasswordForEmail: () => Promise.resolve({ error: null }),
+    updateUser: () => Promise.resolve({ data: { user: null }, error: null })
+  },
+  from: (table: string) => {
+    console.warn(`[Mock Supabase] Unmigrated DB call to table: ${table}. Data will be empty.`);
+    return createDummyPromise() as any;
+  },
+  rpc: (fnName: string) => {
+    console.warn(`[Mock Supabase] Unmigrated RPC call: ${fnName}. Data will be empty.`);
+    return createDummyPromise() as any;
+  },
+  functions: {
+    invoke: (fnName: string) => {
+      console.warn(`[Mock Supabase] Unmigrated Edge Function call: ${fnName}`);
+      return Promise.resolve({ data: null, error: null });
+    }
+  },
+  channel: (name: string) => {
+    return {
+      on: () => supabase.channel(name),
+      subscribe: () => ({ unsubscribe: () => {} }),
+      unsubscribe: () => {}
+    };
+  },
+  removeChannel: () => {}
+};

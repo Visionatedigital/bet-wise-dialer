@@ -48,7 +48,7 @@ export default function Kanban() {
 
             if (error) throw error;
 
-            setLeads(data || []);
+            setLeads((data as any[]) || []);
         } catch (error) {
             console.error("Error loading leads:", error);
             toast({
@@ -63,6 +63,43 @@ export default function Kanban() {
 
     useEffect(() => {
         loadLeads();
+
+        // Real-time subscription for leads
+        const channel = supabase
+            .channel('kanban_leads_realtime')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'leads'
+                },
+                (payload) => {
+                    console.log('[Kanban] Lead change detected:', payload);
+                    if (payload.eventType === 'UPDATE') {
+                        setLeads(prev => prev.map(l =>
+                            l.id === payload.new.id ? {
+                                ...l,
+                                status: payload.new.status,
+                                priority: payload.new.priority,
+                                name: payload.new.name,
+                                phone: payload.new.phone,
+                                segment: payload.new.segment,
+                                trait: payload.new.trait
+                            } : l
+                        ));
+                    } else if (payload.eventType === 'INSERT') {
+                        setLeads(prev => [payload.new as Lead, ...prev]);
+                    } else if (payload.eventType === 'DELETE') {
+                        setLeads(prev => prev.filter(l => l.id !== payload.old.id));
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     // Filter leads based on search
@@ -88,7 +125,8 @@ export default function Kanban() {
             case 'interested': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
             case 'not_interested': return 'bg-slate-100 text-slate-600 border-slate-200';
             case 'unreachable': return 'bg-red-100 text-red-700 border-red-200';
-            case 'no_answer': return 'bg-amber-100 text-amber-700 border-amber-200';
+            case 'no_answer':
+            case 'called_no_answer': return 'bg-amber-100 text-amber-700 border-amber-200';
             default: return 'bg-blue-100 text-blue-700 border-blue-200';
         }
     };

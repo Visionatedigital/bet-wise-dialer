@@ -63,6 +63,9 @@ function CustomDrawerContent(props: any) {
 }
 
 export default function TabLayout() {
+  const { user } = useAuth();
+  const isManager = user?.role === "management" || user?.role === "admin";
+
   return (
     <Drawer
       drawerContent={(props) => <CustomDrawerContent {...props} />}
@@ -116,6 +119,24 @@ export default function TabLayout() {
           title: "Settings",
           drawerLabel: "Settings",
           drawerIcon: ({ focused, color }) => <Feather name="settings" size={18} color={color} />,
+        }}
+      />
+      <Drawer.Screen
+        name="approve-agents"
+        options={{
+          title: "Approve Agents",
+          drawerLabel: "Approve Agents",
+          drawerIcon: ({ focused, color }) => <Feather name="user-check" size={18} color={color} />,
+          drawerItemStyle: isManager ? {} : { display: "none" },
+        }}
+      />
+      <Drawer.Screen
+        name="distribute"
+        options={{
+          title: "Distribute Leads",
+          drawerLabel: "Distribute Leads",
+          drawerIcon: ({ focused, color }) => <Feather name="shuffle" size={18} color={color} />,
+          drawerItemStyle: isManager ? {} : { display: "none" },
         }}
       />
     </Drawer>

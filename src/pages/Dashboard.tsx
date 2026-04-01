@@ -24,6 +24,27 @@ import { LeadsKanban } from "@/components/dashboard/LeadsKanban";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CustomerProfile } from "@/components/telemarketing/CustomerProfile";
 
+const DUMMY_TRAITS = [
+  "Casino Player 🎰",
+  "Aviator Player 🚀",
+  "Man Utd Fan 👹",
+  "Arsenal Fan 🔫",
+  "Chelsea Fan 🦁",
+  "High Roller 💎",
+  "Bonus Hunter 🎁",
+  "Daily Bettor 📅",
+  "Liverpool Fan 🔴",
+  "Real Madrid Fan ⚪"
+];
+
+const getFallbackTrait = (id: string) => {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return DUMMY_TRAITS[Math.abs(hash) % DUMMY_TRAITS.length];
+};
+
 function DashboardContent() {
   const { user } = useAuth();
   const { updateStatus } = useAgentStatus();
@@ -141,7 +162,7 @@ function DashboardContent() {
 
       if (error) throw error;
 
-      const formattedLeads: Lead[] = (data || []).map(lead => ({
+      const formattedLeads: Lead[] = ((data as any[]) || []).map(lead => ({
         id: lead.id,
         name: safeDisplayName(lead.name),
         phone: lead.phone,
@@ -153,6 +174,7 @@ function DashboardContent() {
         score: lead.score || 0,
         tags: lead.tags || [],
         ownerUserId: lead.user_id,
+        nextAction: lead.next_action,
         nextActionDue: lead.next_action_due,
         campaign: lead.campaign || "No Campaign",
         campaignId: lead.campaign_id || undefined,
@@ -161,7 +183,7 @@ function DashboardContent() {
         assignedAt: lead.assigned_at,
         preferredProduct: lead.preferred_product || undefined,
         status: lead.status || 'unassigned',
-        trait: lead.trait || null
+        trait: lead.trait || getFallbackTrait(lead.id)
       }));
 
       setAllLeads(formattedLeads);
@@ -174,7 +196,50 @@ function DashboardContent() {
   };
 
   useEffect(() => {
-    if (user) fetchLeads();
+    if (user) {
+      fetchLeads();
+
+      // Real-time subscription for leads
+      const channel = supabase
+        .channel('dashboard_leads_realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'leads',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('[Dashboard] Lead change detected:', payload);
+            if (payload.eventType === 'UPDATE') {
+              setAllLeads(prev => prev.map(l =>
+                l.id === payload.new.id ? {
+                  ...l,
+                  status: payload.new.status || 'unassigned',
+                  nextAction: payload.new.next_action,
+                  lastActivity: payload.new.last_activity || l.lastActivity,
+                  priority: payload.new.priority || l.priority,
+                  name: safeDisplayName(payload.new.name) || l.name,
+                  phone: payload.new.phone || l.phone,
+                } : l
+              ));
+            } else if (payload.eventType === 'INSERT') {
+              // Add new lead if it's assigned to this user
+              if (payload.new.user_id === user.id) {
+                fetchLeads(); // Simpler than mapping everything manually for INSERT
+              }
+            } else if (payload.eventType === 'DELETE') {
+              setAllLeads(prev => prev.filter(l => l.id !== payload.old.id));
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [user]);
 
   // Auto-save notes every 30 seconds
@@ -239,6 +304,57 @@ function DashboardContent() {
     });
   };
 
+  const generateDailyReport = async () => {
+    try {
+      if (!user?.id) return;
+
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+      // Fetch leads that were updated/contacted in the last 24h
+      const { data, error } = await supabase
+        .from('leads')
+        .select('phone, status, last_activity, updated_at')
+        .eq('user_id', user.id as any)
+        .gte('updated_at', twentyFourHoursAgo)
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.info("No lead activity recorded in the last 24 hours.");
+        return;
+      }
+
+      // Format as CSV
+      const headers = ["Phone", "Status", "Notes", "Timestamp"];
+      const csvRows = [
+        headers.join(","),
+        ...((data as any[]) || []).map(row => {
+          const phone = row.phone || "";
+          const status = row.status || "unassigned";
+          // Escape quotes in notes and replace newlines
+          const notes = (row.last_activity || "").replace(/"/g, '""').replace(/\n/g, ' ');
+          const timestamp = new Date(row.updated_at).toLocaleString();
+          return `"${phone}","${status}","${notes}","${timestamp}"`;
+        })
+      ];
+
+      const csvContent = csvRows.join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `daily_report_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success("Daily report generated and downloaded.");
+    } catch (err: any) {
+      console.error('Error generating report:', err);
+      toast.error(`Failed to generate report: ${err.message}`);
+    }
+  };
+
   const saveCallNotes = async () => {
     if (!currentCallId || !callNotes.trim()) return;
     try {
@@ -274,6 +390,15 @@ function DashboardContent() {
               <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold">
                 {allLeads.length} Total Leads
               </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={generateDailyReport}
+                className="h-8 border-primary/20 hover:bg-primary/5 text-primary font-bold"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Generate Daily Report
+              </Button>
               <Button variant="ghost" size="sm" onClick={fetchLeads} className="h-8 hover:bg-primary/5">
                 Refresh
               </Button>

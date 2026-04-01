@@ -1,0 +1,16 @@
+src-tauri/
+node_modules/
+dist/
+npm-cache/
+downloads/
+.git/
+.claude/
+server/
+documentation/
+Fixing Windows Installer/
+*.msi
+*.exe
+*.sql
+*.xlsx
+*.csv
+ssh details

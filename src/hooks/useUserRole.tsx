@@ -1,64 +1,36 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export type UserRole = 'admin' | 'management' | 'agent' | null;
 
 export function useUserRole() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [role, setRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
+    
     if (!user) {
       setRole(null);
       setLoading(false);
       return;
     }
 
-    const fetchRole = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id);
+    setRole(user.role as UserRole);
+    setLoading(false);
+  }, [user, authLoading]);
 
-        if (!error && data && data.length > 0) {
-          // User can have multiple roles - prioritize: management > admin > agent
-          const roles = data.map(r => r.role as UserRole);
-          
-          // Priority: management > admin > agent
-          // This ensures managers see management views even if they also have admin role
-          let selectedRole: UserRole = null;
-          if (roles.includes('management')) {
-            selectedRole = 'management';
-          } else if (roles.includes('admin')) {
-            selectedRole = 'admin';
-          } else if (roles.includes('agent')) {
-            selectedRole = 'agent';
-          } else if (roles.length > 0) {
-            // Default to first role if none match expected values
-            selectedRole = roles[0];
-          }
-          
-          setRole(selectedRole);
-          console.log('[useUserRole] User has roles:', roles, '→ Selected:', selectedRole);
-        }
-      } catch (error) {
-        console.error('Error fetching user role:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRole();
-  }, [user]);
+  // Handle local development overrides for testing views
+  const effectiveRole = typeof window !== 'undefined' 
+    ? (localStorage.getItem('adminViewMode') as UserRole) || role 
+    : role;
 
   return { 
-    role, 
-    loading,
-    isAdmin: role === 'admin',
-    isManagement: role === 'management',
-    isAgent: role === 'agent'
+    role: effectiveRole, 
+    loading: loading || authLoading,
+    isAdmin: effectiveRole === 'admin',
+    isManagement: effectiveRole === 'management',
+    isAgent: effectiveRole === 'agent' || !effectiveRole
   };
 }

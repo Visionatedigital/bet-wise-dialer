@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface WhatsAppMessage {
   id: string;
@@ -24,100 +23,16 @@ export const useWhatsAppMessages = (conversationId: string | null) => {
       return;
     }
 
-    const fetchMessages = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('whatsapp_messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('timestamp', { ascending: true });
+    setLoading(true);
+    // WhatsApp feature stubbed out as backend is not implemented yet
+    setMessages([]);
+    setLoading(false);
 
-      if (error) {
-        console.error('Error fetching messages:', error);
-      } else {
-        setMessages((data || []) as WhatsAppMessage[]);
-      }
-      setLoading(false);
-    };
-
-    fetchMessages();
-
-    // Subscribe to realtime updates for incremental changes
-    const channel = supabase
-      .channel('whatsapp_messages_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'whatsapp_messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          console.log('[WhatsApp] New message received:', payload.new);
-          setMessages((current) => {
-            // Check if message already exists (prevent duplicates)
-            if (current.some(m => m.id === payload.new.id)) {
-              return current;
-            }
-            return [...current, payload.new as WhatsAppMessage];
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'whatsapp_messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          console.log('[WhatsApp] Message updated:', payload.new);
-          setMessages((current) =>
-            current.map((msg) =>
-              msg.id === payload.new.id ? (payload.new as WhatsAppMessage) : msg
-            )
-          );
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'whatsapp_messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          console.log('[WhatsApp] Message deleted:', payload.old);
-          setMessages((current) =>
-            current.filter((msg) => msg.id !== payload.old.id)
-          );
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, [conversationId]);
 
   const markAsRead = async () => {
     if (!conversationId) return;
-
     console.log('[WhatsApp] Marking conversation as read:', conversationId);
-    
-    const { error } = await supabase
-      .from('whatsapp_conversations')
-      .update({ unread_count: 0 })
-      .eq('id', conversationId);
-    
-    if (error) {
-      console.error('[WhatsApp] Error marking as read:', error);
-    } else {
-      console.log('[WhatsApp] Successfully marked as read');
-    }
   };
 
   return { messages, loading, markAsRead };

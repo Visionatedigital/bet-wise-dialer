@@ -116,7 +116,7 @@ export function AppSidebar() {
     >
       <SidebarHeader className="border-b border-[#333333]/10 p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#333333] text-[#FFE600]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-500 text-[#FFE600]">
             <Phone className="h-4 w-4" />
           </div>
           {!isCollapsed && (

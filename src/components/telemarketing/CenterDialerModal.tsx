@@ -30,6 +30,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
@@ -73,6 +74,7 @@ export function CenterDialerModal({
     const [isMuted, setIsMuted] = useState(false);
     const [isHold, setIsHold] = useState(false);
     const [disposition, setDisposition] = useState<string>("");
+    const [callNotes, setCallNotes] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [aiStage, setAiStage] = useState<'listening' | 'intro' | 'offer' | 'objection'>('listening');
     const { toast } = useToast();
@@ -158,12 +160,45 @@ export function CenterDialerModal({
 
         setIsSubmitting(true);
         try {
-            const { error } = await supabase
+            // 1. Update Lead Status and Last Activity
+            const { error: updateError } = await supabase
                 .from('leads')
-                .update({ status: disposition } as any)
+                .update({
+                    status: disposition,
+                    last_activity: callNotes || disposition
+                } as any)
                 .eq('id' as any, leadDbId as any);
 
-            if (error) throw error;
+            if (updateError) throw updateError;
+
+            // 2. Generate AI Actionable Summary if notes are provided
+            if (callNotes) {
+                try {
+                    toast({
+                        title: "AI Analyzing...",
+                        description: "Generating your actionable plan.",
+                    });
+
+                    const { data: aiData, error: aiError } = await supabase.functions.invoke('generate-lead-summary', {
+                        body: {
+                            leadId: leadDbId,
+                            notes: callNotes,
+                            disposition: disposition
+                        },
+                    });
+
+                    if (aiError) console.error("AI Summary Error:", aiError);
+                    else {
+                        toast({
+                            title: "AI Ready",
+                            description: "Actionable plan added to Kanban card.",
+                            className: "bg-blue-600 text-white border-none"
+                        });
+                    }
+                } catch (aiErr) {
+                    console.error("AI Invocation failed:", aiErr);
+                }
+            }
 
             toast({
                 title: "Feedback Saved",
@@ -408,7 +443,7 @@ export function CenterDialerModal({
                             <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Call Outcome</label>
                             <Select value={disposition} onValueChange={setDisposition}>
                                 <SelectTrigger className="w-full h-11 rounded-xl border-gray-200 bg-gray-50/50 focus:ring-blue-500/20">
-                                    <SelectValue placeholder="Select feedback..." />
+                                    <SelectValue placeholder="Select outcome..." />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {DISPOSITION_OPTIONS.map((option) => (
@@ -418,6 +453,16 @@ export function CenterDialerModal({
                                     ))}
                                 </SelectContent>
                             </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Call Notes</label>
+                            <Textarea
+                                placeholder="Add specific notes about this call..."
+                                className="min-h-[80px] rounded-xl border-gray-200 bg-gray-50/50 focus:ring-blue-500/20 resize-none text-sm"
+                                value={callNotes}
+                                onChange={(e) => setCallNotes(e.target.value)}
+                            />
                         </div>
 
                         <Button

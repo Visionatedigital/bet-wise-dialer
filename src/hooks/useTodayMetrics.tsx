@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/supabase/client';
 
 interface TodayMetrics {
   totalCalls: number;
@@ -26,13 +26,8 @@ export function useTodayMetrics() {
       const today = new Date().toISOString().split('T')[0];
 
       // Fetch all call activities for today
-      const { data: callActivities, error } = await supabase
-        .from('call_activities')
-        .select('status, duration_seconds, start_time, end_time')
-        .gte('start_time', `${today}T00:00:00`)
-        .lt('start_time', `${today}T23:59:59`);
-
-      if (error) throw error;
+      // Setting high limit to get all calls for today.
+      const callActivities = await api.get<any[]>(`/call-activities?start_date=${today}T00:00:00&end_date=${today}T23:59:59&limit=1000`);
 
       const totalCalls = callActivities?.length || 0;
       
@@ -83,29 +78,10 @@ export function useTodayMetrics() {
   useEffect(() => {
     fetchMetrics();
 
-    // Subscribe to call activity changes
-    const channel = supabase
-      .channel('call-activities-metrics')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'call_activities',
-        },
-        () => {
-          fetchMetrics();
-        }
-      )
-      .subscribe();
-
-    // Refresh every minute
+    // Refresh every minute, replaced websockets with polling
     const interval = setInterval(fetchMetrics, 60000);
 
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, []);
 
   return { metrics, loading, refetch: fetchMetrics };

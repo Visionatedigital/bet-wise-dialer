@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -28,16 +28,8 @@ export function useCallbacks() {
     
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("callbacks")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("status", "pending")
-        .order("scheduled_for", { ascending: true });
-
-      if (error) throw error;
-
-      setCallbacks((data || []) as Callback[]);
+      const data = await api.get<Callback[]>(`/callbacks?status=pending`);
+      setCallbacks(data || []);
     } catch (error) {
       console.error("Error fetching callbacks:", error);
       toast.error("Failed to load callbacks");
@@ -49,35 +41,14 @@ export function useCallbacks() {
   useEffect(() => {
     fetchCallbacks();
 
-    // Set up real-time subscription
-    const subscription = supabase
-      .channel('callbacks-changes')
-      .on(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'callbacks',
-          filter: `user_id=eq.${user?.id}`
-        },
-        () => fetchCallbacks()
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    // Replaced realtime subscription with polling
+    const interval = setInterval(fetchCallbacks, 30000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const updateCallback = async (id: string, updates: Partial<Callback>) => {
     try {
-      const { error } = await supabase
-        .from("callbacks")
-        .update(updates)
-        .eq("id", id);
-
-      if (error) throw error;
-      
+      await api.patch(`/callbacks/${id}`, updates);
       toast.success("Callback updated");
       await fetchCallbacks();
     } catch (error) {
@@ -88,12 +59,7 @@ export function useCallbacks() {
 
   const createCallback = async (callback: Omit<Callback, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      const { error } = await supabase
-        .from("callbacks")
-        .insert([callback]);
-
-      if (error) throw error;
-      
+      await api.post("/callbacks", callback);
       toast.success("Callback created");
       await fetchCallbacks();
     } catch (error) {
@@ -104,13 +70,7 @@ export function useCallbacks() {
 
   const deleteCallback = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from("callbacks")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
-      
+      await api.delete(`/callbacks/${id}`);
       toast.success("Callback deleted");
       await fetchCallbacks();
     } catch (error) {

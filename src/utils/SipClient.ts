@@ -1,14 +1,16 @@
 import { UserAgent, Registerer, Inviter, SessionState } from 'sip.js';
 import { SessionDescriptionHandler } from 'sip.js/lib/platform/web';
 
-// Africa's Talking SIP WebSocket configuration
+// BangBet PBX Server WebSocket configuration
 const AT_SIP_CONFIG = {
-  // WebSocket port for Africa's Talking SIP (WSS uses 443, not 5060)
-  wsPort: 443,
+  // PBX server IP address
+  pbxHost: import.meta.env.VITE_PBX_HOST || '192.168.100.200',
+  // WebSocket port for FreePBX WebRTC (8003 = WSS, 8088 = WS)
+  wsPort: 8003,
   // Fallback ports to try if primary fails
-  fallbackPorts: [5060, 8443],
+  fallbackPorts: [8088, 5060],
   // Connection timeout in milliseconds
-  connectionTimeout: 10000,
+  connectionTimeout: 15000,
   // Registration retry attempts
   maxRetries: 3,
   // Retry delay in milliseconds
@@ -46,20 +48,19 @@ export class SipClient {
         console.log('[SIP] Audio element created and added to DOM');
       }
 
-      // Parse username and domain from Africa's Talking format
-      // Username format: agent1.betsure@ug.sip.africastalking.com
+      // Parse username for PBX extension
+      // Username format can be: "1001" (extension only) or "1001@192.168.100.200"
       let sipUser: string;
       let sipDomain: string;
       
       if (sipUsername.includes('@')) {
         const parts = sipUsername.split('@');
-        const rawUser = parts[0];
-        const rawDomain = parts[1];
-        sipUser = rawUser.trim();
-        sipDomain = rawDomain.trim();
+        sipUser = parts[0].trim();
+        sipDomain = parts[1].trim();
       } else {
         sipUser = sipUsername.trim();
-        sipDomain = 'ug.sip.africastalking.com';
+        // Always use the PBX host as the SIP domain
+        sipDomain = AT_SIP_CONFIG.pbxHost;
       }
 
       // Extra debugging for hidden characters
@@ -81,11 +82,13 @@ export class SipClient {
         throw new Error('Failed to create SIP URI');
       }
 
-      // Try different ports - start with 443 (standard WSS), then fallbacks
+      // Try different ports - start with 8003 (FreePBX WSS), then fallbacks
       const portsToTry = [AT_SIP_CONFIG.wsPort, ...AT_SIP_CONFIG.fallbackPorts];
       const portToUse = portsToTry[retryCount % portsToTry.length];
       
-      const serverUrl = `wss://${sipDomain}:${portToUse}`;
+      // Use wss:// for port 8003 (TLS), ws:// for port 8088 (plain)
+      const protocol = portToUse === 8003 ? 'wss' : 'ws';
+      const serverUrl = `${protocol}://${AT_SIP_CONFIG.pbxHost}:${portToUse}/ws`;
       console.debug('[SIP] 🔗 Using WebSocket server:', serverUrl);
 
       // Configure UserAgent with WebSocket server
