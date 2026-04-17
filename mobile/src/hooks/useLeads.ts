@@ -4,7 +4,7 @@ import { Lead } from "../types";
 
 // The DB doesn't have a 'status' column — status is stored in last_activity.
 // Normalize leads to have a consistent .status field.
-const VALID_STATUSES = ["unassigned", "no_answer", "interested", "unreachable", "not_interested"];
+const VALID_STATUSES = ["unassigned", "no_answer", "interested", "unreachable", "not_interested", "answered_no_response"];
 
 function normalizeStatus(lead: Lead): Lead {
   let status = lead.status || lead.last_activity || "unassigned";
