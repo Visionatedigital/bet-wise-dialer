@@ -34,7 +34,8 @@ const KANBAN_COLUMNS = [
     { id: "no_answer", title: "No Answer", color: "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/50" },
     { id: "unreachable", title: "Unreachable", color: "bg-red-50 text-red-700 border-red-100 dark:bg-red-950/30 dark:text-red-400 dark:border-red-900/50" },
     { id: "interested", title: "Interested", color: "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/50" },
-    { id: "not_interested", title: "Not Interested", color: "bg-slate-50 text-slate-600 border-slate-100 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-800/50" }
+    { id: "not_interested", title: "Not Interested", color: "bg-slate-50 text-slate-600 border-slate-100 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-800/50" },
+    { id: "answered_no_response", title: "Answered-No Response", color: "bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900/50" }
 ];
 
 export function LeadsKanban({ leads, onStatusChange, onSelectLead, selectedLeadId }: LeadsKanbanProps) {
@@ -46,7 +47,8 @@ export function LeadsKanban({ leads, onStatusChange, onSelectLead, selectedLeadI
             no_answer: [],
             unreachable: [],
             interested: [],
-            not_interested: []
+            not_interested: [],
+            answered_no_response: []
         };
 
         leads.forEach(lead => {

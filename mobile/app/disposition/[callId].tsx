@@ -12,6 +12,7 @@ const DISPOSITIONS = [
   { value: "not_interested", label: "Not Interested", color: colors.status.error, bg: "#fee2e2" },
   { value: "no_answer", label: "No Answer", color: "#d97706", bg: "#fef3c7" },
   { value: "unreachable", label: "Unreachable", color: colors.text.secondary, bg: "#f3f4f6" },
+  { value: "answered_no_response", label: "Answered-No Response", color: "#7c3aed", bg: "#ede9fe" },
 ];
 
 export default function DispositionScreen() {

@@ -58,7 +58,8 @@ const KANBAN_COLUMNS = [
     { id: "unreachable", title: "Unreachable", color: "bg-red-50 text-red-700 border-red-100" },
     { id: "not_interested", title: "Not Interested", color: "bg-slate-50 text-slate-600 border-slate-100" },
     { id: "interested", title: "Interested", color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
-    { id: "no_answer", title: "No Answer", color: "bg-amber-50 text-amber-700 border-amber-100" }
+    { id: "no_answer", title: "No Answer", color: "bg-amber-50 text-amber-700 border-amber-100" },
+    { id: "answered_no_response", title: "Answered-No Response", color: "bg-purple-50 text-purple-700 border-purple-100" }
 ];
 
 const DUMMY_TRAITS = [
@@ -180,7 +181,8 @@ export function TelemarketingKanban() {
             unreachable: [],
             not_interested: [],
             interested: [],
-            no_answer: []
+            no_answer: [],
+            answered_no_response: []
         };
 
         leads.forEach(lead => {

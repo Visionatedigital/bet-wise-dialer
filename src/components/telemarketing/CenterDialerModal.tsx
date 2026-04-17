@@ -50,7 +50,8 @@ const DISPOSITION_OPTIONS = [
     { value: "unreachable", label: "Unreachable", color: "text-red-600" },
     { value: "not_interested", label: "Not Interested", color: "text-slate-600" },
     { value: "interested", label: "Interested", color: "text-emerald-600" },
-    { value: "no_answer", label: "No Answer", color: "text-amber-600" }
+    { value: "no_answer", label: "No Answer", color: "text-amber-600" },
+    { value: "answered_no_response", label: "Answered-No Response", color: "text-purple-600" }
 ];
 
 export function CenterDialerModal({
