@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Upload, FileText, AlertCircle } from "lucide-react";
 import * as XLSX from 'xlsx';
+import { detectCountryFromPhone, formatPhoneForCountry } from "@/config/countries";
 
 interface ImportLeadsForAgentModalProps {
   open: boolean;
@@ -42,20 +43,8 @@ export function ImportLeadsForAgentModal({
   };
 
   const formatPhoneNumber = (phone: string): string => {
-    // Remove all non-numeric characters
-    let cleaned = phone.replace(/\D/g, '');
-    
-    // If it starts with 0, replace with 256
-    if (cleaned.startsWith('0')) {
-      cleaned = '256' + cleaned.slice(1);
-    }
-    
-    // If it doesn't start with +, add it
-    if (!cleaned.startsWith('256')) {
-      cleaned = '256' + cleaned;
-    }
-    
-    return '+' + cleaned;
+    const country = detectCountryFromPhone(phone);
+    return formatPhoneForCountry(phone, country);
   };
 
   const parsePreview = async (file: File) => {
@@ -124,32 +113,17 @@ export function ImportLeadsForAgentModal({
         return;
       }
 
-      // Create leads with phone numbers assigned to agent
-      const leadsToInsert = phoneNumbers.map(phone => ({
-        name: phone,
-        phone: phone,
-        segment: 'semi-active',
-        user_id: agentId,
-        assigned_at: new Date().toISOString(),
-        priority: 'medium'
-      }));
-
-      // Insert in batches
+      // Import and assign directly to this agent in batches
       const batchSize = 100;
       let totalInserted = 0;
 
-      for (let i = 0; i < leadsToInsert.length; i += batchSize) {
-        const batch = leadsToInsert.slice(i, i + batchSize);
-        const { error } = await supabase
-          .from('leads')
-          .insert(batch);
-
-        if (error) {
-          console.error('Batch insert error:', error);
-          continue;
-        }
-        
-        totalInserted += batch.length;
+      for (let i = 0; i < phoneNumbers.length; i += batchSize) {
+        const batch = phoneNumbers.slice(i, i + batchSize);
+        const res = await api.post<{ imported: number }>('/leads/import-csv', {
+          numbers: batch,
+          distribute_to: [agentId],
+        });
+        totalInserted += res.imported || batch.length;
       }
 
       toast.success(`Successfully imported ${totalInserted} leads for ${agentName}`);

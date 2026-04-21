@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useCallMetrics } from "@/hooks/useCallMetrics";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { maskPhone } from "@/lib/formatters";
 import { AfterCallSummary, AfterCallSummaryData } from "./AfterCallSummary";
 import { parseCallbackIntent } from "@/utils/parseCallbackIntent";
@@ -139,22 +139,15 @@ export function Softphone({
   // Helper to create call activity on connect
   const createActivityOnConnect = async (number: string) => {
     try {
-      const { data, error } = await supabase
-        .from('call_activities')
-        .insert({
-          user_id: user?.id,
-          lead_name: effectiveLead?.name || "Unknown",
-          phone_number: number,
-          campaign_id: effectiveLead?.campaign ? undefined : undefined, // Placeholder logic, ideally lookup ID
-          status: 'connected',
-          start_time: new Date().toISOString(),
-          call_type: 'outbound'
-        } as any)
-        .select()
-        .single();
-
-      if (data) {
-        const activity = data as any;
+      const activity = await api.post<any>('/call-activities', {
+        user_id: user?.id,
+        lead_name: effectiveLead?.name || "Unknown",
+        phone_number: number,
+        status: 'connected',
+        start_time: new Date().toISOString(),
+        call_type: 'outbound'
+      });
+      if (activity?.id) {
         setCurrentCallId(activity.id);
         setContextCallId(activity.id);
         return activity.id;
@@ -172,66 +165,21 @@ export function Softphone({
       console.log('[WebRTC-INIT] ???? Starting WebRTC initialization');
       toast.info("Connecting to WebRTC...");
 
-      // First, check if we have a valid token in the database
-      console.log('[WebRTC-INIT] ???? Checking for existing token in database...');
-      const { data: existingTokenData, error: tokenError } = await supabase
-        .from('webrtc_tokens')
-        .select('*')
-        .single();
-
-      let tokenData;
-
-      if (!tokenError && existingTokenData && new Date((existingTokenData as any).expires_at) > new Date()) {
-        // Use existing valid token
-        const token = existingTokenData as any;
-        console.log('[WebRTC-INIT] ??? Found valid token in database');
-        console.log('[WebRTC-INIT] Token expires at:', token.expires_at);
-        tokenData = {
-          token: token.token,
-          clientName: token.client_name,
-          lifeTimeSec: Math.floor((new Date(token.expires_at).getTime() - Date.now()) / 1000)
-        };
-      } else {
-        // Fetch new token
-        console.log('[WebRTC-INIT] ???? Fetching new token from Supabase...');
-        const { data, error } = await supabase.functions.invoke('get-webrtc-token');
-
-        if (error) {
-          console.error('[WebRTC-INIT] ??? Token request failed:', error);
-          throw error;
-        }
-
-        if (!data.token) {
-          console.error('[WebRTC-INIT] ??? No token in response:', data);
-          throw new Error('No token received');
-        }
-
-        console.log('[WebRTC-INIT] ??? New token received successfully');
-        tokenData = data;
-
-        // Store token in database
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-        const { error: storeError } = await supabase
-          .from('webrtc_tokens')
-          .upsert(
-            {
-              user_id: user?.id,
-              token: tokenData.token,
-              client_name: tokenData.clientName,
-              expires_at: expiresAt.toISOString()
-            } as any,
-            {
-              onConflict: 'user_id', // use unique user_id key for upsert
-            }
-          );
-
-        if (storeError && storeError.code !== '23505') {
-          // 23505 = unique violation; safe to ignore here because upsert semantics still hold
-          console.error('[WebRTC-INIT] ?????? Failed to store token:', storeError);
-        } else if (!storeError) {
-          console.log('[WebRTC-INIT] ??? Token stored in database');
-        }
+      // Fetch WebRTC token from server
+      let tokenData: any;
+      try {
+        console.log('[WebRTC-INIT] Fetching token from server...');
+        tokenData = await api.get<any>('/webrtc-token');
+      } catch (err) {
+        throw new Error('WebRTC token endpoint not available: ' + (err instanceof Error ? err.message : String(err)));
       }
+
+      if (!tokenData?.token) {
+        console.error('[WebRTC-INIT] No token in response:', tokenData);
+        throw new Error('No token received from server');
+      }
+
+      console.log('[WebRTC-INIT] Token received successfully');
 
       console.log('[WebRTC-INIT] Client name:', tokenData.clientName);
       console.log('[WebRTC-INIT] Token (first 30 chars):', tokenData.token?.substring(0, 30) + '...');
@@ -552,16 +500,12 @@ export function Softphone({
       // Get campaign_id if available
       let campaignId = null;
       if (pendingCallData.campaign !== 'No Campaign') {
-        const { data: campaignData, error: campaignError } = await supabase
-          .from('campaigns')
-          .select('id')
-          .eq('name' as any, pendingCallData.campaign as any)
-          .single();
-
-        if (campaignError) {
-          console.warn('[Softphone] Could not find campaign:', campaignError);
-        } else if (campaignData) {
-          campaignId = (campaignData as any).id;
+        try {
+          const campaigns = await api.get<any[]>('/campaigns');
+          const found = campaigns.find((c: any) => c.name === pendingCallData.campaign);
+          if (found) campaignId = found.id;
+        } catch {
+          console.warn('[Softphone] Could not find campaign');
         }
       }
 
@@ -610,24 +554,22 @@ export function Softphone({
       const callbackIntent = parseCallbackIntent(data.notes);
 
       if (callbackIntent.shouldCreateCallback && user) {
-        // Automatically create callback - only use fields that exist in the schema
-        const { error: callbackError } = await supabase.from('callbacks').insert([{
-          user_id: user.id,
-          scheduled_for: callbackIntent.callbackDate!.toISOString(),
-          status: 'pending',
-          notes: data.notes,
-          lead_name: pendingCallData.leadName,
-          phone_number: pendingCallData.phoneNumber
-        } as any]);
-
-        if (callbackError) {
-          console.error('[Softphone] Error creating callback:', callbackError);
-          toast.success("Call notes saved (callback scheduling failed)");
-        } else {
+        try {
+          await api.post('/callbacks', {
+            user_id: user.id,
+            scheduled_for: callbackIntent.callbackDate!.toISOString(),
+            status: 'pending',
+            notes: data.notes,
+            lead_name: pendingCallData.leadName,
+            phone_number: pendingCallData.phoneNumber
+          });
           const formattedDate = callbackIntent.callbackDate!.toLocaleDateString();
           toast.success("Call notes saved and callback scheduled", {
             description: `Follow-up set for ${formattedDate}`
           });
+        } catch (callbackError) {
+          console.error('[Softphone] Error creating callback:', callbackError);
+          toast.success("Call notes saved (callback scheduling failed)");
         }
       } else {
         toast.success("Call notes saved successfully");
@@ -637,38 +579,30 @@ export function Softphone({
       const targetLeadId = pendingCallData.leadId || effectiveLead?.id;
       const targetPhoneNumber = pendingCallData.phoneNumber || effectiveLead?.phone;
 
-      // Update lead status in leads table
+      // Update lead status
       if (targetLeadId) {
-        const { error: updateError } = await supabase
-          .from('leads')
-          .update({
+        try {
+          const updateData: any = {
             status: data.disposition,
             last_contact_at: new Date().toISOString()
-          } as any)
-          .eq('id' as any, targetLeadId as any);
+          };
 
-        if (updateError) {
-          console.error('[Softphone] Error updating lead status (by ID):', updateError);
-        } else {
-          console.log('[Softphone] Lead status updated to:', data.disposition, 'for ID:', targetLeadId);
-        }
-      } else if (targetPhoneNumber) {
-        const { error: updateError } = await supabase
-          .from('leads')
-          .update({
-            status: data.disposition,
-            last_contact_at: new Date().toISOString()
-          } as any)
-          .eq('phone' as any, targetPhoneNumber as any);
+          // Auto-categorize lifecycle stage based on disposition
+          if (data.disposition === 'interested') {
+            updateData.lifecycle_stage = 'interested';
+          } else if (data.disposition === 'not_interested' || data.disposition === 'unreachable') {
+            updateData.lifecycle_stage = 'dead';
+          } else {
+            updateData.lifecycle_stage = 'called';
+          }
 
-        if (updateError) {
+          await api.patch(`/leads/${targetLeadId}`, updateData);
+          console.log('[Softphone] Lead status updated to:', data.disposition, 'Stage:', updateData.lifecycle_stage, 'for ID:', targetLeadId);
+        } catch (updateError) {
           console.error('[Softphone] Error updating lead status (by ID):', updateError);
-        } else {
-          console.log('[Softphone] Lead status updated to:', data.disposition);
         }
       } else {
-        console.warn('[Softphone] No phone number available to update lead status. Pending:', pendingCallData, 'Effective:', effectiveLead);
-        toast.warning("Could not update lead status: missing ID/Phone");
+        console.warn('[Softphone] No lead ID available to update lead status. Pending:', pendingCallData, 'Effective:', effectiveLead);
       }
 
       setPendingCallData(null);
@@ -985,36 +919,7 @@ export function Softphone({
   };
 
   const handleTestApiCall = async () => {
-    try {
-      const testNumber = dialedNumber || currentLead?.phone || '+256702282029';
-
-      toast.loading('Testing direct API call to Africa\'s Talking...');
-
-      const { data, error } = await supabase.functions.invoke('test-voice-call', {
-        body: { phoneNumber: testNumber }
-      });
-
-      toast.dismiss();
-
-      if (error) {
-        console.error('API test error:', error);
-        toast.error(`API Error: ${error.message}`);
-        return;
-      }
-
-      if (data.error) {
-        console.error('Call failed:', data);
-        toast.error(`Call failed: ${data.error}`);
-        toast.info('Check edge function logs for details');
-      } else {
-        console.log('Call response:', data);
-        toast.success('API call successful!');
-      }
-    } catch (error) {
-      console.error('Error testing API call:', error);
-      toast.dismiss();
-      toast.error('Failed to test API call');
-    }
+    toast.error('Test voice call is not available in this version');
   };
 
   // Register controls with context so other components can drive the call

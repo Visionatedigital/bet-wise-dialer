@@ -139,6 +139,24 @@ export default function TabLayout() {
           drawerItemStyle: isManager ? {} : { display: "none" },
         }}
       />
+      <Drawer.Screen
+        name="import-leads"
+        options={{
+          title: "Import Leads",
+          drawerLabel: "Import Leads",
+          drawerIcon: ({ focused, color }) => <Feather name="upload-cloud" size={18} color={color} />,
+          drawerItemStyle: isManager ? {} : { display: "none" },
+        }}
+      />
+      <Drawer.Screen
+        name="refresh-performance"
+        options={{
+          title: "Refresh Performance",
+          drawerLabel: "Refresh Performance",
+          drawerIcon: ({ focused, color }) => <Feather name="refresh-ccw" size={18} color={color} />,
+          drawerItemStyle: isManager ? {} : { display: "none" },
+        }}
+      />
     </Drawer>
   );
 }

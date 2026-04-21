@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Users, Phone, Calendar, Clock, Download, RefreshCw, LogOut, Settings, UserPlus, FileUp, Trash2, Shield, Target, Brain, UserX, BadgeCheck, Share2 } from "lucide-react";
 import { ImportLeadsModal } from "@/components/leads/ImportLeadsModal";
@@ -66,33 +66,14 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
 
-      // Fetch agent monitor data from secure function
-      const { data: monitorData, error: monitorError } = await supabase.rpc('get_agent_monitor_data', {
-        manager_filter: null
-      });
-      if (monitorError) throw monitorError;
+      // Fetch agent monitor data
+      const monitorData = await api.get<any[]>('/monitor').catch(() => []);
 
-      // Build a map of today's assigned leads per agent
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-
-      // 1. Fetch counts & scores (Safe query - Increased limit for accurate stats)
-      const { data: leadRows, error: leadAggError } = await supabase
-        .from('leads')
-        .select('user_id, assigned_at, lead_score')
-        .not('user_id', 'is', null)
-        .limit(50000); // Increase limit to capture full distribution stats
-
-      if (leadAggError) throw leadAggError;
-
-      const leadCounts: Record<string, number> = {};
-      const leadScores: Record<string, number> = {};
-
-      (leadRows || []).forEach((r: any) => {
-        if (r.user_id) {
-          leadCounts[r.user_id] = (leadCounts[r.user_id] || 0) + 1;
-          leadScores[r.user_id] = (leadScores[r.user_id] || 0) + (r.lead_score || 0);
-        }
+      // Fetch distribution stats (lead counts & scores per agent)
+      const distStats = await api.get<any>('/leads/distribution-stats').catch(() => ({ agents: [] }));
+      const agentStats: Record<string, { lead_count: number; total_score: number }> = {};
+      (distStats.agents || []).forEach((a: any) => {
+        agentStats[a.id] = { lead_count: a.lead_count ?? 0, total_score: a.total_score ?? 0 };
       });
 
       const agentsWithLeads = (monitorData || []).map((a: any) => ({
@@ -100,28 +81,18 @@ const AdminDashboard = () => {
         full_name: a.full_name || a.email || 'Unknown',
         email: a.email || '',
         status: a.current_call_start ? 'on-call' : (a.status || 'offline'),
-        assignedLeads: leadCounts[a.id] ?? 0,
-        totalScore: leadScores[a.id] ?? 0,
+        assignedLeads: agentStats[a.id]?.lead_count ?? 0,
+        totalScore: agentStats[a.id]?.total_score ?? 0,
         managerId: a.manager_id,
       }));
 
       setAgents(agentsWithLeads);
 
-      // Fetch managers
-      const { data: managerRoles } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role', 'management');
+      // Fetch managers from users endpoint
+      const allUsers = await api.get<any[]>('/users').catch(() => []);
+      const managerUsers = allUsers.filter((u: any) => u.roles?.includes('management') && u.approved);
 
-      const managerIds = managerRoles?.map(r => r.user_id) || [];
-
-      const { data: managerProfiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', managerIds)
-        .eq('approved', true);
-
-      const managersWithAgents = (managerProfiles || []).map((m: any) => ({
+      const managersWithAgents = managerUsers.map((m: any) => ({
         id: m.id,
         full_name: m.full_name || m.email || 'Unknown',
         email: m.email || '',
@@ -131,14 +102,9 @@ const AdminDashboard = () => {
       setManagers(managersWithAgents);
 
       // Fetch unassigned leads
-      const { data: leads } = await supabase
-        .from('leads')
-        .select('*')
-        .is('user_id', null)
-        .order('created_at', { ascending: false })
-        .limit(10000);
+      const leads = await api.get<any[]>('/leads/unassigned').catch(() => []);
 
-      const formattedLeads = (leads || []).map(lead => ({
+      const formattedLeads = (leads || []).map((lead: any) => ({
         id: lead.id,
         name: lead.name,
         phone: lead.phone,
@@ -160,13 +126,7 @@ const AdminDashboard = () => {
 
   const handleManagerAssignment = async (agentId: string, managerId: string | null) => {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ manager_id: managerId === 'unassign' ? null : managerId })
-        .eq('id', agentId);
-
-      if (error) throw error;
-
+      await api.patch(`/profiles/${agentId}`, { manager_id: managerId === 'unassign' ? null : managerId });
       toast.success('Manager assignment updated');
       fetchData();
     } catch (error) {
@@ -177,16 +137,7 @@ const AdminDashboard = () => {
 
   const handleUnassignAllLeads = async () => {
     try {
-      const { error } = await supabase
-        .from('leads')
-        .update({
-          user_id: null,
-          assigned_at: null
-        })
-        .not('user_id', 'is', null);
-
-      if (error) throw error;
-
+      await api.post('/leads/unassign-all');
       toast.success('All leads unassigned successfully');
       fetchData();
     } catch (error) {
@@ -196,155 +147,18 @@ const AdminDashboard = () => {
   };
 
   const handleRequestLeads = async () => {
-    setSyncing(true);
-    setSyncStatus('Connecting to generic API...');
-
-    // Simulate AI steps for UX (since the edge function does it all in one go, it might be too fast to see)
-    setTimeout(() => setSyncStatus('Fetching player profiles...'), 800);
-    setTimeout(() => setSyncStatus('AI Analyzing betting patterns...'), 2000);
-    setTimeout(() => setSyncStatus('Calculating Lead Scores...'), 3500);
-
-    try {
-      const limit = requestLeadCount ? parseInt(requestLeadCount) : 2000; // Increased to get all leads
-
-      const { data, error } = await supabase.functions.invoke('vip-dormant-sync', {
-        body: {
-          segment: requestSegment,
-          limit: limit
-        }
-      });
-
-      if (error) throw error;
-
-      const syncedCount = data?.players_synced || 0;
-      setLastSyncTime(new Date().toISOString());
-      setLastSyncCount(syncedCount);
-
-      toast.success(`Success! Imported and AI-Analyzed ${syncedCount} leads.`);
-      fetchData(); // Refresh the dashboard
-    } catch (error) {
-      console.error('Error requesting leads:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      toast.error('Failed to request leads from BangBet - check console for details');
-    } finally {
-      setSyncing(false);
-      setSyncStatus('');
-    }
+    toast.error('BangBet API sync is not available — please use the CSV/Excel import instead');
   };
   const handleDistributeLeads = async () => {
     setDistributing(true);
     try {
-      // Pass the requested lead count as limit if available
       const limit = requestLeadCount ? parseInt(requestLeadCount) : 10000;
-
-      // --- CLIENT SIDE DISTRIBUTION ---
-      // Since Edge Function deployment failed, we run the logic here.
-
-      // 1. Fetch Agents (Online & Approved AND Role is 'agent')
-      // First fetch online profiles
-      const { data: onlineProfiles, error: agentsError } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .eq('approved', true)
-        .eq('status', 'online');
-
-      if (agentsError) throw agentsError;
-
-      if (!onlineProfiles || onlineProfiles.length === 0) {
-        toast.error("No online users found.");
-        setDistributing(false);
-        return;
-      }
-
-      // Then filter for strictly 'agent' role to avoid distributing to admins/managers
-      const { data: agentRoles } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role', 'agent')
-        .in('user_id', onlineProfiles.map(p => p.id));
-
-      const validAgentIds = new Set(agentRoles?.map(r => r.user_id) || []);
-      const onlineAgents = onlineProfiles.filter(p => validAgentIds.has(p.id));
-
-      if (onlineAgents.length === 0) {
-        toast.error("No online AGENTS found (Admins/Managers excluded).");
-        setDistributing(false);
-        return;
-      }
-
-      // 2. Fetch Unassigned Leads (Respecting Limit)
-      // Try with score first, fallback if error
-      let leadsToDistribute: any[] = [];
-      try {
-        const { data, error } = await supabase
-          .from('leads')
-          .select('id, lead_score')
-          .is('user_id', null)
-          .order('lead_score', { ascending: false })
-          .limit(limit);
-
-        if (error) throw error;
-        leadsToDistribute = data || [];
-      } catch (err) {
-        console.warn("Falling back to unscored distribution", err);
-        const { data } = await supabase
-          .from('leads')
-          .select('id')
-          .is('user_id', null)
-          .limit(limit);
-        leadsToDistribute = data || [];
-      }
-
-      if (leadsToDistribute.length === 0) {
-        toast.info("No unassigned leads found.");
-        return;
-      }
-
-      // 3. Current Load Balancing
-      // To ensure true fairness, we should consider *current* load, 
-      // but for now we'll just distribute this batch evenly among them.
-      // A more advanced version would fetch current counts first.
-
-      // Initialize trackers
-      const agentStats = onlineAgents.map(a => ({
-        id: a.id,
-        count: 0,
-        score: 0
-      }));
-
-      const updates = leadsToDistribute.map(lead => {
-        // Sort to find best candidate (Lowest Score -> Lowest Count)
-        agentStats.sort((a, b) => {
-          if (a.score !== b.score) return a.score - b.score;
-          return a.count - b.count;
-        });
-
-        const target = agentStats[0];
-        target.count++;
-        target.score += (lead.lead_score || 0);
-
-        return {
-          id: lead.id,
-          user_id: target.id,
-          assigned_at: new Date().toISOString()
-        };
-      });
-
-      // 4. Perform Updates (Batched)
-      const batchSize = 50;
-      for (let i = 0; i < updates.length; i += batchSize) {
-        const batch = updates.slice(i, i + batchSize);
-        await Promise.all(batch.map(u =>
-          supabase.from('leads').update({ user_id: u.user_id, assigned_at: u.assigned_at }).eq('id', u.id)
-        ));
-      }
-
-      toast.success(`Successfully distributed ${updates.length} leads among ${onlineAgents.length} agents`);
-      fetchData(); // Refresh the dashboard
+      const res = await api.post<{ message: string; total_distributed: number }>('/leads/distribute', { limit });
+      toast.success(res.message || `Distributed ${res.total_distributed} leads`);
+      fetchData();
     } catch (error: any) {
       console.error('Error distributing leads:', error);
-      const errorMessage = error?.message || 'Failed to distribute leads';
-      toast.error(`Error: ${errorMessage}`);
+      toast.error(error?.message || 'Failed to distribute leads');
     } finally {
       setDistributing(false);
     }
@@ -361,59 +175,7 @@ const AdminDashboard = () => {
   }, [aiLogs]);
 
   const handleAnalyzeLeads = async () => {
-    // If already analyzing, this click means STOP
-    if (analyzing) {
-      stopAnalysisRef.current = true;
-      toast.info("Stopping analysis after current batch...");
-      return;
-    }
-
-    setAnalyzing(true);
-    stopAnalysisRef.current = false;
-    let totalProcessed = 0;
-
-    try {
-      toast.info("Starting AI Auto-Analysis. Click again to stop.");
-
-      while (!stopAnalysisRef.current) {
-        const { data, error } = await supabase.functions.invoke('analyze-leads');
-
-        if (error) throw error;
-
-        if (data?.logs && Array.isArray(data.logs)) {
-          console.group(`🧠 AI Batch Logs (Total so far: ${totalProcessed})`);
-          data.logs.forEach((log: string) => console.log(log));
-          console.groupEnd();
-        }
-
-        const count = data?.processed || 0;
-
-        if (count === 0) {
-          toast.info("Analysis Complete: No more unscored leads found.");
-          break;
-        }
-
-        totalProcessed += count;
-        toast.success(`AI Processed batch of ${count} leads... (Total: ${totalProcessed})`);
-
-        // Small delay to prevent rate limiting issues and allow UI updates
-        await new Promise(r => setTimeout(r, 500));
-      }
-
-      if (totalProcessed > 0) {
-        toast.success(`Analysis Finished! Total analyzed: ${totalProcessed} leads.`);
-        fetchData();
-      } else if (stopAnalysisRef.current) {
-        toast.info("Analysis stopped by user.");
-      }
-
-    } catch (error) {
-      console.error('Error analyzing leads:', error);
-      toast.error('Failed to analyze leads');
-    } finally {
-      setAnalyzing(false);
-      stopAnalysisRef.current = false;
-    }
+    toast.info('AI lead analysis is not available in this version');
   };
 
 

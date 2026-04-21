@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWhatsAppMessages } from "@/hooks/useWhatsAppMessages";
 import { useWhatsAppConversations } from "@/hooks/useWhatsAppConversations";
-import { supabase } from "@/integrations/supabase/client";
+// supabase removed
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -91,26 +91,7 @@ useEffect(() => {
 
   // Handle sending follow-up template
   const handleSendFollowUpTemplate = async () => {
-    if (!conversationId) return;
-
-    setIsSendingTemplate(true);
-    try {
-      const { error } = await supabase.functions.invoke('whatsapp-send-message', {
-        body: {
-          conversationId,
-          templateName: 'test_template_1',
-        },
-      });
-
-      if (error) throw error;
-      
-      toast.success('Follow-up message sent');
-    } catch (error) {
-      console.error('Error sending template:', error);
-      toast.error('Failed to send follow-up message');
-    } finally {
-      setIsSendingTemplate(false);
-    }
+    toast.error('WhatsApp integration is not available in this version');
   };
 
   // Load AI mode from localStorage
@@ -132,112 +113,14 @@ useEffect(() => {
 
   // Handle delete conversation
   const handleDeleteConversation = async () => {
-    if (!conversationId) return;
-
-    setIsDeleting(true);
-    try {
-      const { error } = await supabase
-        .from('whatsapp_conversations')
-        .delete()
-        .eq('id', conversationId);
-
-      if (error) throw error;
-
-      toast.success('Chat deleted successfully');
-      setShowDeleteDialog(false);
-      onConversationDeleted?.();
-    } catch (error) {
-      console.error('Error deleting conversation:', error);
-      toast.error('Failed to delete chat');
-    } finally {
-      setIsDeleting(false);
-    }
+    toast.error('Chat deletion is not available in this version');
+    setShowDeleteDialog(false);
   };
 
-  // Handle incoming messages when AI mode is on
+  // Track message count (AI mode not available)
   useEffect(() => {
-    const handleIncomingMessage = async () => {
-      if (!conversationId || !aiMode || isProcessing) return;
-      
-      // Check if new message came in
-      if (messages.length > previousMessageCountRef.current) {
-        const latestMessage = messages[messages.length - 1];
-        
-        // Only respond to user messages
-        if (latestMessage.sender_type === 'user') {
-          setIsProcessing(true);
-          
-          try {
-            console.log('[AI] Generating response for message:', latestMessage.content);
-            
-            // Get AI response
-            const { data: aiData, error: aiError } = await supabase.functions.invoke(
-              'whatsapp-ai-response',
-              {
-                body: { 
-                  messages: messages.slice(-10), // Last 10 messages for context
-                  conversationContext: {
-                    contact_name: conversation?.contact_name,
-                    contact_phone: conversation?.contact_phone
-                  }
-                }
-              }
-            );
-
-            console.log('[AI] Response received:', aiData);
-
-            if (aiError) {
-              console.error('[AI] Error from AI function:', aiError);
-              throw aiError;
-            }
-
-            if (!aiData?.response) {
-              console.error('[AI] No response in AI data:', aiData);
-              throw new Error('AI returned empty response');
-            }
-
-            console.log('[AI] Sending message:', aiData.response);
-
-            // Send AI response
-            const { data: sendData, error: sendError } = await supabase.functions.invoke(
-              'whatsapp-send-message',
-              {
-                body: {
-                  conversationId,
-                  message: aiData.response
-                }
-              }
-            );
-
-            if (sendError) {
-              const msg = (sendError as any)?.message || '';
-              const ctxBody = (sendError as any)?.context?.body;
-              const payload = (() => { try { return typeof ctxBody === 'string' ? JSON.parse(ctxBody) : ctxBody; } catch { return null; }})();
-              const code = (payload && (payload.error || payload.code)) || '';
-              if (msg.includes('409') || code === 'WHATSAPP_24H_WINDOW') {
-                toast.error('24h window closed. Enable template sending to re-engage.');
-                return;
-              }
-              console.error('[AI] Error sending message:', sendError);
-              throw sendError;
-            }
-
-            console.log('[AI] Message sent successfully:', sendData);
-
-          } catch (error) {
-            console.error('[AI] Full error:', error);
-            toast.error('Failed to generate AI response: ' + (error instanceof Error ? error.message : 'Unknown error'));
-          } finally {
-            setIsProcessing(false);
-          }
-        }
-      }
-      
-      previousMessageCountRef.current = messages.length;
-    };
-
-    handleIncomingMessage();
-  }, [messages.length, conversationId, aiMode, isProcessing, messages, conversation]);
+    previousMessageCountRef.current = messages.length;
+  }, [messages.length]);
 
   // Mark conversation as read when opened or when new messages arrive
   useEffect(() => {

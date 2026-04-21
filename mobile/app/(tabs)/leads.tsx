@@ -22,6 +22,7 @@ const CATEGORIES = [
   { id: "unreachable", title: "Unreachable", bg: "#fef2f2", text: "#b91c1c", border: "#fecaca", dot: "#ef4444" },
   { id: "interested", title: "Interested", bg: "#ecfdf5", text: "#047857", border: "#a7f3d0", dot: "#10b981" },
   { id: "not_interested", title: "Not Interested", bg: "#f8fafc", text: "#475569", border: "#e2e8f0", dot: "#94a3b8" },
+  { id: "answered_no_response", title: "No Response", bg: "#faf5ff", text: "#7c3aed", border: "#e9d5ff", dot: "#a855f7" },
 ];
 
 function maskPhone(phone: string): string {
@@ -194,11 +195,55 @@ export default function LeadsScreen() {
                 </View>
               )}
               {lead.trait && (
-                <View style={[styles.tag, { backgroundColor: "#dcfce7", borderColor: "#bbf7d0" }]}>
-                  <Text style={[styles.tagText, { color: "#166534" }]}>{lead.trait}</Text>
+                <View style={[styles.tag, {
+                  backgroundColor: lead.trait === 'High Staker' ? '#fee2e2' : lead.trait === 'Medium Staker' ? '#fef3c7' : lead.trait === 'Frequent Bettor' ? '#dbeafe' : lead.trait === 'Dormant' ? '#f3f4f6' : '#dcfce7',
+                  borderColor: lead.trait === 'High Staker' ? '#fecaca' : lead.trait === 'Medium Staker' ? '#fde68a' : lead.trait === 'Frequent Bettor' ? '#bfdbfe' : lead.trait === 'Dormant' ? '#e5e7eb' : '#bbf7d0',
+                }]}>
+                  <Text style={[styles.tagText, {
+                    color: lead.trait === 'High Staker' ? '#991b1b' : lead.trait === 'Medium Staker' ? '#92400e' : lead.trait === 'Frequent Bettor' ? '#1e40af' : lead.trait === 'Dormant' ? '#6b7280' : '#166534',
+                  }]}>{lead.trait}</Text>
+                </View>
+              )}
+              {lead.preferred_product && (
+                <View style={[styles.tag, { backgroundColor: "#eff6ff", borderColor: "#bfdbfe" }]}>
+                  <Text style={[styles.tagText, { color: "#1d4ed8" }]}>
+                    {lead.preferred_product === 'Sports' ? '⚽ ' : lead.preferred_product === 'Gaming' ? '🎮 ' : ''}{lead.preferred_product}
+                  </Text>
                 </View>
               )}
             </View>
+
+            {/* Quick stats row */}
+            {(lead.betting_patterns?.deposit_usd > 0 || lead.deposit_count > 0 || lead.last_bet_date) && (
+              <View style={styles.depositRow}>
+                {lead.betting_patterns?.deposit_usd > 0 && (
+                  <>
+                    <Feather name="dollar-sign" size={10} color={colors.text.muted} />
+                    <Text style={styles.depositText}>
+                      ${Number(lead.betting_patterns.deposit_usd).toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    </Text>
+                  </>
+                )}
+                {lead.deposit_count != null && lead.deposit_count > 0 && (
+                  <>
+                    <Text style={styles.depositDot}>·</Text>
+                    <Text style={styles.depositText}>{lead.deposit_count.toLocaleString()} bets</Text>
+                  </>
+                )}
+                {lead.last_bet_date && (
+                  <>
+                    <Text style={styles.depositDot}>·</Text>
+                    <Feather name="clock" size={10} color={colors.text.muted} />
+                    <Text style={styles.depositText}>
+                      {(() => {
+                        const d = Math.floor((Date.now() - new Date(lead.last_bet_date).getTime()) / 86400000);
+                        return d === 0 ? 'Today' : d < 30 ? `${d}d ago` : `${Math.floor(d/30)}mo ago`;
+                      })()}
+                    </Text>
+                  </>
+                )}
+              </View>
+            )}
 
             {/* AI Strategy / Last Note */}
             {(lead.next_action || lead.last_activity) && (
@@ -315,6 +360,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border.default,
   },
   tagText: { fontSize: 9, fontWeight: "700", color: colors.text.secondary, textTransform: "uppercase", letterSpacing: 0.3 },
+
+  // Deposit info
+  depositRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, paddingLeft: 2 },
+  depositText: { fontSize: 11, color: colors.text.secondary, fontWeight: "500" },
+  depositDot: { fontSize: 11, color: colors.text.muted },
 
   // Note box
   noteBox: {

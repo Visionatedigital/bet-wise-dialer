@@ -7,7 +7,7 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, full_name: string) => Promise<string>;
+  signup: (email: string, password: string, full_name: string, country?: string) => Promise<string>;
   logout: () => Promise<void>;
 }
 
@@ -61,12 +61,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signup = async (email: string, password: string, full_name: string): Promise<string> => {
+  const signup = async (email: string, password: string, full_name: string, country = 'UG'): Promise<string> => {
     const res = await api.post<{ message: string }>("/auth/signup", {
       email,
       password,
       full_name,
       role: "agent",
+      country,
     });
     return res.message;
   };

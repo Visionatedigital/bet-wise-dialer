@@ -1,4 +1,4 @@
-import { BarChart3, TrendingUp, Users, Target, FileText, Settings, Phone } from "lucide-react";
+import { BarChart3, TrendingUp, Users, Target, FileText, Settings, Phone, Zap, Upload, RefreshCcw } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -18,6 +18,9 @@ const managementMenuItems = [
   { title: "Performance", url: "/performance", icon: TrendingUp },
   { title: "Agent Monitoring", url: "/management-monitor", icon: Users },
   { title: "Campaigns", url: "/management-campaigns", icon: Target },
+  { title: "Import Leads", url: "/manager/import-leads", icon: Upload },
+  { title: "Refresh Performance", url: "/manager/refresh-performance", icon: RefreshCcw },
+  { title: "Promising Leads", url: "/promising-leads", icon: Zap },
   { title: "Reports", url: "/management-reports", icon: FileText },
   { title: "Settings", url: "/settings", icon: Settings },
 ];

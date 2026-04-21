@@ -10,25 +10,51 @@ router.use(requireAdmin as any);
 router.get('/admin', async (req: AuthRequest, res: Response) => {
   try {
     const { start_date } = req.query;
+    const isManagement = req.user!.role === 'management';
+    const managerId = req.user!.id;
 
-    const usersRes = await query('SELECT COUNT(*) FROM users');
-    const profilesRes = await query("SELECT COUNT(*) FROM profiles WHERE status = 'online'");
-    const rolesRes = await query("SELECT COUNT(*) FROM user_roles WHERE role = 'agent'");
-    const leadsRes = await query('SELECT COUNT(*) FROM leads');
-    
-    // Calls total and recent
-    const callsTotalRes = await query('SELECT COUNT(*) FROM call_activities');
+    // Country subquery used in parameterized queries
+    const cSub = `(SELECT country FROM profiles WHERE id = $1)`;
+
+    const [usersRes, profilesRes, rolesRes, leadsRes, callsTotalRes] = await Promise.all([
+      isManagement
+        ? query(`SELECT COUNT(*) FROM profiles WHERE country = ${cSub}`, [managerId])
+        : query('SELECT COUNT(*) FROM users'),
+      isManagement
+        ? query(`SELECT COUNT(*) FROM profiles WHERE country = ${cSub} AND status = 'online'`, [managerId])
+        : query("SELECT COUNT(*) FROM profiles WHERE status = 'online'"),
+      isManagement
+        ? query(`SELECT COUNT(*) FROM user_roles ur JOIN profiles p ON p.id = ur.user_id WHERE ur.role = 'agent' AND p.country = ${cSub}`, [managerId])
+        : query("SELECT COUNT(*) FROM user_roles WHERE role = 'agent'"),
+      isManagement
+        ? query(`SELECT COUNT(*) FROM leads WHERE country = ${cSub}`, [managerId])
+        : query('SELECT COUNT(*) FROM leads'),
+      isManagement
+        ? query(`SELECT COUNT(*) FROM call_activities ca JOIN profiles p ON p.id = ca.user_id WHERE p.country = ${cSub}`, [managerId])
+        : query('SELECT COUNT(*) FROM call_activities'),
+    ]);
+
     let callsRecentRes = callsTotalRes;
     let callsByStatusRes: any = { rows: [] };
-    
+
     if (start_date) {
-      callsRecentRes = await query('SELECT COUNT(*) FROM call_activities WHERE start_time >= $1', [start_date]);
-      callsByStatusRes = await query('SELECT status, COUNT(*) as count FROM call_activities WHERE start_time >= $1 GROUP BY status', [start_date]);
+      [callsRecentRes, callsByStatusRes] = await Promise.all([
+        isManagement
+          ? query(`SELECT COUNT(*) FROM call_activities ca JOIN profiles p ON p.id = ca.user_id WHERE p.country = ${cSub} AND ca.start_time >= $2`, [managerId, start_date])
+          : query('SELECT COUNT(*) FROM call_activities WHERE start_time >= $1', [start_date]),
+        isManagement
+          ? query(`SELECT ca.status, COUNT(*) as count FROM call_activities ca JOIN profiles p ON p.id = ca.user_id WHERE p.country = ${cSub} AND ca.start_time >= $2 GROUP BY ca.status`, [managerId, start_date])
+          : query('SELECT status, COUNT(*) as count FROM call_activities WHERE start_time >= $1 GROUP BY status', [start_date]),
+      ]);
     } else {
-      callsByStatusRes = await query('SELECT status, COUNT(*) as count FROM call_activities GROUP BY status');
+      callsByStatusRes = isManagement
+        ? await query(`SELECT ca.status, COUNT(*) as count FROM call_activities ca JOIN profiles p ON p.id = ca.user_id WHERE p.country = ${cSub} GROUP BY ca.status`, [managerId])
+        : await query('SELECT status, COUNT(*) as count FROM call_activities GROUP BY status');
     }
 
-    const leadsSegmentRes = await query('SELECT segment, COUNT(*) as count FROM leads GROUP BY segment');
+    const leadsSegmentRes = isManagement
+      ? await query(`SELECT segment, COUNT(*) as count FROM leads WHERE country = ${cSub} GROUP BY segment`, [managerId])
+      : await query('SELECT segment, COUNT(*) as count FROM leads GROUP BY segment');
 
     const callsByStatus = { connected: 0, converted: 0, failed: 0 };
     callsByStatusRes.rows.forEach((r: any) => {

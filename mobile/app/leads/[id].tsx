@@ -12,6 +12,7 @@ import { api } from "../../src/api/client";
 import { parseCallbackIntent } from "../../src/utils/parseCallbackIntent";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
+import { computeCooldown } from "../../src/utils/cooldown";
 
 const DISPOSITIONS = [
   { value: "interested", label: "Interested", icon: "thumbs-up" as const, color: "#10b981", bg: "#dcfce7" },
@@ -74,17 +75,18 @@ export default function LeadDetailScreen() {
         phone_number: lead.phone,
         lead_name: lead.name,
         call_type: "native_dialer",
-        status: disposition === "interested" || disposition === "not_interested" ? "connected" : disposition,
+        status: disposition,
         duration_seconds: 0,
         deposit_amount: depositAmount ? Number(depositAmount) : null,
         notes: notes || null,
         campaign_id: lead.campaign_id || null,
       });
 
-      // Update lead status (stored in last_activity)
       await api.patch(`/leads/${lead.id}`, {
+        status: disposition,
         last_activity: disposition,
         last_contact_at: new Date().toISOString(),
+        ...(disposition === "interested" ? { lifecycle_stage: "interested" } : {}),
       });
 
       // Auto-detect or manual callback
@@ -149,6 +151,21 @@ export default function LeadDetailScreen() {
             <StatusBadge label={lead.priority} />
           </View>
         </View>
+
+        {(() => {
+          const cd = computeCooldown(lead.last_contact_at, lead.last_activity || lead.status);
+          if (cd.severity === "none") return null;
+          return (
+            <View style={[styles.cooldownBanner, { backgroundColor: cd.bg, borderColor: cd.color }]}>
+              <Feather
+                name={cd.severity === "strong" ? "alert-octagon" : cd.severity === "mild" ? "clock" : "check-circle"}
+                size={14}
+                color={cd.color}
+              />
+              <Text style={[styles.cooldownText, { color: cd.color }]}>{cd.message}</Text>
+            </View>
+          );
+        })()}
 
         <TouchableOpacity style={styles.callButton} onPress={handleCall} activeOpacity={0.8}>
           <Feather name="phone-outgoing" size={18} color="#fff" />
@@ -454,6 +471,8 @@ const styles = StyleSheet.create({
   name: { fontSize: 22, fontWeight: "700", color: colors.text.primary },
   phone: { fontSize: 15, color: colors.text.secondary, marginTop: 2 },
   badges: { flexDirection: "row", gap: 8, marginTop: 12 },
+  cooldownBanner: { marginHorizontal: 20, marginTop: 16, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  cooldownText: { fontSize: 12, fontWeight: "600", flex: 1 },
   callButton: { backgroundColor: colors.brand.green, marginHorizontal: 20, marginTop: 16, borderRadius: 8, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
   callText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   logButton: { backgroundColor: colors.bg.card, marginHorizontal: 20, marginTop: 8, borderRadius: 8, paddingVertical: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: colors.brand.green },

@@ -29,8 +29,8 @@ export default function DispositionScreen() {
     if (!disposition) { Alert.alert("Required", "Please select a call outcome"); return; }
     setSubmitting(true);
     try {
-      await api.post("/call-activities", { phone_number: params.phone, lead_name: params.leadName, call_type: "native_dialer", status: disposition === "interested" || disposition === "not_interested" ? "connected" : disposition, duration_seconds: 0, deposit_amount: depositAmount ? Number(depositAmount) : null, notes: notes || null, campaign_id: params.campaignId || null });
-      if (params.leadId) await api.patch(`/leads/${params.leadId}`, { last_activity: disposition, last_contact_at: new Date().toISOString() });
+      await api.post("/call-activities", { phone_number: params.phone, lead_name: params.leadName, call_type: "native_dialer", status: disposition, duration_seconds: 0, deposit_amount: depositAmount ? Number(depositAmount) : null, notes: notes || null, campaign_id: params.campaignId || null });
+      if (params.leadId) await api.patch(`/leads/${params.leadId}`, { status: disposition, last_activity: disposition, last_contact_at: new Date().toISOString(), ...(disposition === "interested" ? { lifecycle_stage: "interested" } : {}) });
       const cbIntent = parseCallbackIntent(notes);
       if (scheduleCallback || cbIntent.shouldCreateCallback) {
         const cbDate = cbIntent.callbackDate || new Date(Date.now() + 86400000);

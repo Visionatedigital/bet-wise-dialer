@@ -6,28 +6,37 @@ import * as FileSystem from "expo-file-system/legacy";
 import { useDistributionStats, useAgentsAvailable } from "../../src/hooks/useDistribution";
 import { api } from "../../src/api/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../../src/contexts/AuthContext";
 import { colors } from "../../src/theme/colors";
+import { formatPhoneForCountry } from "../../src/config/countries";
 
-function parseCSVNumbers(text: string): string[] {
-  // Handle CSV with headers or plain number lists
+function parseCSVNumbers(text: string, countryCode: string): string[] {
   const lines = text.split(/[\r\n]+/).filter((l) => l.trim());
+  const seen = new Set<string>();
   const numbers: string[] = [];
 
   for (const line of lines) {
-    // Split by comma, semicolon, or tab
     const parts = line.split(/[,;\t]/);
     for (const part of parts) {
-      const cleaned = part.replace(/[^0-9+]/g, "").trim();
-      if (cleaned.length >= 7) {
-        numbers.push(cleaned);
+      const raw = part.replace(/[^0-9+]/g, "").trim();
+      if (raw.length >= 7) {
+        // Normalise to E.164 using the manager's country so local-format
+        // numbers (e.g. 0712345678) get the correct country code prefix
+        const e164 = formatPhoneForCountry(raw, countryCode);
+        if (!seen.has(e164)) {
+          seen.add(e164);
+          numbers.push(e164);
+        }
       }
     }
   }
 
-  return [...new Set(numbers)];
+  return numbers;
 }
 
 export default function DistributeScreen() {
+  const { user } = useAuth();
+  const managerCountry = (user as any)?.country || 'UG';
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useDistributionStats();
   const { data: agents, isLoading: agentsLoading, refetch: refetchAgents } = useAgentsAvailable();
   const queryClient = useQueryClient();
@@ -66,7 +75,7 @@ export default function DistributeScreen() {
       if (!file.uri) return;
 
       const content = await FileSystem.readAsStringAsync(file.uri);
-      const numbers = parseCSVNumbers(content);
+      const numbers = parseCSVNumbers(content, managerCountry);
 
       if (numbers.length === 0) {
         Alert.alert("No Numbers Found", "Could not find valid phone numbers in the file. Make sure numbers are at least 7 digits.");

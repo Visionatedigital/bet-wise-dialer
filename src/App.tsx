@@ -31,6 +31,9 @@ const Callbacks = lazy(() => import("./pages/Callbacks"));
 const WhatsApp = lazy(() => import("./pages/WhatsApp"));
 const Kanban = lazy(() => import("./pages/Kanban"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
+const PromisingLeads = lazy(() => import("./pages/PromisingLeads"));
+const ManagerImportLeads = lazy(() => import("./pages/ManagerImportLeads"));
+const ManagerRefreshPerformance = lazy(() => import("./pages/ManagerRefreshPerformance"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -164,6 +167,21 @@ const App = () => (
                     <Route path="/kanban" element={
                       <ProtectedRoute>
                         <Kanban />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/promising-leads" element={
+                      <ProtectedRoute>
+                        <PromisingLeads />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/manager/import-leads" element={
+                      <ProtectedRoute>
+                        <ManagerImportLeads />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/manager/refresh-performance" element={
+                      <ProtectedRoute>
+                        <ManagerRefreshPerformance />
                       </ProtectedRoute>
                     } />
                     <Route path="/settings" element={

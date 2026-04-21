@@ -10,10 +10,20 @@ import {
   Platform,
   Alert,
   ScrollView,
+  Modal,
+  FlatList,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../src/contexts/AuthContext";
+
+const COUNTRIES = [
+  { code: 'UG', name: 'Uganda',   flag: '🇺🇬', dialCode: '256' },
+  { code: 'GH', name: 'Ghana',    flag: '🇬🇭', dialCode: '233' },
+  { code: 'NG', name: 'Nigeria',  flag: '🇳🇬', dialCode: '234' },
+  { code: 'TZ', name: 'Tanzania', flag: '🇹🇿', dialCode: '255' },
+  { code: 'KE', name: 'Kenya',    flag: '🇰🇪', dialCode: '254' },
+];
 
 export default function SignupScreen() {
   const insets = useSafeAreaInsets();
@@ -21,9 +31,13 @@ export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [country, setCountry] = useState("UG");
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const { signup } = useAuth();
   const router = useRouter();
+
+  const selectedCountry = COUNTRIES.find(c => c.code === country) || COUNTRIES[0];
 
   const handleSignup = async () => {
     if (!fullName.trim() || !email.trim() || !password) {
@@ -40,7 +54,7 @@ export default function SignupScreen() {
     }
     setSubmitting(true);
     try {
-      const message = await signup(email.trim().toLowerCase(), password, fullName.trim());
+      const message = await signup(email.trim().toLowerCase(), password, fullName.trim(), country);
       Alert.alert("Account Created", message || "Your account is pending approval. An administrator will review your access.", [
         { text: "OK", onPress: () => router.replace("/login") },
       ]);
@@ -103,6 +117,51 @@ export default function SignupScreen() {
               onChangeText={setConfirmPassword}
               secureTextEntry
             />
+
+            <Text style={styles.label}>Country</Text>
+            <TouchableOpacity
+              style={styles.pickerButton}
+              onPress={() => setShowCountryPicker(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.pickerText}>
+                {selectedCountry.flag}  {selectedCountry.name} (+{selectedCountry.dialCode})
+              </Text>
+              <Text style={styles.pickerChevron}>▾</Text>
+            </TouchableOpacity>
+
+            <Modal
+              visible={showCountryPicker}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setShowCountryPicker(false)}
+            >
+              <TouchableOpacity
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowCountryPicker(false)}
+              >
+                <View style={styles.modalCard}>
+                  <Text style={styles.modalTitle}>Select Country</Text>
+                  <FlatList
+                    data={COUNTRIES}
+                    keyExtractor={item => item.code}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[styles.countryItem, item.code === country && styles.countryItemSelected]}
+                        onPress={() => { setCountry(item.code); setShowCountryPicker(false); }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.countryFlag}>{item.flag}</Text>
+                        <Text style={styles.countryName}>{item.name}</Text>
+                        <Text style={styles.countryDial}>+{item.dialCode}</Text>
+                        {item.code === country && <Text style={styles.countryCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+              </TouchableOpacity>
+            </Modal>
 
             <TouchableOpacity
               style={[styles.button, submitting && { opacity: 0.6 }]}
@@ -168,4 +227,45 @@ const styles = StyleSheet.create({
   linkRow: { marginTop: 16, alignItems: "center" },
   linkText: { fontSize: 13, color: "#666" },
   linkBold: { fontWeight: "700", color: "#22c55e" },
+  pickerButton: {
+    backgroundColor: "#f5f5f5",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pickerText: { fontSize: 15, color: "#1a1a1a" },
+  pickerChevron: { fontSize: 16, color: "#999" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    width: "100%",
+    maxHeight: 360,
+  },
+  modalTitle: { fontSize: 16, fontWeight: "700", color: "#1a1a1a", marginBottom: 12 },
+  countryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  countryItemSelected: { backgroundColor: "#f0fdf4" },
+  countryFlag: { fontSize: 22, marginRight: 10 },
+  countryName: { flex: 1, fontSize: 15, color: "#1a1a1a" },
+  countryDial: { fontSize: 13, color: "#888", marginRight: 8 },
+  countryCheck: { fontSize: 16, color: "#22c55e", fontWeight: "700" },
 });

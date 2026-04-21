@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Target, Play, Pause, Square, BarChart3, Users, Phone, TrendingUp, Clock, DollarSign, Calendar, Settings, Trash2, CheckCircle } from "lucide-react";
 import { formatUGX } from "@/lib/formatters";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { CreateCampaignModal } from "@/components/campaigns/CreateCampaignModal";
@@ -50,13 +50,8 @@ useEffect(() => {
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('campaigns')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setCampaigns((data as Campaign[]) || []);
+      const data = await api.get<Campaign[]>('/campaigns');
+      setCampaigns(data || []);
     } catch (error) {
       console.error('Error fetching campaigns:', error);
       toast.error('Failed to load campaigns');
@@ -97,13 +92,7 @@ useEffect(() => {
   const updateCampaignStatus = async (campaignId: string, newStatus: 'active' | 'paused' | 'completed') => {
     setUpdating(true);
     try {
-      const { error } = await supabase
-        .from('campaigns')
-        .update({ status: newStatus })
-        .eq('id', campaignId);
-
-      if (error) throw error;
-
+      await api.patch('/campaigns/' + campaignId, { status: newStatus });
       toast.success(`Campaign ${newStatus === 'active' ? 'activated' : newStatus === 'paused' ? 'paused' : 'completed'}`);
       await fetchCampaigns();
       setSelectedCampaign(prev => prev ? { ...prev, status: newStatus } : null);

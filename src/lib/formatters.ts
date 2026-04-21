@@ -94,16 +94,20 @@ export const formatDuration = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
-// Mask phone numbers for agent-facing UI
+// Mask phone numbers for agent-facing UI (multi-country)
 export const maskPhone = (phone: string): string => {
   if (!phone) return '';
   const digits = phone.replace(/\D/g, '');
-  // Uganda +256 format: show country code + first 3 digits, mask middle 3, show last 3
-  if (digits.startsWith('256') && digits.length >= 9) {
-    const p = digits.slice(3); // remove 256
-    const first = p.slice(0, 3);
-    const last = p.slice(-3);
-    return `+256 ${first} XXX ${last}`;
+  const prefixes: [string, string][] = [
+    ['256', 'UG'], ['233', 'GH'], ['234', 'NG'], ['255', 'TZ'], ['254', 'KE'],
+  ];
+  for (const [dial] of prefixes) {
+    if (digits.startsWith(dial) && digits.length > dial.length + 4) {
+      const local = digits.slice(dial.length);
+      const first = local.slice(0, 3);
+      const last = local.slice(-3);
+      return `+${dial} ${first} XXX ${last}`;
+    }
   }
   // Generic mask: keep first 3 and last 3
   return phone.replace(/(\+?\d{3})\d+(\d{3})/, '$1 XXX $2');

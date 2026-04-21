@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MessageSquarePlus } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+// supabase removed
 import { toast } from "sonner";
 
 interface NewConversationDialogProps {
@@ -24,85 +24,7 @@ export function NewConversationDialog({ onConversationCreated }: NewConversation
   const [loading, setLoading] = useState(false);
 
   const handleStartConversation = async () => {
-    if (!phoneNumber.trim()) {
-      toast.error("Please enter a phone number");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      console.log('[NewConversation] Starting conversation with:', phoneNumber);
-      
-      // Use edge function for proper POST request handling
-      const { data, error } = await supabase.functions.invoke('whatsapp-start-conversation', {
-        body: { phoneNumber },
-      });
-
-      console.log('[NewConversation] Response:', { data, error });
-
-      if (error) {
-        console.error('[NewConversation] Error:', error);
-        toast.error("Failed to start conversation");
-        return;
-      }
-
-      if (data.isNew) {
-        toast.success("New conversation started");
-      } else {
-        toast.info("Conversation already exists");
-      }
-      
-      onConversationCreated(data.conversationId);
-
-      // Auto-send approved template to initiate conversation
-      console.log('[NewConversation] Sending template message...');
-      const { data: sendData, error: sendError } = await supabase.functions.invoke('whatsapp-send-message', {
-        body: {
-          conversationId: data.conversationId,
-          templateName: 'test_template_1',
-          templateLanguage: 'en',
-        },
-      });
-
-      if (sendError) {
-        console.error('[NewConversation] Template send error:', sendError);
-        
-        // Parse the detailed error message
-        const errorMessage = sendError.message || 'Unknown error';
-        const errorDetails = (sendError as any).context?.body 
-          ? JSON.parse((sendError as any).context.body) 
-          : null;
-        
-        let userMessage = 'Failed to send template message';
-        
-        if (errorDetails?.error === 'WHATSAPP_24H_WINDOW') {
-          userMessage = errorDetails.message || 'Template required to start conversation';
-        } else if (errorMessage.includes('[135000]')) {
-          userMessage = 'Template "test_template_1" not found or not approved in Meta Business Suite. Contact admin to approve the template.';
-        } else if (errorMessage.includes('WhatsApp API error')) {
-          userMessage = 'WhatsApp API error - check template approval status';
-        } else if (errorMessage.includes('template')) {
-          userMessage = 'Template not found or not approved. Contact admin.';
-        } else {
-          userMessage = `Failed to send: ${errorMessage}`;
-        }
-        
-        toast.error(userMessage);
-        // Don't close dialog on failure so user can see the error
-        return;
-      }
-
-      console.log('[NewConversation] Template sent successfully:', sendData);
-      toast.success("Conversation started with template message!");
-      
-      setOpen(false);
-      setPhoneNumber("");
-    } catch (error) {
-      console.error('[NewConversation] Unexpected error:', error);
-      toast.error("Failed to start conversation");
-    } finally {
-      setLoading(false);
-    }
+    toast.error("WhatsApp integration is not available in this version");
   };
 
   return (

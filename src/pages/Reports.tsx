@@ -40,7 +40,7 @@ import { useFunnelAnalysis } from "@/hooks/useFunnelAnalysis";
 import { useRecentCalls } from "@/hooks/useRecentCalls";
 import { useAgentAnalysis } from "@/hooks/useAgentAnalysis";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
+// supabase removed
 import { toast } from "sonner";
 import { ExportReportModal } from "@/components/dashboard/ExportReportModal";
 import { useAuth } from "@/contexts/AuthContext";
@@ -145,106 +145,38 @@ export default function Reports() {
   const handleTranscribeCall = async (callId: string) => {
     setIsTranscribing(true);
     setIsTranscribed(false);
-    
+
     try {
-      // Fetch the actual call data from database
-      const { data: callData, error: callError } = await supabase
-        .from('call_activities')
-        .select('*')
-        .eq('id', callId)
-        .single();
-
-      if (callError) {
-        throw new Error(`Failed to fetch call data: ${callError.message}`);
-      }
-
-      if (!callData) {
-        throw new Error('Call not found');
-      }
-
+      const callData = selectedCall as any;
       let transcript = '';
-      let transcriptSource = '';
 
-      // Priority 1: Use stored transcript if available (real-time capture)
-      if (callData.transcript && callData.transcript.trim()) {
+      if (callData?.transcript && callData.transcript.trim()) {
         transcript = callData.transcript.trim();
-        transcriptSource = 'real-time';
-        console.log('[Reports] Using real-time transcript, length:', transcript.length);
-      }
-      // Priority 2: Check if there's a recording URL - transcribe it
-      else if (callData.recording_url) {
-        // TODO: In the future, transcribe the audio file using OpenAI Whisper
-        // For now, use notes if available, or show a message
-        transcriptSource = 'recording';
-        toast.info('Audio transcription from recording is coming soon. Using call notes for now.');
-        
-        // Fallback to notes if available
-        if (callData.notes && callData.notes.trim()) {
-          // Clean notes (remove session IDs if present)
-          const cleanNotes = callData.notes
-            .replace(/session:ATVId_[a-f0-9]+/gi, '')
-            .replace(/ATVId_[a-f0-9]+/gi, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-          
-          if (cleanNotes && cleanNotes.length > 10) {
-            transcript = `Call Notes:\n${cleanNotes}`;
-            transcriptSource = 'notes';
-          }
-        }
-      }
-      // Priority 3: Use notes if no transcript or recording available
-      else if (callData.notes && callData.notes.trim()) {
-        // Clean notes (remove session IDs if present)
+      } else if (callData?.notes && callData.notes.trim()) {
         const cleanNotes = callData.notes
           .replace(/session:ATVId_[a-f0-9]+/gi, '')
           .replace(/ATVId_[a-f0-9]+/gi, '')
           .replace(/\s+/g, ' ')
           .trim();
-        
         if (cleanNotes && cleanNotes.length > 10) {
           transcript = `Call Notes:\n${cleanNotes}`;
-          transcriptSource = 'notes';
         }
       }
 
-      // If no transcript available, show appropriate message
       if (!transcript || transcript.length < 10) {
-        const message = callData.recording_url 
-          ? 'Call recording available but transcription not yet implemented. Please check back later.'
-          : 'No call notes or recording available for this call.';
-        
-        toast.warning(message);
-        setTranscriptText(message);
-        setIsTranscribing(false);
+        toast.warning('No call notes or recording available for this call.');
+        setTranscriptText('No call notes or recording available for this call.');
         return;
       }
 
       setTranscriptText(transcript);
-
-      // Call the edge function to analyze the transcript
-      const { data, error } = await supabase.functions.invoke('transcribe-call', {
-        body: { 
-          callId,
-          transcript: transcript,
-          source: transcriptSource // Pass source info for context
-        }
-      });
-
-      if (error) throw error;
-
-      setKeyMoments(data.keyMoments || []);
-      setSuggestions(data.suggestions || []);
+      setKeyMoments([]);
+      setSuggestions(['AI transcript analysis is not available. Call notes displayed from stored data.']);
       setIsTranscribed(true);
-      
-      const sourceMessage = transcriptSource === 'notes' 
-        ? 'Analysis generated from call notes'
-        : 'Analysis generated from call recording';
-      toast.success(`Transcript analyzed successfully! ${sourceMessage}`);
+      toast.success('Call notes loaded successfully');
     } catch (error) {
-      console.error('Error transcribing call:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to generate transcript';
-      toast.error(errorMessage);
+      console.error('Error loading call:', error);
+      toast.error('Failed to load call details');
     } finally {
       setIsTranscribing(false);
     }

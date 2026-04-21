@@ -15,7 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Phone, Mail, MessageSquare, Search, Filter, Download, UserMinus, Calendar, Clock, DollarSign, Target, Tag, User, Zap, Trash2 } from "lucide-react";
 import { type Lead } from "@/types/lead";
 import { formatUGX, formatKampalaTime } from "@/lib/formatters";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
 import { toast } from "sonner";
@@ -58,16 +58,7 @@ export default function Leads() {
   const fetchLeads = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('leads')
-        .select(`
-          *,
-          campaigns(name)
-        `)
-        .order('created_at', { ascending: false })
-        .range(0, 99999);
-
-      if (error) throw error;
+      const data = await api.get<any[]>('/leads');
 
       const formattedLeads: Lead[] = (data || []).map(lead => ({
         id: lead.id,
@@ -85,7 +76,7 @@ export default function Leads() {
         ownerUserId: lead.user_id,
         nextAction: lead.next_action || undefined,
         nextActionDue: lead.next_action_due || undefined,
-        campaign: lead.campaigns?.name || "No Campaign",
+        campaign: lead.campaign_name || "No Campaign",
         campaignId: lead.campaign_id || undefined,
         priority: lead.priority as "high" | "medium" | "low",
         slaMinutes: lead.sla_minutes || 0,
@@ -156,15 +147,9 @@ export default function Leads() {
   const fetchLeadCalls = async (leadId: string) => {
     try {
       setLoadingCalls(true);
-      const { data, error } = await supabase
-        .from('call_activities')
-        .select('*')
-        .eq('lead_name', leads.find(l => l.id === leadId)?.name)
-        .order('start_time', { ascending: false })
-        .limit(10);
-
-      if (error) throw error;
-      setLeadCalls(data || []);
+      const data = await api.get<any[]>('/call-activities?limit=10');
+      const leadName = leads.find(l => l.id === leadId)?.name;
+      setLeadCalls((data || []).filter(c => c.lead_name === leadName));
     } catch (error) {
       console.error('Error fetching lead calls:', error);
     } finally {
@@ -176,13 +161,7 @@ export default function Leads() {
     if (!leadToDelete) return;
 
     try {
-      const { error } = await supabase
-        .from('leads')
-        .delete()
-        .eq('id', leadToDelete.id);
-
-      if (error) throw error;
-
+      await api.delete('/leads/' + leadToDelete.id);
       toast.success('Lead deleted successfully');
       await fetchLeads();
       setDeleteDialogOpen(false);
@@ -197,13 +176,7 @@ export default function Leads() {
     if (selectedLeads.length === 0) return;
 
     try {
-      const { error } = await supabase
-        .from('leads')
-        .delete()
-        .in('id', selectedLeads);
-
-      if (error) throw error;
-
+      await Promise.all(selectedLeads.map(id => api.delete('/leads/' + id)));
       toast.success(`${selectedLeads.length} lead${selectedLeads.length > 1 ? 's' : ''} deleted successfully`);
       setSelectedLeads([]);
       await fetchLeads();

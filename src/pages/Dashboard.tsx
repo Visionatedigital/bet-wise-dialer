@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Lightbulb, MessageSquare, FileText, History, LayoutDashboard, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Softphone } from "@/components/dashboard/Softphone";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
@@ -95,19 +95,13 @@ function DashboardContent() {
     const loadCampaignScript = async () => {
       if (!currentLead?.segment) return;
       try {
-        const { data, error } = await supabase
-          .from('campaigns')
-          .select('ai_script, suggestions')
-          .eq('target_segment' as any, currentLead.segment as any)
-          .eq('status' as any, 'active' as any)
-          .maybeSingle();
-
-        if (error) throw error;
-
-        if (data) {
-          const scriptData = data as any;
-          setCampaignScript(scriptData.ai_script);
-          setCampaignSuggestions(Array.isArray(scriptData.suggestions) ? scriptData.suggestions : []);
+        const campaigns = await api.get<any[]>('/campaigns');
+        const match = (campaigns || []).find((c: any) =>
+          c.target_segment === currentLead.segment && c.status === 'active'
+        );
+        if (match) {
+          setCampaignScript(match.ai_script);
+          setCampaignSuggestions(Array.isArray(match.suggestions) ? match.suggestions : []);
         } else {
           setCampaignScript(null);
           setCampaignSuggestions([]);
@@ -153,14 +147,7 @@ function DashboardContent() {
       setLoading(true);
       if (!user?.id) return;
 
-      // Fetch all leads assigned to this agent
-      const { data, error } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('user_id', user.id as any)
-        .order('updated_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await api.get<any[]>('/leads');
 
       const formattedLeads: Lead[] = ((data as any[]) || []).map(lead => ({
         id: lead.id,
@@ -198,47 +185,6 @@ function DashboardContent() {
   useEffect(() => {
     if (user) {
       fetchLeads();
-
-      // Real-time subscription for leads
-      const channel = supabase
-        .channel('dashboard_leads_realtime')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'leads',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            console.log('[Dashboard] Lead change detected:', payload);
-            if (payload.eventType === 'UPDATE') {
-              setAllLeads(prev => prev.map(l =>
-                l.id === payload.new.id ? {
-                  ...l,
-                  status: payload.new.status || 'unassigned',
-                  nextAction: payload.new.next_action,
-                  lastActivity: payload.new.last_activity || l.lastActivity,
-                  priority: payload.new.priority || l.priority,
-                  name: safeDisplayName(payload.new.name) || l.name,
-                  phone: payload.new.phone || l.phone,
-                } : l
-              ));
-            } else if (payload.eventType === 'INSERT') {
-              // Add new lead if it's assigned to this user
-              if (payload.new.user_id === user.id) {
-                fetchLeads(); // Simpler than mapping everything manually for INSERT
-              }
-            } else if (payload.eventType === 'DELETE') {
-              setAllLeads(prev => prev.filter(l => l.id !== payload.old.id));
-            }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
     }
   }, [user]);
 
@@ -270,12 +216,7 @@ function DashboardContent() {
 
   const handleStatusChange = async (leadId: string, newStatus: string) => {
     try {
-      const { error } = await supabase
-        .from('leads')
-        .update({ status: newStatus === 'unassigned' ? null : (newStatus as any) } as any)
-        .eq('id', leadId as any);
-
-      if (error) throw error;
+      await api.patch(`/leads/${leadId}`, { status: newStatus === 'unassigned' ? null : newStatus });
 
       setAllLeads(prev => prev.map(l =>
         l.id === leadId ? { ...l, status: newStatus } : l
@@ -310,15 +251,11 @@ function DashboardContent() {
 
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-      // Fetch leads that were updated/contacted in the last 24h
-      const { data, error } = await supabase
-        .from('leads')
-        .select('phone, status, last_activity, updated_at')
-        .eq('user_id', user.id as any)
-        .gte('updated_at', twentyFourHoursAgo)
-        .order('updated_at', { ascending: false });
+      const allData = await api.get<any[]>('/leads');
+      const data = (allData || []).filter((lead: any) =>
+        lead.updated_at && lead.updated_at >= twentyFourHoursAgo
+      ).sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
-      if (error) throw error;
       if (!data || data.length === 0) {
         toast.info("No lead activity recorded in the last 24 hours.");
         return;
@@ -358,11 +295,7 @@ function DashboardContent() {
   const saveCallNotes = async () => {
     if (!currentCallId || !callNotes.trim()) return;
     try {
-      const { error } = await supabase
-        .from('call_activities')
-        .update({ notes: callNotes } as any)
-        .eq('id' as any, currentCallId as any);
-      if (error) throw error;
+      await api.patch(`/call-activities/${currentCallId}`, { notes: callNotes });
       toast.success('Notes saved');
     } catch (error) {
       toast.error('Failed to save notes');

@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Phone, User, Calendar, TrendingUp, DollarSign, Target, Sparkles } from "lucide-react";
 import WhatsAppLogo from "@/assets/whatsapp-logo.svg";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CallScriptViewer } from "./CallScriptViewer";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
@@ -68,14 +68,8 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
     const loadLeadAndCustomer = async () => {
         try {
             // Load lead from database
-            const { data: leadData, error: leadError } = await supabase
-                .from("leads")
-                .select('*')
-                .eq("id", leadId)
-                .single();
-
-            if (leadError) throw leadError;
-            const row = leadData as any;
+            const leadData = await api.get<any>(`/leads/${leadId}`);
+            const row = leadData;
 
             // Map leads table to TelemarketingLead interface
             const mappedLead: TelemarketingLead = {
@@ -100,49 +94,19 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
 
             setLead(mappedLead);
 
-            // Fetch customer details from BangBet API (or mock)
-            // We make this non-fatal because the UUID won't match mock API IDs
-            try {
-                const response = await supabase.functions.invoke("mock-bangbet-api", {
-                    body: {
-                        path: `/customers/${mappedLead.player_id}`, // This might fail if mock doesn't support generic IDs
-                        method: "GET"
-                    }
-                });
-
-                if (response.data?.customer) {
-                    setCustomerDetails(response.data.customer);
-                } else {
-                    // Fallback mock stats if API fails
-                    setCustomerDetails({
-                        player_id: mappedLead.player_id,
-                        phone: mappedLead.phone,
-                        name: mappedLead.player_name || "Unknown",
-                        vip_level: mappedLead.vip_level || "bronze",
-                        current_balance: (leadData as any).last_deposit_ugx || 0,
-                        total_deposits: ((leadData as any).last_deposit_ugx || 0) * 5, // Mock estimate
-                        lifetime_value: ((leadData as any).last_deposit_ugx || 0) * 10,
-                        days_inactive: 5,
-                        preferred_product: mappedLead.preferred_product || "Sports",
-                        last_login: new Date().toISOString()
-                    });
-                }
-            } catch (apiError) {
-                console.warn("API load failed, using fallback data:", apiError);
-                // Fallback mock stats
-                setCustomerDetails({
-                    player_id: mappedLead.player_id,
-                    phone: mappedLead.phone,
-                    name: mappedLead.player_name || "Unknown",
-                    vip_level: mappedLead.vip_level || "bronze",
-                    current_balance: (leadData as any).last_deposit_ugx || 0,
-                    total_deposits: ((leadData as any).last_deposit_ugx || 0) * 5,
-                    lifetime_value: ((leadData as any).last_deposit_ugx || 0) * 10,
-                    days_inactive: 5,
-                    preferred_product: mappedLead.preferred_product || "Sports",
-                    last_login: new Date().toISOString()
-                });
-            }
+            // Use lead data to populate customer details
+            setCustomerDetails({
+                player_id: mappedLead.player_id,
+                phone: mappedLead.phone,
+                name: mappedLead.player_name || "Unknown",
+                vip_level: mappedLead.vip_level || "bronze",
+                current_balance: row.last_deposit_ugx || 0,
+                total_deposits: (row.last_deposit_ugx || 0) * 5,
+                lifetime_value: (row.last_deposit_ugx || 0) * 10,
+                days_inactive: 5,
+                preferred_product: mappedLead.preferred_product || "Sports",
+                last_login: new Date().toISOString()
+            });
 
         } catch (error) {
             console.error("Error loading customer:", error);

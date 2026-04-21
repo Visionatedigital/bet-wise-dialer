@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -34,17 +34,22 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { useAuth } from '@/contexts/AuthContext';
+import { COUNTRY_MAP } from '@/config/countries';
 
 interface UserProfile {
   id: string;
   email: string;
   full_name: string;
   approved: boolean;
+  rejected?: boolean;
   created_at: string;
   roles: string[];
+  country?: string;
 }
 
 const UserManagement = () => {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [approvingAll, setApprovingAll] = useState(false);
@@ -62,29 +67,8 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      
-      // Fetch all profiles
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (profileError) throw profileError;
-
-      // Fetch roles for each user
-      const { data: userRoles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
-
-      if (rolesError) throw rolesError;
-
-      // Combine data
-      const usersWithRoles = profiles?.map(profile => ({
-        ...profile,
-        roles: userRoles?.filter(r => r.user_id === profile.id).map(r => r.role) || []
-      })) || [];
-
-      setUsers(usersWithRoles);
+      const data = await api.get<UserProfile[]>('/users');
+      setUsers(data);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast.error('Failed to load users');
@@ -95,81 +79,39 @@ const UserManagement = () => {
 
   const handleApprove = async (userId: string) => {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ approved: true })
-        .eq('id', userId);
-
-      if (error) throw error;
-
+      await api.patch(`/users/${userId}/approve`, { approved: true });
       toast.success('User approved successfully');
       fetchUsers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving user:', error);
-      toast.error('Failed to approve user');
+      toast.error(error.message || 'Failed to approve user');
     }
   };
 
-const handleRoleChange = async (userId: string, newRole: string) => {
+  const handleRoleChange = async (userId: string, newRole: string) => {
     try {
-      // Validate role value
-      const validRoles = ['admin', 'management', 'agent', 'moderator', 'user'];
-      if (!validRoles.includes(newRole)) {
-        throw new Error(`Invalid role: ${newRole}. Must be one of: ${validRoles.join(', ')}`);
-      }
-
-      console.log(`[UserManagement] Updating role for user ${userId} to ${newRole}`);
-
-      // Remove existing roles (check for errors)
-      const { error: deleteError, data: deleteData } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId)
-        .select();
-
-      if (deleteError) {
-        console.error('[UserManagement] Error deleting existing roles:', deleteError);
-        throw new Error(`Failed to delete existing roles: ${deleteError.message || deleteError.code || 'Unknown error'}`);
-      }
-
-      console.log(`[UserManagement] Deleted ${deleteData?.length || 0} existing role(s)`);
-
-      // Add new role
-      const { error: insertError, data: insertData } = await supabase
-        .from('user_roles')
-        .insert([{ user_id: userId, role: newRole }])
-        .select();
-
-      if (insertError) {
-        console.error('[UserManagement] Error inserting new role:', insertError);
-        
-        // Provide more specific error messages
-        let errorMsg = 'Failed to update role';
-        if (insertError.code === '23505') {
-          errorMsg = 'Role already exists for this user';
-        } else if (insertError.code === '23514') {
-          errorMsg = `Invalid role value: ${newRole}. Please check the role is valid.`;
-        } else if (insertError.message) {
-          errorMsg = insertError.message;
-        } else if (insertError.details) {
-          errorMsg = insertError.details;
-        }
-        
-        throw new Error(errorMsg);
-      }
-
-      console.log(`[UserManagement] Successfully inserted role:`, insertData);
+      await api.patch(`/users/${userId}/role`, { role: newRole });
       toast.success(`Role updated to ${newRole} successfully`);
       fetchUsers();
     } catch (error: any) {
       console.error('[UserManagement] Error updating role:', error);
-      const errorMessage = error?.message || error?.details || error?.hint || error?.code || 'Unknown error occurred';
-      toast.error(`Failed to update role: ${errorMessage}`);
+      toast.error(`Failed to update role: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleReject = async (userId: string) => {
+    try {
+      await api.patch(`/users/${userId}/reject`);
+      toast.success('User rejected — they can now re-sign up with the correct country');
+      fetchUsers();
+    } catch (error: any) {
+      console.error('Error rejecting user:', error);
+      toast.error(error.message || 'Failed to reject user');
     }
   };
 
   const handleApproveAll = async () => {
-    const pendingUsers = users.filter(u => !u.approved);
+    const pendingUsers = users.filter(u => !u.approved && !u.rejected);
     if (pendingUsers.length === 0) {
       toast.info('No pending users to approve');
       return;
@@ -181,18 +123,12 @@ const handleRoleChange = async (userId: string, newRole: string) => {
 
     setApprovingAll(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ approved: true })
-        .in('id', pendingUsers.map(u => u.id));
-
-      if (error) throw error;
-
+      await Promise.all(pendingUsers.map(u => api.patch(`/users/${u.id}/approve`, { approved: true })));
       toast.success(`${pendingUsers.length} user(s) approved successfully`);
       fetchUsers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving users:', error);
-      toast.error('Failed to approve users');
+      toast.error(error.message || 'Failed to approve users');
     } finally {
       setApprovingAll(false);
     }
@@ -205,60 +141,15 @@ const handleRoleChange = async (userId: string, newRole: string) => {
 
   const handleDeleteConfirm = async () => {
     if (!userToDelete) return;
-
     try {
-      // Delete user roles first
-      await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userToDelete.id);
-
-      // Delete profile (this will cascade from auth.users deletion)
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', userToDelete.id);
-
-      if (profileError) throw profileError;
-
-      // Call edge function to delete auth user
-      const { error: authError } = await supabase.functions.invoke('delete-user', {
-        body: { userId: userToDelete.id }
-      });
-
-      if (authError) {
-        console.error('Error deleting auth user:', authError);
-        toast.warning('User profile deleted but auth account may remain');
-      } else {
-        toast.success('User deleted successfully');
-      }
-
+      await api.delete(`/users/${userToDelete.id}`);
+      toast.success('User deleted successfully');
       setDeleteDialogOpen(false);
       setUserToDelete(null);
       fetchUsers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting user:', error);
-      toast.error('Failed to delete user');
-    }
-  };
-
-  const handlePasswordReset = async (email: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('reset-user-password', {
-        body: { email }
-      });
-
-      if (error) throw error;
-
-      if (data?.resetLink) {
-        toast.success('Password reset link generated! Check console for link.');
-        console.log('Password reset link:', data.resetLink);
-      } else {
-        toast.success('Password reset email sent to user');
-      }
-    } catch (error) {
-      console.error('Error resetting password:', error);
-      toast.error('Failed to reset password');
+      toast.error(error.message || 'Failed to delete user');
     }
   };
 
@@ -270,31 +161,24 @@ const handleRoleChange = async (userId: string, newRole: string) => {
 
   const handleManualPasswordSet = async () => {
     if (!userToResetPassword || !newPassword) return;
+    if (newPassword.length < 6) { toast.error('Password must be at least 6 characters'); return; }
 
     setSettingPassword(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-set-password', {
-        body: { 
-          email: userToResetPassword.email,
-          password: newPassword
-        }
-      });
-
-      if (error) throw error;
-
+      await api.post(`/users/${userToResetPassword.id}/reset-password`, { new_password: newPassword });
       toast.success('Password updated successfully');
       setPasswordDialogOpen(false);
       setUserToResetPassword(null);
       setNewPassword('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error setting password:', error);
-      toast.error('Failed to set password');
+      toast.error(error.message || 'Failed to set password');
     } finally {
       setSettingPassword(false);
     }
   };
 
-const pendingCount = users.filter(u => !u.approved).length;
+const pendingCount = users.filter(u => !u.approved && !u.rejected).length;
 
   return (
     <AdminLayout>
@@ -325,6 +209,7 @@ const pendingCount = users.filter(u => !u.approved).length;
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Country</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Joined</TableHead>
@@ -337,8 +222,17 @@ const pendingCount = users.filter(u => !u.approved).length;
                       <TableCell>{user.full_name}</TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
+                        {user.country ? (
+                          <span title={COUNTRY_MAP[user.country]?.name || user.country}>
+                            {COUNTRY_MAP[user.country]?.flag || ''} {user.country}
+                          </span>
+                        ) : '—'}
+                      </TableCell>
+                      <TableCell>
                         {user.approved ? (
                           <Badge variant="default" className="bg-green-500">Approved</Badge>
+                        ) : user.rejected ? (
+                          <Badge variant="destructive">Rejected</Badge>
                         ) : (
                           <Badge variant="secondary" className="bg-yellow-500">Pending</Badge>
                         )}
@@ -364,16 +258,28 @@ const pendingCount = users.filter(u => !u.approved).length;
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {!user.approved ? (
-                            <Button
-                              size="sm"
-                              onClick={() => handleApprove(user.id)}
-                              className="bg-green-500 hover:bg-green-600"
-                            >
-                              Approve
-                            </Button>
-                          ) : (
+                          {!user.approved && !user.rejected ? (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => handleApprove(user.id)}
+                                className="bg-green-500 hover:bg-green-600"
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleReject(user.id)}
+                                className="border-red-300 text-red-600 hover:bg-red-50"
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          ) : user.approved ? (
                             <span className="text-xs text-muted-foreground">Approved</span>
+                          ) : (
+                            <span className="text-xs text-red-500">Rejected</span>
                           )}
                           <Button
                             size="sm"
