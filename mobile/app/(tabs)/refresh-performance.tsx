@@ -258,7 +258,7 @@ function RefreshPerformanceScreen() {
       contentContainerStyle={{ paddingBottom: 40 }}
     >
       <View style={styles.intro}>
-        <Text style={styles.introTitle}>Refresh Performance</Text>
+        <Text style={styles.introTitle}>Recycle Leads</Text>
         <Text style={styles.introSub}>
           Fresh deposits are auto-attributed to agent calls only when platform activity happened after the call.
         </Text>

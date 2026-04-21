@@ -51,6 +51,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       params.push(user_id);
     }
 
+    const { segment, trait, priority, cooldown_expired } = req.query;
+
     if (campaign_id) {
       sql += ` AND l.campaign_id = $${paramCount++}`;
       params.push(campaign_id);
@@ -59,12 +61,29 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       sql += ` AND l.status = $${paramCount++}`;
       params.push(status);
     }
-    if (lifecycle_stage && lifecycle_stage !== 'all') {
+    if (lifecycle_stage === 'pipeline') {
+      sql += ` AND l.lifecycle_stage IN ('interested', 'promised')`;
+    } else if (lifecycle_stage && lifecycle_stage !== 'all') {
       sql += ` AND l.lifecycle_stage = $${paramCount++}`;
       params.push(lifecycle_stage);
     }
+    if (segment && segment !== 'all') {
+      sql += ` AND l.segment = $${paramCount++}`;
+      params.push(segment);
+    }
+    if (trait && trait !== 'all') {
+      sql += ` AND l.trait = $${paramCount++}`;
+      params.push(trait);
+    }
+    if (priority && priority !== 'all') {
+      sql += ` AND COALESCE(l.priority, 'medium') = $${paramCount++}`;
+      params.push(priority);
+    }
+    if (cooldown_expired === 'true') {
+      sql += ` AND l.cooldown_until IS NOT NULL AND l.cooldown_until <= NOW()`;
+    }
 
-    sql += ` ORDER BY l.created_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
+    sql += ` ORDER BY COALESCE(l.lead_score, l.score, 0) DESC, l.created_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
     params.push(Number(limit), Number(offset));
 
     const result = await query(sql, params);
@@ -159,6 +178,34 @@ router.get('/distribution-stats', requireAdmin as any, async (req: AuthRequest, 
       agents: perAgent.rows,
     });
   } catch (err) { res.status(500).json({ error: 'Failed to fetch distribution stats' }); }
+});
+
+// GET /leads/category-counts - counts per segment category for Manage Leads overview
+router.get('/category-counts', requireAdmin as any, async (req: AuthRequest, res: Response) => {
+  try {
+    const isManagement = req.user!.role === 'management';
+    const countryScope = isManagement
+      ? `AND l.country = (SELECT country FROM profiles WHERE id = '${req.user!.id}')`
+      : '';
+
+    const result = await query(`
+      SELECT
+        COUNT(*) FILTER (WHERE l.trait = 'High Staker') AS high_staker,
+        COUNT(*) FILTER (WHERE l.trait = 'Medium Staker') AS medium_staker,
+        COUNT(*) FILTER (WHERE l.trait = 'Frequent Bettor') AS frequent_bettor,
+        COUNT(*) FILTER (WHERE l.segment = 'semi-active') AS active,
+        COUNT(*) FILTER (WHERE l.segment = 'dormant' OR l.trait = 'Dormant') AS dormant,
+        COUNT(*) FILTER (WHERE l.lifecycle_stage IN ('interested', 'promised')) AS pipeline,
+        COUNT(*) FILTER (WHERE l.user_id IS NULL) AS unassigned,
+        COUNT(*) AS total
+      FROM leads l
+      WHERE 1=1 ${countryScope}
+    `);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[Leads] Category counts error:', err);
+    res.status(500).json({ error: 'Failed to fetch category counts' });
+  }
 });
 
 // POST /leads/import-csv - smart bulk import.

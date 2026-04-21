@@ -6,6 +6,7 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import { useTodayMetrics, useTeamMetrics } from "../../src/hooks/useMetrics";
 import { usePendingCallbacks } from "../../src/hooks/useCallbacks";
 import { useRecentCalls } from "../../src/hooks/useRecentCalls";
+import { useNewLeads, useCooldownDueLeads } from "../../src/hooks/useLeads";
 import { useAgentsAvailable } from "../../src/hooks/useDistribution";
 import { KpiCard } from "../../src/components/KpiCard";
 import { colors } from "../../src/theme/colors";
@@ -173,9 +174,17 @@ function AgentDashboard() {
   const { data: metrics, refetch, isLoading } = useTodayMetrics();
   const { data: callbacks } = usePendingCallbacks();
   const { data: recentCalls } = useRecentCalls();
+  const { data: newLeads } = useNewLeads(10);
+  const { data: cooldownLeads } = useCooldownDueLeads(10);
   const router = useRouter();
 
   const overdueCount = callbacks?.filter((c) => new Date(c.scheduled_for) < new Date()).length || 0;
+  const dueCallbackCount = callbacks?.filter((c) => {
+    const d = new Date(c.scheduled_for);
+    const eod = new Date(); eod.setHours(23, 59, 59, 999);
+    return d <= eod;
+  }).length || 0;
+  const totalQueue = (newLeads?.length || 0) + dueCallbackCount + (cooldownLeads?.length || 0);
 
   return (
     <ScrollView
@@ -198,6 +207,69 @@ function AgentDashboard() {
           <Text style={styles.startSub}>View your assigned leads</Text>
         </View>
       </TouchableOpacity>
+
+      {/* Call Queue */}
+      {totalQueue > 0 && (
+        <View style={styles.queueSection}>
+          <View style={styles.queueHeader}>
+            <View style={styles.rowGap6}>
+              <Feather name="phone-call" size={14} color={colors.text.secondary} />
+              <Text style={styles.sectionTitleInline}>Call Queue</Text>
+            </View>
+            <View style={styles.queueTotalBadge}>
+              <Text style={styles.queueTotalText}>{totalQueue}</Text>
+            </View>
+          </View>
+
+          {(newLeads?.length ?? 0) > 0 && (
+            <TouchableOpacity style={styles.queueRow} onPress={() => router.push("/(tabs)/leads")} activeOpacity={0.7}>
+              <View style={[styles.queueIcon, { backgroundColor: "#eff6ff" }]}>
+                <Feather name="user-plus" size={14} color="#1d4ed8" />
+              </View>
+              <View style={styles.queueInfo}>
+                <Text style={styles.queueLabel}>New Leads</Text>
+                <Text style={styles.queueSub}>Freshly assigned to you</Text>
+              </View>
+              <View style={[styles.queueBadge, { backgroundColor: "#dbeafe" }]}>
+                <Text style={[styles.queueBadgeText, { color: "#1d4ed8" }]}>{newLeads!.length}</Text>
+              </View>
+              <Feather name="chevron-right" size={14} color={colors.text.muted} />
+            </TouchableOpacity>
+          )}
+
+          {dueCallbackCount > 0 && (
+            <TouchableOpacity style={styles.queueRow} onPress={() => router.push("/(tabs)/callbacks")} activeOpacity={0.7}>
+              <View style={[styles.queueIcon, { backgroundColor: "#fee2e2" }]}>
+                <Feather name="phone-call" size={14} color="#dc2626" />
+              </View>
+              <View style={styles.queueInfo}>
+                <Text style={styles.queueLabel}>Callbacks Due</Text>
+                <Text style={styles.queueSub}>{overdueCount > 0 ? `${overdueCount} overdue` : "Scheduled today"}</Text>
+              </View>
+              <View style={[styles.queueBadge, { backgroundColor: "#fee2e2" }]}>
+                <Text style={[styles.queueBadgeText, { color: "#dc2626" }]}>{dueCallbackCount}</Text>
+              </View>
+              <Feather name="chevron-right" size={14} color={colors.text.muted} />
+            </TouchableOpacity>
+          )}
+
+          {(cooldownLeads?.length ?? 0) > 0 && (
+            <TouchableOpacity style={styles.queueRow} onPress={() => router.push("/(tabs)/leads")} activeOpacity={0.7}>
+              <View style={[styles.queueIcon, { backgroundColor: "#ecfdf5" }]}>
+                <Feather name="clock" size={14} color="#16a34a" />
+              </View>
+              <View style={styles.queueInfo}>
+                <Text style={styles.queueLabel}>Ready to Call</Text>
+                <Text style={styles.queueSub}>Cooldown period ended</Text>
+              </View>
+              <View style={[styles.queueBadge, { backgroundColor: "#dcfce7" }]}>
+                <Text style={[styles.queueBadgeText, { color: "#16a34a" }]}>{cooldownLeads!.length}</Text>
+              </View>
+              <Feather name="chevron-right" size={14} color={colors.text.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Recent Activity */}
       <View style={styles.activitySection}>
@@ -415,6 +487,19 @@ const styles = StyleSheet.create({
   emptyBox: { backgroundColor: colors.bg.card, borderRadius: 8, padding: 24, alignItems: "center", borderWidth: 1, borderColor: colors.border.default },
   emptyText: { fontSize: 14, color: colors.text.secondary, fontWeight: "600", marginTop: 8 },
   emptySubText: { fontSize: 12, color: colors.text.muted, marginTop: 2 },
+
+  // Call queue
+  queueSection: { marginHorizontal: 20, marginTop: 20, backgroundColor: colors.bg.card, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default, overflow: "hidden" },
+  queueHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default },
+  queueTotalBadge: { backgroundColor: colors.brand.green, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  queueTotalText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  queueRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 13, borderTopWidth: 1, borderTopColor: colors.border.default },
+  queueIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  queueInfo: { flex: 1 },
+  queueLabel: { fontSize: 14, fontWeight: "600", color: colors.text.primary },
+  queueSub: { fontSize: 11, color: colors.text.muted, marginTop: 1 },
+  queueBadge: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10 },
+  queueBadgeText: { fontSize: 12, fontWeight: "800" },
 
   // Recent activity
   activitySection: { marginHorizontal: 20, marginTop: 20 },

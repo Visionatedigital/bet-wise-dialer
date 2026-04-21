@@ -37,3 +37,19 @@ export function useLead(id: string) {
     enabled: !!id,
   });
 }
+
+export function useNewLeads(limit = 5) {
+  return useQuery({
+    queryKey: ["leads-new", limit],
+    queryFn: () => api.get<Lead[]>(`/leads?lifecycle_stage=new&limit=${limit}`),
+    refetchInterval: 30000,
+  });
+}
+
+export function useCooldownDueLeads(limit = 5) {
+  return useQuery({
+    queryKey: ["leads-cooldown-due", limit],
+    queryFn: () => api.get<Lead[]>(`/leads?cooldown_expired=true&limit=${limit}`),
+    refetchInterval: 30000,
+  });
+}

@@ -65,6 +65,7 @@ function CustomDrawerContent(props: any) {
 export default function TabLayout() {
   const { user } = useAuth();
   const isManager = user?.role === "management" || user?.role === "admin";
+  const isAgent = !isManager;
 
   return (
     <Drawer
@@ -87,6 +88,7 @@ export default function TabLayout() {
         sceneStyle: { backgroundColor: colors.bg.dashboard },
       }}
     >
+      {/* ── Dashboard (everyone) ── */}
       <Drawer.Screen
         name="index"
         options={{
@@ -94,15 +96,18 @@ export default function TabLayout() {
           headerTitle: "BANGBET Dialer",
           headerTitleStyle: { fontWeight: "900", color: colors.brand.dark, letterSpacing: 0.5 },
           drawerLabel: "Dashboard",
-          drawerIcon: ({ focused, color }) => <Feather name="home" size={18} color={color} />,
+          drawerIcon: ({ color }) => <Feather name="home" size={18} color={color} />,
         }}
       />
+
+      {/* ── Agent-only screens ── */}
       <Drawer.Screen
         name="leads"
         options={{
           title: "Leads",
           drawerLabel: "Leads",
-          drawerIcon: ({ focused, color }) => <Feather name="check-square" size={18} color={color} />,
+          drawerIcon: ({ color }) => <Feather name="check-square" size={18} color={color} />,
+          drawerItemStyle: isAgent ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
         }}
       />
       <Drawer.Screen
@@ -110,24 +115,19 @@ export default function TabLayout() {
         options={{
           title: "Callbacks",
           drawerLabel: "Callbacks",
-          drawerIcon: ({ focused, color }) => <Feather name="phone-call" size={18} color={color} />,
+          drawerIcon: ({ color }) => <Feather name="phone-call" size={18} color={color} />,
+          drawerItemStyle: isAgent ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
         }}
       />
+
+      {/* ── Manager-only screens (in order) ── */}
       <Drawer.Screen
-        name="settings"
+        name="import-leads"
         options={{
-          title: "Settings",
-          drawerLabel: "Settings",
-          drawerIcon: ({ focused, color }) => <Feather name="settings" size={18} color={color} />,
-        }}
-      />
-      <Drawer.Screen
-        name="approve-agents"
-        options={{
-          title: "Approve Agents",
-          drawerLabel: "Approve Agents",
-          drawerIcon: ({ focused, color }) => <Feather name="user-check" size={18} color={color} />,
-          drawerItemStyle: isManager ? {} : { display: "none" },
+          title: "Import Leads",
+          drawerLabel: "Import Leads",
+          drawerIcon: ({ color }) => <Feather name="upload-cloud" size={18} color={color} />,
+          drawerItemStyle: isManager ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
         }}
       />
       <Drawer.Screen
@@ -135,26 +135,36 @@ export default function TabLayout() {
         options={{
           title: "Manage Leads",
           drawerLabel: "Manage Leads",
-          drawerIcon: ({ focused, color }) => <Feather name="layers" size={18} color={color} />,
-          drawerItemStyle: isManager ? {} : { display: "none" },
-        }}
-      />
-      <Drawer.Screen
-        name="import-leads"
-        options={{
-          title: "Import Leads",
-          drawerLabel: "Import Leads",
-          drawerIcon: ({ focused, color }) => <Feather name="upload-cloud" size={18} color={color} />,
-          drawerItemStyle: isManager ? {} : { display: "none" },
+          drawerIcon: ({ color }) => <Feather name="layers" size={18} color={color} />,
+          drawerItemStyle: isManager ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
         }}
       />
       <Drawer.Screen
         name="refresh-performance"
         options={{
-          title: "Refresh Performance",
-          drawerLabel: "Refresh Performance",
-          drawerIcon: ({ focused, color }) => <Feather name="refresh-ccw" size={18} color={color} />,
-          drawerItemStyle: isManager ? {} : { display: "none" },
+          title: "Recycle Leads",
+          drawerLabel: "Recycle Leads",
+          drawerIcon: ({ color }) => <Feather name="refresh-ccw" size={18} color={color} />,
+          drawerItemStyle: isManager ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
+        }}
+      />
+      <Drawer.Screen
+        name="approve-agents"
+        options={{
+          title: "Approve Agents",
+          drawerLabel: "Approve Agents",
+          drawerIcon: ({ color }) => <Feather name="user-check" size={18} color={color} />,
+          drawerItemStyle: isManager ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
+        }}
+      />
+
+      {/* ── Settings (everyone) ── */}
+      <Drawer.Screen
+        name="settings"
+        options={{
+          title: "Settings",
+          drawerLabel: "Settings",
+          drawerIcon: ({ color }) => <Feather name="settings" size={18} color={color} />,
         }}
       />
     </Drawer>

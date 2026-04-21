@@ -17,7 +17,7 @@ import { leadDisplayName } from "../../src/utils/leadDisplayName";
 
 // Matches desktop KANBAN_COLUMNS exactly
 const CATEGORIES = [
-  { id: "unassigned", title: "Unassigned", bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe", dot: "#3b82f6" },
+  { id: "unassigned", title: "New", bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe", dot: "#3b82f6" },
   { id: "no_answer", title: "No Answer", bg: "#fffbeb", text: "#b45309", border: "#fde68a", dot: "#f59e0b" },
   { id: "unreachable", title: "Unreachable", bg: "#fef2f2", text: "#b91c1c", border: "#fecaca", dot: "#ef4444" },
   { id: "interested", title: "Interested", bg: "#ecfdf5", text: "#047857", border: "#a7f3d0", dot: "#10b981" },
