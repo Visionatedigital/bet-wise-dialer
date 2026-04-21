@@ -1,16 +1,40 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Component } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, RefreshControl,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
-import * as Sharing from "expo-sharing";
-import * as XLSX from "xlsx";
+// expo-sharing loaded dynamically to avoid module-level crash if native module missing
 import { useAgentsAvailable } from "../../src/hooks/useDistribution";
 import { api, API_BASE, getToken } from "../../src/api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { colors } from "../../src/theme/colors";
+
+// Catches render errors and shows them instead of a blank screen
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: string | null }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(e: Error) { return { error: e.message }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: colors.bg.dashboard }}>
+          <Feather name="alert-triangle" size={32} color={colors.status.error} />
+          <Text style={{ marginTop: 12, fontSize: 15, fontWeight: "700", color: colors.text.primary, textAlign: "center" }}>
+            Something went wrong
+          </Text>
+          <Text style={{ marginTop: 8, fontSize: 12, color: colors.text.muted, textAlign: "center" }}>
+            {this.state.error}
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const PLATFORM_COLUMNS: Record<string, string> = {
   'username': 'phone',
@@ -43,7 +67,7 @@ type RefreshResult = {
   converted_ids: string[]; upgraded_ids: string[]; unmatched_phones: string[];
 };
 
-export default function RefreshPerformanceScreen() {
+function RefreshPerformanceScreen() {
   const { data: agents, refetch: refetchAgents } = useAgentsAvailable();
   const queryClient = useQueryClient();
 
@@ -80,11 +104,16 @@ export default function RefreshPerformanceScreen() {
       const dest = `${FileSystem.cacheDirectory}phones-${new Date().toISOString().slice(0, 10)}.csv`;
       await FileSystem.writeAsStringAsync(dest, csv);
 
-      const available = await Sharing.isAvailableAsync();
-      if (available) {
-        await Sharing.shareAsync(dest, { mimeType: "text/csv", dialogTitle: "Send phone list to tech team" });
-      } else {
-        Alert.alert("Saved", `File saved to ${dest}`);
+      try {
+        const Sharing = await import("expo-sharing");
+        const available = await Sharing.isAvailableAsync();
+        if (available) {
+          await Sharing.shareAsync(dest, { mimeType: "text/csv", dialogTitle: "Send phone list to tech team" });
+        } else {
+          Alert.alert("Saved", `File saved to:\n${dest}`);
+        }
+      } catch {
+        Alert.alert("Saved", `File saved to:\n${dest}`);
       }
     } catch (err: any) {
       Alert.alert("Export failed", err?.message || "Could not export phones");
@@ -484,3 +513,11 @@ const styles = StyleSheet.create({
   historyStatText: { fontSize: 11, fontWeight: "600", color: colors.text.secondary },
   historySep: { fontSize: 11, color: colors.border.default },
 });
+
+export default function RefreshPerformanceScreenWrapper() {
+  return (
+    <ErrorBoundary>
+      <RefreshPerformanceScreen />
+    </ErrorBoundary>
+  );
+}
