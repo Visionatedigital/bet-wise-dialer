@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAgentsAvailable } from "../../src/hooks/useDistribution";
 import { api } from "../../src/api/client";
 import { colors } from "../../src/theme/colors";
@@ -129,6 +130,7 @@ export default function ManageLeadsScreen() {
 
   const queryClient = useQueryClient();
   const { data: agents } = useAgentsAvailable();
+  const insets = useSafeAreaInsets();
   const PAGE_SIZE = 50;
 
   const { data: counts, refetch: refetchCounts } = useQuery({
@@ -383,7 +385,7 @@ export default function ManageLeadsScreen() {
 
       {/* Floating action bar */}
       {selected.size > 0 && (
-        <View style={styles.actionBar}>
+        <View style={[styles.actionBar, { paddingBottom: insets.bottom + 12 }]}>
           <View style={styles.actionBarLeft}>
             <Text style={styles.actionBarCount}>{selected.size} selected</Text>
           </View>
@@ -561,7 +563,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.bg.card,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border.default,
     gap: 8,
