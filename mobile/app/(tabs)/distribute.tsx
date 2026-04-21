@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  Alert, RefreshControl, FlatList, Modal, ScrollView,
+  Alert, RefreshControl, FlatList, Modal, ScrollView, BackHandler,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -159,6 +159,16 @@ export default function ManageLeadsScreen() {
     setSelected(new Set());
   }, [activeCategory]);
 
+  // Intercept Android hardware back when inside a category — go back to grid, don't navigate away
+  useEffect(() => {
+    if (!activeCategory) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setActiveCategory(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [activeCategory]);
+
   useEffect(() => {
     if (!pageLeads) return;
     if (offset === 0) {
@@ -269,6 +279,7 @@ export default function ManageLeadsScreen() {
           <Text style={styles.overviewSub}>Tap a category to view and assign leads</Text>
         </View>
         <FlatList
+          key="category-grid"
           data={CATEGORIES}
           keyExtractor={(c) => c.id}
           numColumns={2}
@@ -361,6 +372,7 @@ export default function ManageLeadsScreen() {
         </View>
       ) : (
         <FlatList
+          key="lead-list"
           data={allLeads}
           keyExtractor={(item) => item.id}
           renderItem={renderLead}
