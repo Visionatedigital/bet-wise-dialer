@@ -82,7 +82,7 @@ export default function TabLayout() {
         drawerActiveTintColor: colors.brand.dark,
         drawerInactiveTintColor: "rgba(51,51,51,0.6)",
         drawerActiveBackgroundColor: "rgba(51,51,51,0.15)",
-        drawerLabelStyle: { fontWeight: "600", fontSize: 14, marginLeft: -8 },
+        drawerLabelStyle: { fontWeight: "600", fontSize: 14, marginLeft: 0 },
         drawerItemStyle: { borderRadius: 8, marginHorizontal: 8 },
         sceneStyle: { backgroundColor: colors.bg.dashboard },
       }}
@@ -133,9 +133,9 @@ export default function TabLayout() {
       <Drawer.Screen
         name="distribute"
         options={{
-          title: "Distribute Leads",
-          drawerLabel: "Distribute Leads",
-          drawerIcon: ({ focused, color }) => <Feather name="shuffle" size={18} color={color} />,
+          title: "Manage Leads",
+          drawerLabel: "Manage Leads",
+          drawerIcon: ({ focused, color }) => <Feather name="layers" size={18} color={color} />,
           drawerItemStyle: isManager ? {} : { display: "none" },
         }}
       />

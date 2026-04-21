@@ -14,15 +14,21 @@ import {
 const router = Router();
 router.use(authenticate as any);
 
-// GET /leads - get leads for current user (or all if admin)
+// GET /leads - get leads for current user (or all if admin/management)
+// Query params: user_id, campaign_id, status, lifecycle_stage, limit, offset
+// Special: user_id=unassigned → leads with no agent; adds assigned_agent_name to each row
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const role = req.user!.role;
     const isAdmin = role === 'admin' || role === 'moderator';
     const isManagement = role === 'management';
-    const { campaign_id, status, limit = 100, offset = 0, user_id } = req.query;
+    const { campaign_id, status, lifecycle_stage, limit = 100, offset = 0, user_id } = req.query;
 
-    let sql = 'SELECT l.*, c.name as campaign_name FROM leads l LEFT JOIN campaigns c ON c.id = l.campaign_id WHERE 1=1';
+    let sql = `SELECT l.*, c.name as campaign_name, p.full_name as assigned_agent_name
+               FROM leads l
+               LEFT JOIN campaigns c ON c.id = l.campaign_id
+               LEFT JOIN profiles p ON p.id = l.user_id
+               WHERE 1=1`;
     const params: any[] = [];
     let paramCount = 1;
 
@@ -30,13 +36,16 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       sql += ` AND l.user_id = $${paramCount++}`;
       params.push(req.user!.id);
     } else if (isManagement) {
-      // Scope to manager's country only
       sql += ` AND l.country = (SELECT country FROM profiles WHERE id = $${paramCount++})`;
       params.push(req.user!.id);
-      if (user_id) {
+      if (user_id === 'unassigned') {
+        sql += ` AND l.user_id IS NULL`;
+      } else if (user_id) {
         sql += ` AND l.user_id = $${paramCount++}`;
         params.push(user_id);
       }
+    } else if (user_id === 'unassigned') {
+      sql += ` AND l.user_id IS NULL`;
     } else if (user_id) {
       sql += ` AND l.user_id = $${paramCount++}`;
       params.push(user_id);
@@ -45,6 +54,14 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     if (campaign_id) {
       sql += ` AND l.campaign_id = $${paramCount++}`;
       params.push(campaign_id);
+    }
+    if (status && status !== 'all') {
+      sql += ` AND l.status = $${paramCount++}`;
+      params.push(status);
+    }
+    if (lifecycle_stage && lifecycle_stage !== 'all') {
+      sql += ` AND l.lifecycle_stage = $${paramCount++}`;
+      params.push(lifecycle_stage);
     }
 
     sql += ` ORDER BY l.created_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
@@ -937,6 +954,59 @@ router.post('/distribute', requireAdmin as any, async (req: AuthRequest, res: Re
   } catch (err) {
     console.error('[Leads] Distribution error:', err);
     res.status(500).json({ error: 'Failed to distribute leads' });
+  }
+});
+
+// POST /leads/bulk-assign - assign or unassign multiple leads at once (admin/management)
+// Body: { lead_ids: string[], agent_id: string | null }
+// agent_id = null → unassign; agent_id = userId → assign to that agent
+router.post('/bulk-assign', requireAdmin as any, async (req: AuthRequest, res: Response) => {
+  try {
+    const { lead_ids, agent_id } = req.body;
+    if (!lead_ids || !Array.isArray(lead_ids) || lead_ids.length === 0) {
+      return res.status(400).json({ error: 'Provide a non-empty array of lead_ids' });
+    }
+
+    const isManagement = req.user!.role === 'management';
+
+    if (agent_id) {
+      // Verify agent exists and belongs to manager's country
+      if (isManagement) {
+        const check = await query(
+          `SELECT p.id FROM profiles p
+           JOIN user_roles r ON r.user_id = p.id AND r.role = 'agent'
+           WHERE p.id = $1 AND p.approved = TRUE
+           AND p.country = (SELECT country FROM profiles WHERE id = $2)`,
+          [agent_id, req.user!.id]
+        );
+        if (check.rows.length === 0) {
+          return res.status(403).json({ error: 'Agent not found in your country' });
+        }
+      }
+
+      let sql = `UPDATE leads SET user_id = $1, assigned_by = $2, assigned_at = NOW(), updated_at = NOW()
+                 WHERE id = ANY($3)`;
+      const params: any[] = [agent_id, req.user!.id, lead_ids];
+      if (isManagement) {
+        params.push(req.user!.id);
+        sql += ` AND country = (SELECT country FROM profiles WHERE id = $${params.length})`;
+      }
+      const result = await query(sql, params);
+      res.json({ message: `Assigned ${result.rowCount} lead${result.rowCount === 1 ? '' : 's'}`, updated: result.rowCount });
+    } else {
+      let sql = `UPDATE leads SET user_id = NULL, assigned_by = NULL, assigned_at = NULL, updated_at = NOW()
+                 WHERE id = ANY($1)`;
+      const params: any[] = [lead_ids];
+      if (isManagement) {
+        params.push(req.user!.id);
+        sql += ` AND country = (SELECT country FROM profiles WHERE id = $${params.length})`;
+      }
+      const result = await query(sql, params);
+      res.json({ message: `Unassigned ${result.rowCount} lead${result.rowCount === 1 ? '' : 's'}`, updated: result.rowCount });
+    }
+  } catch (err) {
+    console.error('[Leads] Bulk assign error:', err);
+    res.status(500).json({ error: 'Failed to bulk assign leads' });
   }
 });
 
