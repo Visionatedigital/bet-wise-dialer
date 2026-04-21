@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } 
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "../../src/contexts/AuthContext";
-import { useTodayMetrics } from "../../src/hooks/useMetrics";
+import { useTodayMetrics, useTeamMetrics } from "../../src/hooks/useMetrics";
 import { usePendingCallbacks } from "../../src/hooks/useCallbacks";
 import { useRecentCalls } from "../../src/hooks/useRecentCalls";
-import { useUsers } from "../../src/hooks/useUsers";
+import { useAgentsAvailable } from "../../src/hooks/useDistribution";
 import { KpiCard } from "../../src/components/KpiCard";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
@@ -35,22 +35,146 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> 
   not_interested: { bg: "#f3f4f6", text: "#374151", label: "Not Interested" },
 };
 
-const ROLE_COLORS: Record<string, string> = {
-  agent: colors.brand.green,
-  management: "#6366f1",
-  admin: "#f59e0b",
-};
+function ManagerDashboard() {
+  const router = useRouter();
+  const { data: agents, refetch: refetchAgents } = useAgentsAvailable();
+  const { data: teamData, refetch: refetchTeam } = useTeamMetrics();
+  const totals = teamData?.totals;
+  const metricsByAgent = teamData?.byAgent ?? [];
 
-export default function HomeScreen() {
-  const { user } = useAuth();
+  const activeAgents = agents?.filter((a) => a.status === "online").length ?? 0;
+
+  const refetchAll = () => {
+    refetchAgents();
+    refetchTeam();
+  };
+
+  return (
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={false} onRefresh={refetchAll} tintColor={colors.brand.green} />}
+    >
+      {/* Team KPIs */}
+      <Text style={styles.sectionTitle}>Team Performance Today</Text>
+      <View style={styles.kpiRow}>
+        <KpiCard label="Calls" value={totals?.calls_made ?? 0} color={colors.brand.green} />
+        <KpiCard label="Connects" value={totals?.connects ?? 0} color={colors.status.success} />
+        <KpiCard label="Converts" value={totals?.conversions ?? 0} color={colors.status.info} />
+      </View>
+
+      {/* Agent Overview */}
+      <View style={styles.agentSection}>
+        <View style={styles.agentSectionHeader}>
+          <View style={styles.rowGap6}>
+            <Feather name="users" size={14} color={colors.text.secondary} />
+            <Text style={styles.sectionTitleInline}>Agent Overview</Text>
+          </View>
+          <View style={styles.rowGap6}>
+            <View style={styles.onlineDot} />
+            <Text style={styles.agentsCount}>{activeAgents} online · {agents?.length ?? 0} total</Text>
+          </View>
+        </View>
+
+        {!agents || agents.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Feather name="user-x" size={22} color={colors.text.muted} />
+            <Text style={styles.emptyText}>No agents in your country yet</Text>
+            <Text style={styles.emptySubText}>Approve agents to see them here</Text>
+          </View>
+        ) : (
+          agents.map((agent) => {
+            const initials = (agent.full_name || agent.email || "?")
+              .split(" ")
+              .map((w: string) => w[0])
+              .join("")
+              .toUpperCase()
+              .slice(0, 2);
+            const isOnline = agent.status === "online";
+            const agentMetrics = metricsByAgent.find((m) => m.user_id === agent.id);
+            const callsToday = agentMetrics?.calls_made ?? 0;
+            const connectsToday = agentMetrics?.connects ?? 0;
+            const connectRate =
+              callsToday > 0 ? Math.round((connectsToday / callsToday) * 100) : 0;
+
+            return (
+              <TouchableOpacity
+                key={agent.id}
+                style={styles.agentCard}
+                activeOpacity={0.75}
+                onPress={() =>
+                  router.push({
+                    pathname: `/agent-logs/${agent.id}` as any,
+                    params: { agentName: agent.full_name || agent.email },
+                  })
+                }
+              >
+                <View style={[styles.agentAvatar, isOnline && styles.agentAvatarOnline]}>
+                  <Text style={styles.agentAvatarText}>{initials}</Text>
+                  <View style={[styles.statusDot, isOnline ? styles.statusDotOnline : styles.statusDotOffline]} />
+                </View>
+                <View style={styles.agentInfo}>
+                  <Text style={styles.agentName}>{agent.full_name || agent.email}</Text>
+                  <Text style={styles.agentEmail} numberOfLines={1}>{agent.email}</Text>
+                </View>
+                <View style={styles.agentStats}>
+                  <View style={styles.agentStat}>
+                    <Text style={styles.agentStatValue}>{callsToday}</Text>
+                    <Text style={styles.agentStatLabel}>Calls</Text>
+                  </View>
+                  <View style={styles.agentStatDivider} />
+                  <View style={styles.agentStat}>
+                    <Text style={[styles.agentStatValue, connectRate >= 30 && { color: colors.status.success }]}>
+                      {connectRate}%
+                    </Text>
+                    <Text style={styles.agentStatLabel}>Rate</Text>
+                  </View>
+                  <View style={styles.agentStatDivider} />
+                  <View style={styles.agentStat}>
+                    <Text style={styles.agentStatValue}>{agent.assigned_leads}</Text>
+                    <Text style={styles.agentStatLabel}>Leads</Text>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={16} color={colors.text.muted} />
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </View>
+
+      {/* Quick actions */}
+      <View style={styles.quickActions}>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.quickGrid}>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/(tabs)/distribute")} activeOpacity={0.8}>
+            <Feather name="shuffle" size={20} color={colors.brand.dark} />
+            <Text style={styles.quickBtnText}>Distribute</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/(tabs)/import-leads")} activeOpacity={0.8}>
+            <Feather name="upload-cloud" size={20} color={colors.brand.dark} />
+            <Text style={styles.quickBtnText}>Import Leads</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/(tabs)/refresh-performance")} activeOpacity={0.8}>
+            <Feather name="refresh-ccw" size={20} color={colors.brand.dark} />
+            <Text style={styles.quickBtnText}>Refresh Data</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/(tabs)/approve-agents")} activeOpacity={0.8}>
+            <Feather name="user-check" size={20} color={colors.brand.dark} />
+            <Text style={styles.quickBtnText}>Approve Agents</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={{ height: 30 }} />
+    </ScrollView>
+  );
+}
+
+function AgentDashboard() {
   const { data: metrics, refetch, isLoading } = useTodayMetrics();
   const { data: callbacks } = usePendingCallbacks();
   const { data: recentCalls } = useRecentCalls();
-  const { data: allUsers } = useUsers();
   const router = useRouter();
 
-  const isManager = user?.role === "management" || user?.role === "admin";
-  const agents = allUsers?.filter((u) => u.approved && u.role === "agent") ?? [];
   const overdueCount = callbacks?.filter((c) => new Date(c.scheduled_for) < new Date()).length || 0;
 
   return (
@@ -58,20 +182,6 @@ export default function HomeScreen() {
       style={styles.container}
       refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={colors.brand.green} />}
     >
-      {/* Greeting */}
-      <View style={styles.greeting}>
-        <View>
-          <Text style={styles.greetText}>Hello, {user?.full_name?.split(" ")[0] || "Agent"}</Text>
-          <Text style={styles.dateText}>
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-          </Text>
-        </View>
-        <View style={styles.statusPill}>
-          <View style={styles.onlineDot} />
-          <Text style={styles.statusText}>Online</Text>
-        </View>
-      </View>
-
       {/* KPIs */}
       <Text style={styles.sectionTitle}>Today's Performance</Text>
       <View style={styles.kpiRow}>
@@ -80,70 +190,19 @@ export default function HomeScreen() {
         <KpiCard label="Converts" value={metrics?.conversions ?? 0} color={colors.status.info} />
       </View>
 
-      {/* Manager: Agent cards | Agent: Start Calling */}
-      {isManager ? (
-        <View style={styles.agentsSection}>
-          <View style={styles.agentsSectionHeader}>
-            <View style={styles.agentsTitleRow}>
-              <Feather name="users" size={14} color={colors.text.secondary} />
-              <Text style={styles.sectionTitleInline}>Agents</Text>
-            </View>
-            <Text style={styles.agentsCount}>{agents.length} active</Text>
-          </View>
-
-          {agents.length === 0 ? (
-            <View style={styles.emptyAgents}>
-              <Feather name="user-x" size={20} color={colors.text.muted} />
-              <Text style={styles.emptyAgentsText}>No active agents</Text>
-            </View>
-          ) : (
-            agents.map((agent) => {
-              const initials = (agent.full_name || agent.email)
-                .split(" ")
-                .map((w) => w[0])
-                .join("")
-                .toUpperCase()
-                .slice(0, 2);
-              const roleColor = ROLE_COLORS[agent.role] || colors.brand.green;
-              return (
-                <TouchableOpacity
-                  key={agent.id}
-                  style={styles.agentCard}
-                  activeOpacity={0.75}
-                  onPress={() =>
-                    router.push({
-                      pathname: `/agent-logs/${agent.id}` as any,
-                      params: { agentName: agent.full_name || agent.email },
-                    })
-                  }
-                >
-                  <View style={[styles.agentAvatar, { backgroundColor: roleColor }]}>
-                    <Text style={styles.agentAvatarText}>{initials}</Text>
-                  </View>
-                  <View style={styles.agentInfo}>
-                    <Text style={styles.agentName}>{agent.full_name || agent.email}</Text>
-                    <Text style={styles.agentEmail} numberOfLines={1}>{agent.email}</Text>
-                  </View>
-                  <Feather name="chevron-right" size={18} color={colors.text.muted} />
-                </TouchableOpacity>
-              );
-            })
-          )}
+      {/* Start Calling */}
+      <TouchableOpacity style={styles.startButton} onPress={() => router.push("/(tabs)/leads")} activeOpacity={0.8}>
+        <Feather name="phone-outgoing" size={22} color="#fff" />
+        <View>
+          <Text style={styles.startText}>Start Calling</Text>
+          <Text style={styles.startSub}>View your assigned leads</Text>
         </View>
-      ) : (
-        <TouchableOpacity style={styles.startButton} onPress={() => router.push("/(tabs)/leads")} activeOpacity={0.8}>
-          <Feather name="phone-outgoing" size={22} color="#fff" />
-          <View>
-            <Text style={styles.startText}>Start Calling</Text>
-            <Text style={styles.startSub}>View your assigned leads</Text>
-          </View>
-        </TouchableOpacity>
-      )}
+      </TouchableOpacity>
 
       {/* Recent Activity */}
       <View style={styles.activitySection}>
         <View style={styles.activityHeader}>
-          <View style={styles.activityTitleRow}>
+          <View style={styles.rowGap6}>
             <Feather name="activity" size={14} color={colors.text.secondary} />
             <Text style={styles.sectionTitleInline}>Recent Activity</Text>
           </View>
@@ -153,23 +212,26 @@ export default function HomeScreen() {
         </View>
 
         {!recentCalls || recentCalls.length === 0 ? (
-          <View style={styles.emptyActivity}>
+          <View style={styles.emptyBox}>
             <Feather name="phone-off" size={20} color={colors.text.muted} />
-            <Text style={styles.emptyActivityText}>No recent calls</Text>
-            <Text style={styles.emptyActivitySub}>Your call activity will appear here</Text>
+            <Text style={styles.emptyText}>No recent calls</Text>
+            <Text style={styles.emptySubText}>Your call activity will appear here</Text>
           </View>
         ) : (
           recentCalls.slice(0, 8).map((call, i) => {
             const statusStyle = STATUS_STYLE[call.status] || STATUS_STYLE.connected;
             return (
-              <View
-                key={call.id || i}
-                style={[styles.activityCard, i === 0 && { borderTopWidth: 0 }]}
-              >
+              <View key={call.id || i} style={[styles.activityCard, i === 0 && { borderTopWidth: 0 }]}>
                 <View style={styles.activityRow}>
                   <View style={[styles.activityIcon, { backgroundColor: statusStyle.bg }]}>
                     <Feather
-                      name={call.status === "connected" || call.status === "interested" ? "phone-incoming" : call.status === "no_answer" ? "phone-missed" : "phone-off"}
+                      name={
+                        call.status === "connected" || call.status === "interested"
+                          ? "phone-incoming"
+                          : call.status === "no_answer"
+                          ? "phone-missed"
+                          : "phone-off"
+                      }
                       size={13}
                       color={statusStyle.text}
                     />
@@ -215,7 +277,12 @@ export default function HomeScreen() {
               <View style={styles.cbRow}>
                 <Text style={styles.cbName}>{leadDisplayName(cb.phone_number)}</Text>
                 <Text style={styles.cbTime}>
-                  {new Date(cb.scheduled_for).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  {new Date(cb.scheduled_for).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
                 </Text>
               </View>
               {cb.notes && <Text style={styles.cbNotes} numberOfLines={1}>{cb.notes}</Text>}
@@ -231,8 +298,50 @@ export default function HomeScreen() {
   );
 }
 
+export default function HomeScreen() {
+  const { user } = useAuth();
+  const isManager = user?.role === "management" || user?.role === "admin";
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Greeting bar visible on both views */}
+      <View style={styles.topBar}>
+        <View>
+          <Text style={styles.greetText}>
+            Hello, {user?.full_name?.split(" ")[0] || (isManager ? "Manager" : "Agent")}
+          </Text>
+          <Text style={styles.dateText}>
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+          </Text>
+        </View>
+        {isManager ? (
+          <View style={[styles.statusPill, { backgroundColor: "#ede9fe" }]}>
+            <Feather name="briefcase" size={12} color="#7c3aed" />
+            <Text style={[styles.statusText, { color: "#7c3aed" }]}>Manager</Text>
+          </View>
+        ) : (
+          <View style={styles.statusPill}>
+            <View style={styles.onlineDot} />
+            <Text style={styles.statusText}>Online</Text>
+          </View>
+        )}
+      </View>
+      {isManager ? <ManagerDashboard /> : <AgentDashboard />}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg.dashboard },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: colors.bg.dashboard,
+  },
   greeting: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 16 },
   greetText: { fontSize: 22, fontWeight: "700", color: colors.text.primary },
   dateText: { fontSize: 13, color: colors.text.secondary, marginTop: 2 },
@@ -242,34 +351,75 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 12, fontWeight: "700", color: colors.text.secondary, paddingHorizontal: 20, marginTop: 20, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 },
   sectionTitleInline: { fontSize: 12, fontWeight: "700", color: colors.text.secondary, textTransform: "uppercase", letterSpacing: 0.5 },
   kpiRow: { flexDirection: "row", paddingHorizontal: 16 },
+  rowGap6: { flexDirection: "row", alignItems: "center", gap: 6 },
 
-  // Start Calling (agents only)
+  // Manager: Agent section
+  agentSection: { marginHorizontal: 20, marginTop: 20 },
+  agentSectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  agentsCount: { fontSize: 12, color: colors.text.muted, fontWeight: "500" },
+  agentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.bg.card,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    gap: 10,
+  },
+  agentAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.brand.green,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  agentAvatarOnline: { backgroundColor: "#16a34a" },
+  agentAvatarText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  statusDot: { position: "absolute", bottom: 0, right: 0, width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: colors.bg.card },
+  statusDotOnline: { backgroundColor: "#22c55e" },
+  statusDotOffline: { backgroundColor: "#9ca3af" },
+  agentInfo: { flex: 1, minWidth: 0 },
+  agentName: { fontSize: 14, fontWeight: "600", color: colors.text.primary },
+  agentEmail: { fontSize: 11, color: colors.text.muted, marginTop: 1 },
+  agentStats: { flexDirection: "row", alignItems: "center", gap: 6 },
+  agentStat: { alignItems: "center", minWidth: 30 },
+  agentStatValue: { fontSize: 14, fontWeight: "700", color: colors.text.primary },
+  agentStatLabel: { fontSize: 9, color: colors.text.muted, fontWeight: "600", textTransform: "uppercase" },
+  agentStatDivider: { width: 1, height: 20, backgroundColor: colors.border.default },
+
+  // Quick actions (manager)
+  quickActions: { marginHorizontal: 20, marginTop: 4 },
+  quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  quickBtn: {
+    flex: 1,
+    minWidth: "45%",
+    backgroundColor: colors.bg.card,
+    borderRadius: 10,
+    padding: 16,
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  quickBtnText: { fontSize: 13, fontWeight: "600", color: colors.brand.dark },
+
+  // Agent: Start Calling
   startButton: { backgroundColor: colors.brand.green, marginHorizontal: 20, marginTop: 20, borderRadius: 8, padding: 16, flexDirection: "row", alignItems: "center", gap: 14 },
   startText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   startSub: { color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 1 },
 
-  // Agents section (managers only)
-  agentsSection: { marginHorizontal: 20, marginTop: 20 },
-  agentsSectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  agentsTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  agentsCount: { fontSize: 12, color: colors.text.muted, fontWeight: "500" },
-  emptyAgents: { backgroundColor: colors.bg.card, borderRadius: 8, padding: 24, alignItems: "center", borderWidth: 1, borderColor: colors.border.default },
-  emptyAgentsText: { fontSize: 14, color: colors.text.secondary, marginTop: 8 },
-  agentCard: { flexDirection: "row", alignItems: "center", backgroundColor: colors.bg.card, borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default, gap: 12 },
-  agentAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  agentAvatarText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  agentInfo: { flex: 1 },
-  agentName: { fontSize: 15, fontWeight: "600", color: colors.text.primary },
-  agentEmail: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
+  // Empty states
+  emptyBox: { backgroundColor: colors.bg.card, borderRadius: 8, padding: 24, alignItems: "center", borderWidth: 1, borderColor: colors.border.default },
+  emptyText: { fontSize: 14, color: colors.text.secondary, fontWeight: "600", marginTop: 8 },
+  emptySubText: { fontSize: 12, color: colors.text.muted, marginTop: 2 },
 
   // Recent activity
   activitySection: { marginHorizontal: 20, marginTop: 20 },
   activityHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  activityTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   activityCount: { fontSize: 12, color: colors.text.muted, fontWeight: "500" },
-  emptyActivity: { backgroundColor: colors.bg.card, borderRadius: 8, padding: 24, alignItems: "center", borderWidth: 1, borderColor: colors.border.default },
-  emptyActivityText: { fontSize: 14, color: colors.text.secondary, fontWeight: "600", marginTop: 8 },
-  emptyActivitySub: { fontSize: 12, color: colors.text.muted, marginTop: 2 },
   activityCard: { paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border.default },
   activityRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   activityIcon: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
