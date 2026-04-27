@@ -10,6 +10,8 @@ import { useAgentsAvailable } from "../../src/hooks/useDistribution";
 import { api, API_BASE, getToken } from "../../src/api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { colors } from "../../src/theme/colors";
+import { useAuth } from "../../src/contexts/AuthContext";
+import { getCurrencyFromCountry } from "../../src/utils/formatCurrency";
 
 // Catches render errors and shows them instead of a blank screen
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: string | null }> {
@@ -68,6 +70,8 @@ type RefreshResult = {
 };
 
 function RefreshPerformanceScreen() {
+  const { user } = useAuth();
+  const currency = getCurrencyFromCountry(user?.country || 'UG');
   const { data: agents, refetch: refetchAgents } = useAgentsAvailable();
   const queryClient = useQueryClient();
 
@@ -348,7 +352,7 @@ function RefreshPerformanceScreen() {
               <Text style={styles.attributionLabel}>Call-attributed revenue</Text>
             </View>
             <Text style={styles.attributionValue}>
-              UGX {Math.round(result.attributed_deposit_ugx).toLocaleString()}
+              {currency} {Math.round(result.attributed_deposit_ugx).toLocaleString()}
             </Text>
             <Text style={styles.attributionSub}>
               {result.conversions_attributed} lead{result.conversions_attributed !== 1 ? "s" : ""} deposited after agent calls
@@ -429,7 +433,7 @@ function RefreshPerformanceScreen() {
                   <>
                     <Text style={styles.historySep}>·</Text>
                     <Text style={[styles.historyStatText, { color: "#047857" }]}>
-                      UGX {Math.round(Number(b.attributed_deposit_ugx)).toLocaleString()}
+                      {currency} {Math.round(Number(b.attributed_deposit_ugx)).toLocaleString()}
                     </Text>
                   </>
                 )}

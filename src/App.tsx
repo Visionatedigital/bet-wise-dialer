@@ -34,6 +34,8 @@ const UserManagement = lazy(() => import("./pages/UserManagement"));
 const PromisingLeads = lazy(() => import("./pages/PromisingLeads"));
 const ManagerImportLeads = lazy(() => import("./pages/ManagerImportLeads"));
 const ManagerRefreshPerformance = lazy(() => import("./pages/ManagerRefreshPerformance"));
+const ManagerHelp = lazy(() => import("./pages/ManagerHelp"));
+const AgentHelp = lazy(() => import("./pages/AgentHelp"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -197,6 +199,16 @@ const App = () => (
                     <Route path="/users" element={
                       <ProtectedRoute>
                         <UserManagement />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/help/manager" element={
+                      <ProtectedRoute>
+                        <ManagerHelp />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/help/agent" element={
+                      <ProtectedRoute>
+                        <AgentHelp />
                       </ProtectedRoute>
                     } />
                     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

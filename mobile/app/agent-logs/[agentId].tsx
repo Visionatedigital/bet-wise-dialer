@@ -16,6 +16,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../../src/api/client";
 import { CallActivity, Callback } from "../../src/types";
 import { colors } from "../../src/theme/colors";
+import { useAuth } from "../../src/contexts/AuthContext";
+import { getCurrencyFromCountry, getCurrencyFromPhone } from "../../src/utils/formatCurrency";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -111,6 +113,7 @@ const PRESETS: { key: PresetKey; label: string }[] = [
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AgentLogsScreen() {
+  const { user } = useAuth();
   const { agentId, agentName } = useLocalSearchParams<{ agentId: string; agentName: string }>();
 
   const [preset, setPreset] = useState<PresetKey>("today");
@@ -336,7 +339,7 @@ export default function AgentLogsScreen() {
                   {call.deposit_amount && call.deposit_amount > 0 ? (
                     <View style={styles.depositRow}>
                       <Feather name="trending-up" size={11} color="#10b981" />
-                      <Text style={styles.depositText}>Deposit: UGX {call.deposit_amount.toLocaleString()}</Text>
+                      <Text style={styles.depositText}>Deposit: {getCurrencyFromPhone(call.phone_number) || getCurrencyFromCountry(user?.country || 'UG')} {call.deposit_amount.toLocaleString()}</Text>
                     </View>
                   ) : null}
                   {cb ? (

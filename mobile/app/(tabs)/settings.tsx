@@ -1,29 +1,109 @@
 import React, { useState } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
-  ScrollView, TextInput, ActivityIndicator, Image,
+  ScrollView, TextInput, ActivityIndicator, Image, Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
+import { Feather } from "@expo/vector-icons";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { api } from "../../src/api/client";
 import { colors } from "../../src/theme/colors";
 
 export default function SettingsScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const router = useRouter();
 
   const [fullName, setFullName] = useState(user?.full_name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [avatarUri, setAvatarUri] = useState<string | null>(user?.avatar_url || null);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
+  const requestPermission = async (type: "camera" | "library") => {
+    if (type === "camera") {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      return status === "granted";
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      return status === "granted";
+    }
+  };
+
+  const processAndUpload = async (result: ImagePicker.ImagePickerResult) => {
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    setUploadingAvatar(true);
+    try {
+      // Build a base64 data URI — no separate file server needed
+      const base64 = asset.base64;
+      if (!base64) throw new Error("Could not read image data");
+      const mimeType = asset.mimeType ?? "image/jpeg";
+      const dataUri = `data:${mimeType};base64,${base64}`;
+
+      // Optimistic update
+      setAvatarUri(dataUri);
+
+      await api.patch(`/profiles/${user!.id}`, { avatar_url: dataUri });
+      await refreshUser();
+      Alert.alert("✓ Photo updated", "Your profile photo has been saved.");
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to upload photo");
+      // Revert on failure
+      setAvatarUri(user?.avatar_url || null);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const pickImage = () => {
-    Alert.alert("Photo Upload", "Profile photo upload will be available in the next app update.");
+    Alert.alert(
+      "Change Profile Photo",
+      "Choose a source",
+      [
+        {
+          text: "Take Photo",
+          onPress: async () => {
+            const granted = await requestPermission("camera");
+            if (!granted) {
+              Alert.alert("Permission required", "Camera access is needed to take a photo.");
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.7,
+              base64: true,
+            });
+            await processAndUpload(result);
+          },
+        },
+        {
+          text: "Choose from Library",
+          onPress: async () => {
+            const granted = await requestPermission("library");
+            if (!granted) {
+              Alert.alert("Permission required", "Photo library access is needed.");
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.7,
+              base64: true,
+            });
+            await processAndUpload(result);
+          },
+        },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
   };
 
   const handleSaveProfile = async () => {
@@ -82,7 +162,31 @@ export default function SettingsScreen() {
 
       {/* Avatar */}
       <View style={styles.avatarSection}>
-        <TouchableOpacity onPress={pickImage} activeOpacity={0.8}>
+        <TouchableOpacity
+          onPress={pickImage}
+          onLongPress={avatarUri ? () => {
+            Alert.alert("Remove Photo", "Remove your profile photo?", [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Remove", style: "destructive",
+                onPress: async () => {
+                  setUploadingAvatar(true);
+                  try {
+                    await api.patch(`/profiles/${user!.id}`, { avatar_url: null });
+                    setAvatarUri(null);
+                    await refreshUser();
+                  } catch (err: any) {
+                    Alert.alert("Error", err.message || "Failed to remove photo");
+                  } finally {
+                    setUploadingAvatar(false);
+                  }
+                },
+              },
+            ]);
+          } : undefined}
+          activeOpacity={0.8}
+          disabled={uploadingAvatar}
+        >
           {avatarUri ? (
             <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
           ) : (
@@ -90,11 +194,18 @@ export default function SettingsScreen() {
               <Text style={styles.avatarInitial}>{initials}</Text>
             </View>
           )}
+          {/* Camera badge */}
           <View style={styles.cameraBtn}>
-            <Text style={styles.cameraIcon}>📷</Text>
+            {uploadingAvatar ? (
+              <ActivityIndicator size={12} color={colors.brand.green} />
+            ) : (
+              <Feather name="camera" size={14} color={colors.text.primary} />
+            )}
           </View>
         </TouchableOpacity>
-        <Text style={styles.avatarHint}>Tap to change photo</Text>
+        <Text style={styles.avatarHint}>
+          {uploadingAvatar ? "Uploading…" : "Tap to change · Hold to remove"}
+        </Text>
       </View>
 
       {/* Profile Info */}
@@ -242,8 +353,7 @@ const styles = StyleSheet.create({
   avatarImg: { width: 88, height: 88, borderRadius: 44, borderWidth: 2, borderColor: colors.brand.green },
   avatarPlaceholder: { width: 88, height: 88, borderRadius: 44, backgroundColor: colors.brand.green, alignItems: "center", justifyContent: "center" },
   avatarInitial: { color: "#fff", fontSize: 34, fontWeight: "700" },
-  cameraBtn: { position: "absolute", bottom: 0, right: 0, backgroundColor: "#fff", borderRadius: 14, width: 28, height: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
-  cameraIcon: { fontSize: 14 },
+  cameraBtn: { position: "absolute", bottom: 0, right: 0, backgroundColor: "#fff", borderRadius: 14, width: 28, height: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 4, elevation: 3, borderWidth: 1, borderColor: colors.border.default },
   avatarHint: { fontSize: 12, color: colors.text.secondary, marginTop: 8 },
   card: { backgroundColor: colors.bg.card, marginHorizontal: 16, marginTop: 16, borderRadius: 12, padding: 18, borderWidth: 1, borderColor: colors.border.default },
   cardTitle: { fontSize: 15, fontWeight: "700", color: colors.text.primary, marginBottom: 14 },

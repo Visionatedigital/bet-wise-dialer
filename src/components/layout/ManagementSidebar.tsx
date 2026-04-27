@@ -1,4 +1,4 @@
-import { BarChart3, TrendingUp, Users, Target, FileText, Settings, Phone, Zap, Upload, RefreshCcw } from "lucide-react";
+import { BarChart3, TrendingUp, Users, Target, FileText, Settings, Phone, Zap, Upload, RefreshCcw, HelpCircle } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -23,6 +23,7 @@ const managementMenuItems = [
   { title: "Promising Leads", url: "/promising-leads", icon: Zap },
   { title: "Reports", url: "/management-reports", icon: FileText },
   { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Help", url: "/help/manager", icon: HelpCircle },
 ];
 
 export function ManagementSidebar() {

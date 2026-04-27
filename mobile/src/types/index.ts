@@ -6,6 +6,7 @@ export interface User {
   role: "agent" | "management" | "admin";
   approved?: boolean;
   status?: string;
+  country?: string;
 }
 
 export interface AuthResponse {

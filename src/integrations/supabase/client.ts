@@ -32,7 +32,7 @@ export const api = {
   post: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   put: <T>(path: string, body: unknown) => apiRequest<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   patch: <T>(path: string, body: unknown) => apiRequest<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
-  delete: <T>(path: string) => apiRequest<T>(path, { method: 'DELETE' }),
+  delete: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined }),
 };
 
 // Export environment helpers

@@ -13,6 +13,7 @@ import { parseCallbackIntent } from "../../src/utils/parseCallbackIntent";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
 import { computeCooldown } from "../../src/utils/cooldown";
+import { getCurrencyFromPhone } from "../../src/utils/formatCurrency";
 
 const DISPOSITIONS = [
   { value: "interested", label: "Interested", icon: "thumbs-up" as const, color: "#10b981", bg: "#dcfce7" },
@@ -124,6 +125,8 @@ export default function LeadDetailScreen() {
     setLeadStrength("warm");
     setScheduleCallback(false);
   };
+
+  const currency = lead ? getCurrencyFromPhone(lead.phone) : 'UGX';
 
   if (isLoading || !lead) {
     return (
@@ -280,13 +283,13 @@ export default function LeadDetailScreen() {
             {/* Financial Details */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Financial Summary</Text>
-              <InfoRow label="Deposits (UGX)" value={lead.lifetime_value ? `UGX ${Number(lead.lifetime_value).toLocaleString()}` : '—'} />
+              <InfoRow label={`Deposits (${currency})`} value={lead.lifetime_value ? `${currency} ${Number(lead.lifetime_value).toLocaleString()}` : '—'} />
               <InfoRow label="Deposits (USD)" value={lead.betting_patterns?.deposit_usd ? `$${Number(lead.betting_patterns.deposit_usd).toLocaleString()}` : '—'} />
               {(lead.betting_patterns?.total_bet_amount ?? 0) > 0 && (
-                <InfoRow label="Total Wagered" value={`UGX ${Number(lead.betting_patterns!.total_bet_amount).toLocaleString()}`} />
+                <InfoRow label="Total Wagered" value={`${currency} ${Number(lead.betting_patterns!.total_bet_amount).toLocaleString()}`} />
               )}
               {(lead.betting_patterns?.total_ggr ?? 0) > 0 && (
-                <InfoRow label="GGR" value={`UGX ${Number(lead.betting_patterns!.total_ggr).toLocaleString()}`} />
+                <InfoRow label="GGR" value={`${currency} ${Number(lead.betting_patterns!.total_ggr).toLocaleString()}`} />
               )}
               <InfoRow label="Last Login" value={lead.last_bet_date ? new Date(lead.last_bet_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : '—'} last />
             </View>
@@ -298,7 +301,7 @@ export default function LeadDetailScreen() {
             <InfoRow label="Segment" value={lead.segment || "—"} />
             <InfoRow label="Priority" value={lead.priority} />
             <InfoRow label="Score" value={lead.score?.toString() || "—"} />
-            <InfoRow label="Last Deposit" value={lead.last_deposit_ugx ? `UGX ${lead.last_deposit_ugx.toLocaleString()}` : "—"} last />
+            <InfoRow label="Last Deposit" value={lead.last_deposit_ugx ? `${currency} ${lead.last_deposit_ugx.toLocaleString()}` : "—"} last />
           </View>
         )}
 
@@ -370,7 +373,7 @@ export default function LeadDetailScreen() {
             {disposition === "interested" && (
               <>
                 <Text style={m.label}>
-                  <Feather name="trending-up" size={12} color={colors.status.success} /> Promised Deposit (UGX)
+                  <Feather name="trending-up" size={12} color={colors.status.success} /> Promised Deposit ({currency})
                 </Text>
                 <TextInput style={m.input} placeholder="e.g. 50000" placeholderTextColor={colors.text.muted} value={depositAmount} onChangeText={setDepositAmount} keyboardType="numeric" />
 

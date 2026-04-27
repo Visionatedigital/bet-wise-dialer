@@ -1,14 +1,20 @@
 // Utility functions for formatting data
 
-// Format Ugandan Shillings
-export const formatUGX = (amount: number): string => {
-  return new Intl.NumberFormat('en-UG', {
+import { COUNTRY_MAP } from '@/config/countries';
+
+// Format an amount in the currency for the given country code (e.g. 'UG', 'NG')
+export const formatCurrency = (amount: number, countryCode: string): string => {
+  const currency = COUNTRY_MAP[countryCode]?.currency ?? 'UGX';
+  return new Intl.NumberFormat('en', {
     style: 'currency',
-    currency: 'UGX',
+    currency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
 };
+
+// Format Ugandan Shillings (kept for backwards compat)
+export const formatUGX = (amount: number): string => formatCurrency(amount, 'UG');
 
 // Format date/time in Kampala timezone
 export const formatKampalaTime = (date: Date | string): string => {

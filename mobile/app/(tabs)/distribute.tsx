@@ -127,6 +127,7 @@ export default function ManageLeadsScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [clearingCategory, setClearingCategory] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
   const { data: agents } = useAgentsAvailable();
@@ -224,6 +225,61 @@ export default function ManageLeadsScreen() {
     }
   };
 
+  const confirmClearCategory = (categoryId: string, categoryTitle: string) => {
+    Alert.alert(
+      `Clear "${categoryTitle}"?`,
+      `Permanently delete all leads in the "${categoryTitle}" category. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Yes, delete",
+          style: "destructive",
+          onPress: async () => {
+            setClearingCategory(categoryId);
+            try {
+              const res = await api.delete<{ message: string; deleted: number }>("/leads/clear-by-trait", { categoryId });
+              Alert.alert("Done", res.message);
+              refetchCounts();
+              queryClient.invalidateQueries({ queryKey: ["manage-leads"] });
+            } catch (err: any) {
+              Alert.alert("Error", err?.message || "Failed to clear category.");
+            } finally {
+              setClearingCategory(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const confirmClearAll = () => {
+    Alert.alert(
+      "Clear ALL Leads",
+      "This will permanently delete ALL leads and their entire history from the database. This cannot be undone.\n\nAre you absolutely sure?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Yes, delete everything",
+          style: "destructive",
+          onPress: async () => {
+            setClearingCategory("all");
+            try {
+              const res = await api.delete<{ message: string; deleted: number }>("/leads/clear-all");
+              Alert.alert("Done", res.message || "All leads cleared.");
+              refetchCounts();
+              queryClient.invalidateQueries({ queryKey: ["manage-leads"] });
+              queryClient.invalidateQueries({ queryKey: ["category-counts"] });
+            } catch (err: any) {
+              Alert.alert("Error", err?.message || "Failed to clear all leads.");
+            } finally {
+              setClearingCategory(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderLead = useCallback(
     ({ item }: { item: ManageLead }) => {
       const isSelected = selected.has(item.id);
@@ -271,29 +327,48 @@ export default function ManageLeadsScreen() {
   // ── Category overview ──────────────────────────────────────────────────────
   if (!activeCategory) {
     return (
-      <View style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetchCounts()} tintColor={colors.brand.green} />}
+        contentContainerStyle={{ paddingBottom: 32 }}
+      >
         <View style={styles.overviewHeader}>
           <Text style={styles.overviewTotal}>
             {counts?.total != null ? Number(counts.total).toLocaleString() : "—"} leads total
           </Text>
           <Text style={styles.overviewSub}>Tap a category to view and assign leads</Text>
         </View>
-        <FlatList
-          key="category-grid"
-          data={CATEGORIES}
-          keyExtractor={(c) => c.id}
-          numColumns={2}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetchCounts()} tintColor={colors.brand.green} />}
-          contentContainerStyle={{ padding: 12, gap: 10 }}
-          columnWrapperStyle={{ gap: 10 }}
-          renderItem={({ item }) => {
+
+        {/* 2-column grid */}
+        <View style={styles.categoryGrid}>
+          {CATEGORIES.map((item) => {
             const count = counts != null ? Number(counts[item.countKey] ?? 0) : null;
+            const isClearing = clearingCategory === item.id;
             return (
               <TouchableOpacity
+                key={item.id}
                 style={[styles.categoryCard, { backgroundColor: item.bg, borderColor: item.border }]}
                 onPress={() => setActiveCategory(item.id)}
                 activeOpacity={0.75}
               >
+                {/* Trash icon top-right */}
+                <TouchableOpacity
+                  style={styles.cardTrashBtn}
+                  onPress={() => confirmClearCategory(item.id, item.title)}
+                  disabled={isClearing || count === 0}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  {isClearing ? (
+                    <ActivityIndicator size={12} color={colors.status.error} />
+                  ) : (
+                    <Feather
+                      name="trash-2"
+                      size={13}
+                      color={count === 0 ? item.border : colors.status.error}
+                    />
+                  )}
+                </TouchableOpacity>
+
                 <View style={[styles.categoryIconWrap, { backgroundColor: item.dot + "22" }]}>
                   <Feather name={item.icon} size={18} color={item.dot} />
                 </View>
@@ -304,9 +379,35 @@ export default function ManageLeadsScreen() {
                 <Text style={[styles.categoryDesc, { color: item.text + "99" }]}>{item.description}</Text>
               </TouchableOpacity>
             );
-          }}
-        />
-      </View>
+          })}
+        </View>
+
+        {/* Danger Zone */}
+        <View style={styles.dangerSection}>
+          <View style={styles.dangerHeader}>
+            <Feather name="alert-triangle" size={13} color={colors.status.error} />
+            <Text style={styles.dangerTitle}>Danger Zone</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.dangerBtn, clearingCategory === "all" && { opacity: 0.5 }]}
+            onPress={confirmClearAll}
+            disabled={clearingCategory === "all"}
+            activeOpacity={0.8}
+          >
+            {clearingCategory === "all" ? (
+              <ActivityIndicator color={colors.status.error} size="small" />
+            ) : (
+              <Feather name="trash-2" size={15} color={colors.status.error} />
+            )}
+            <Text style={styles.dangerBtnText}>
+              {clearingCategory === "all" ? "Clearing…" : "Clear ALL Leads"}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.dangerHint}>
+            Permanently deletes every lead and all call history from the database.
+          </Text>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -497,8 +598,15 @@ const styles = StyleSheet.create({
   overviewTotal: { fontSize: 18, fontWeight: "800", color: colors.text.primary },
   overviewSub: { fontSize: 12, color: colors.text.muted, marginTop: 2 },
 
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    padding: 12,
+    gap: 10,
+  },
+
   categoryCard: {
-    flex: 1,
+    width: "47%",
     borderRadius: 12,
     borderWidth: 1,
     padding: 14,
@@ -506,6 +614,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
+    position: "relative",
+  },
+  cardTrashBtn: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    padding: 4,
+    zIndex: 10,
   },
   categoryIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 10 },
   categoryCount: { fontSize: 28, fontWeight: "800", lineHeight: 32 },
@@ -601,4 +717,12 @@ const styles = StyleSheet.create({
   agentOptionAvatarText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   agentOptionName: { fontSize: 15, fontWeight: "600", color: colors.text.primary },
   agentOptionMeta: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
+
+  // Danger zone
+  dangerSection: { marginHorizontal: 12, marginTop: 8, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: "#fecaca", backgroundColor: "#fff5f5" },
+  dangerHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  dangerTitle: { fontSize: 11, fontWeight: "700", color: colors.status.error, textTransform: "uppercase", letterSpacing: 0.5 },
+  dangerBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1.5, borderColor: colors.status.error, borderRadius: 8, paddingVertical: 11 },
+  dangerBtnText: { fontSize: 13, fontWeight: "700", color: colors.status.error },
+  dangerHint: { fontSize: 11, color: colors.text.muted, marginTop: 8, textAlign: "center", lineHeight: 15 },
 });

@@ -91,18 +91,29 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
 });
 
-// GET /leads/unassigned - get count and list of unassigned leads (admin)
+// GET /leads/unassigned - get count and list of unassigned leads (admin/management)
 router.get('/unassigned', requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
     const { limit = 50, offset = 0 } = req.query;
-    const countResult = await query('SELECT COUNT(*) FROM leads WHERE user_id IS NULL');
+    const isManagement = req.user!.role === 'management';
+    const params: any[] = [];
+    let countryClause = '';
+    if (isManagement) {
+      params.push(req.user!.id);
+      countryClause = `AND country = (SELECT country FROM profiles WHERE id = $${params.length})`;
+    }
+    const countResult = await query(
+      `SELECT COUNT(*) FROM leads WHERE user_id IS NULL ${countryClause}`,
+      params
+    );
+    const listParams = [...params, Number(limit), Number(offset)];
     const result = await query(
       `SELECT l.*, c.name as campaign_name FROM leads l
        LEFT JOIN campaigns c ON c.id = l.campaign_id
-       WHERE l.user_id IS NULL
+       WHERE l.user_id IS NULL ${countryClause}
        ORDER BY COALESCE(l.lead_score, l.score, 0) DESC, l.created_at ASC
-       LIMIT $1 OFFSET $2`,
-      [Number(limit), Number(offset)]
+       LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,
+      listParams
     );
     res.json({ total: parseInt(countResult.rows[0].count), leads: result.rows });
   } catch (err) { res.status(500).json({ error: 'Failed to fetch unassigned leads' }); }
@@ -113,7 +124,7 @@ router.get('/agents-available', requireAdmin as any, async (req: AuthRequest, re
   try {
     const isManagement = req.user!.role === 'management';
     const params: any[] = [];
-    let sql = `SELECT p.id, p.full_name, p.email, p.status, p.manager_id, p.country,
+    let sql = `SELECT p.id, p.full_name, p.email, p.status, p.manager_id, p.country, p.avatar_url,
                       r.role,
                       COUNT(l.id) as assigned_leads,
                       COALESCE(SUM(COALESCE(l.lead_score, l.score, 0)), 0) as total_score
@@ -125,7 +136,7 @@ router.get('/agents-available', requireAdmin as any, async (req: AuthRequest, re
       params.push(req.user!.id);
       sql += ` AND p.country = (SELECT country FROM profiles WHERE id = $${params.length})`;
     }
-    sql += ` GROUP BY p.id, p.full_name, p.email, p.status, p.manager_id, p.country, r.role ORDER BY p.full_name`;
+    sql += ` GROUP BY p.id, p.full_name, p.email, p.status, p.manager_id, p.country, p.avatar_url, r.role ORDER BY p.full_name`;
     const result = await query(sql, params);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: 'Failed to fetch available agents' }); }
@@ -184,9 +195,12 @@ router.get('/distribution-stats', requireAdmin as any, async (req: AuthRequest, 
 router.get('/category-counts', requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
     const isManagement = req.user!.role === 'management';
-    const countryScope = isManagement
-      ? `AND l.country = (SELECT country FROM profiles WHERE id = '${req.user!.id}')`
-      : '';
+    const params: any[] = [];
+    let countryFilter = '';
+    if (isManagement) {
+      params.push(req.user!.id);
+      countryFilter = `AND l.country = (SELECT country FROM profiles WHERE id = $1)`;
+    }
 
     const result = await query(`
       SELECT
@@ -199,8 +213,8 @@ router.get('/category-counts', requireAdmin as any, async (req: AuthRequest, res
         COUNT(*) FILTER (WHERE l.user_id IS NULL) AS unassigned,
         COUNT(*) AS total
       FROM leads l
-      WHERE 1=1 ${countryScope}
-    `);
+      WHERE 1=1 ${countryFilter}
+    `, params);
     res.json(result.rows[0]);
   } catch (err) {
     console.error('[Leads] Category counts error:', err);
@@ -763,16 +777,28 @@ router.get('/export-phones', requireAdmin as any, async (req: AuthRequest, res: 
   }
 });
 
-// GET /leads/import-batches - recent import history
+// GET /leads/import-batches - recent import history (country-scoped for management)
 router.get('/import-batches', requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
     const { limit = 20 } = req.query;
-    const result = await query(
-      `SELECT b.*, p.full_name AS user_name
-       FROM import_batches b LEFT JOIN profiles p ON p.id = b.user_id
-       ORDER BY b.created_at DESC LIMIT $1`,
-      [Number(limit)]
-    );
+    const isManagement = req.user!.role === 'management';
+    let sql: string;
+    let params: any[];
+    if (isManagement) {
+      sql = `SELECT b.*, p.full_name AS user_name
+             FROM import_batches b LEFT JOIN profiles p ON p.id = b.user_id
+             WHERE b.user_id IN (
+               SELECT id FROM profiles WHERE country = (SELECT country FROM profiles WHERE id = $1)
+             )
+             ORDER BY b.created_at DESC LIMIT $2`;
+      params = [req.user!.id, Number(limit)];
+    } else {
+      sql = `SELECT b.*, p.full_name AS user_name
+             FROM import_batches b LEFT JOIN profiles p ON p.id = b.user_id
+             ORDER BY b.created_at DESC LIMIT $1`;
+      params = [Number(limit)];
+    }
+    const result = await query(sql, params);
     res.json(result.rows);
   } catch (err) {
     console.error('[Leads] Import batches fetch error:', err);
@@ -796,9 +822,23 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 // GET /leads/:id
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
+    const role = req.user!.role;
     const result = await query('SELECT * FROM leads WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Lead not found' });
-    res.json(result.rows[0]);
+    const lead = result.rows[0];
+    // Agents can only see leads assigned to them
+    if (role === 'agent' && lead.user_id !== req.user!.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    // Management can only see leads in their country
+    if (role === 'management') {
+      const cpResult = await query('SELECT country FROM profiles WHERE id = $1', [req.user!.id]);
+      const country = cpResult.rows[0]?.country;
+      if (lead.country && country && lead.country !== country) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+    res.json(lead);
   } catch (err) { res.status(500).json({ error: 'Failed to fetch lead' }); }
 });
 
@@ -865,10 +905,191 @@ router.get('/:id/events', async (req: AuthRequest, res: Response) => {
   } catch (err) { res.status(500).json({ error: 'Failed to fetch lead events' }); }
 });
 
-// DELETE /leads/:id
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+// DELETE /leads/clear-all - permanently delete all leads from the database (admin/management only)
+// Management role is country-scoped; admin deletes everything.
+// NOTE: must be registered BEFORE /:id to prevent Express from matching 'clear-all' as an id.
+router.delete('/clear-all', requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
-    await query('DELETE FROM leads WHERE id = $1', [req.params.id]);
+    const isAdmin = req.user!.role === 'admin';
+    let deleted: number;
+
+    if (isAdmin) {
+      // Admin: delete lead_events first (FK), then all leads
+      await query('DELETE FROM lead_events WHERE lead_id IN (SELECT id FROM leads)');
+      await query('DELETE FROM import_batches');
+      const result = await query('DELETE FROM leads');
+      deleted = result.rowCount ?? 0;
+    } else {
+      // Management: scope to their country only
+      const cpResult = await query('SELECT country FROM profiles WHERE id = $1', [req.user!.id]);
+      const country = cpResult.rows[0]?.country;
+      if (!country) return res.status(400).json({ error: 'Country not found for your account' });
+
+      await query(
+        'DELETE FROM lead_events WHERE lead_id IN (SELECT id FROM leads WHERE country = $1)',
+        [country]
+      );
+      const result = await query('DELETE FROM leads WHERE country = $1', [country]);
+      deleted = result.rowCount ?? 0;
+    }
+
+    res.json({ message: `Deleted ${deleted} lead${deleted === 1 ? '' : 's'} from the database`, deleted });
+  } catch (err) {
+    console.error('[Leads] Clear-all error:', err);
+    res.status(500).json({ error: 'Failed to clear leads' });
+  }
+});
+
+// DELETE /leads/clear-by-status - delete all leads with a specific status (admin/management only)
+// Body: { status: string } — use "unassigned" for leads with no status.
+// Management role is country-scoped.
+// NOTE: must be registered BEFORE /:id.
+router.delete('/clear-by-status', requireAdmin as any, async (req: AuthRequest, res: Response) => {
+  try {
+    const { status } = req.body as { status?: string };
+    if (!status) return res.status(400).json({ error: 'Provide a status to clear' });
+
+    const isAdmin = req.user!.role === 'admin';
+    let country: string | null = null;
+    if (!isAdmin) {
+      const cpResult = await query('SELECT country FROM profiles WHERE id = $1', [req.user!.id]);
+      country = cpResult.rows[0]?.country || null;
+      if (!country) return res.status(400).json({ error: 'Country not found for your account' });
+    }
+
+    // Build WHERE clause for status matching
+    let statusWhere: string;
+    const params: any[] = [];
+    let p = 1;
+
+    if (status === 'unassigned') {
+      // "unassigned" = no status, empty string, 'pending', or explicitly 'unassigned'
+      statusWhere = `(status IS NULL OR status = '' OR status = 'unassigned' OR status = 'pending')`;
+    } else if (status === 'no_answer') {
+      // Accept both internal values
+      statusWhere = `status IN ('no_answer', 'called_no_answer')`;
+    } else {
+      params.push(status);
+      statusWhere = `status = $${p++}`;
+    }
+
+    if (country) {
+      params.push(country);
+      statusWhere += ` AND country = $${p++}`;
+    }
+
+    // Cascade: delete events first, then the leads
+    await query(
+      `DELETE FROM lead_events WHERE lead_id IN (SELECT id FROM leads WHERE ${statusWhere})`,
+      params
+    );
+    const result = await query(`DELETE FROM leads WHERE ${statusWhere}`, params);
+    const deleted = result.rowCount ?? 0;
+
+    res.json({
+      message: `Deleted ${deleted} lead${deleted === 1 ? '' : 's'} with status "${status}"`,
+      deleted,
+      status,
+    });
+  } catch (err) {
+    console.error('[Leads] Clear-by-status error:', err);
+    res.status(500).json({ error: 'Failed to clear leads by status' });
+  }
+});
+
+// DELETE /leads/clear-by-trait - delete all leads in a Manage Leads category (admin/management only)
+// categoryId matches the CATEGORIES ids in distribute.tsx:
+//   high_staker, medium_staker, frequent_bettor, dormant → trait field
+//   pipeline → lifecycle_stage IN ('interested','promised')
+//   unassigned → user_id IS NULL
+// "all" deletes everything (same as clear-all).
+// NOTE: must be registered BEFORE /:id.
+router.delete('/clear-by-trait', requireAdmin as any, async (req: AuthRequest, res: Response) => {
+  try {
+    const { categoryId } = req.body as { categoryId?: string };
+    if (!categoryId) return res.status(400).json({ error: 'Provide a categoryId' });
+
+    const isAdmin = req.user!.role === 'admin';
+    let country: string | null = null;
+
+    // Management ALWAYS gets their country — no bypass possible
+    if (!isAdmin) {
+      const cpResult = await query(
+        'SELECT country FROM profiles WHERE id = $1',
+        [req.user!.id]
+      );
+      country = cpResult.rows[0]?.country || null;
+      if (!country) return res.status(400).json({ error: 'Country not found for your account' });
+    }
+
+    // Build the WHERE clause using parameterized values only
+    const params: any[] = [];
+    let p = 1;
+    let baseWhere: string;
+
+    if (categoryId === 'all') {
+      baseWhere = '1=1'; // country clause appended below if management
+    } else if (categoryId === 'unassigned') {
+      baseWhere = 'user_id IS NULL';
+    } else if (categoryId === 'pipeline') {
+      baseWhere = `lifecycle_stage IN ('interested','promised')`;
+    } else {
+      // Trait-based — whitelist so arbitrary values can't be injected
+      const traitMap: Record<string, string> = {
+        high_staker: 'High Staker',
+        medium_staker: 'Medium Staker',
+        frequent_bettor: 'Frequent Bettor',
+        dormant: 'Dormant',
+      };
+      const trait = traitMap[categoryId];
+      if (!trait) return res.status(400).json({ error: `Unknown categoryId: ${categoryId}` });
+      params.push(trait);
+      baseWhere = `trait = $${p++}`;
+    }
+
+    // Always append country filter for management roles — parameterized
+    let where = baseWhere;
+    if (country) {
+      params.push(country);
+      where = `(${baseWhere}) AND country = $${p++}`;
+    }
+
+    // Cascade: delete events first (FK), then leads
+    await query(
+      `DELETE FROM lead_events WHERE lead_id IN (SELECT id FROM leads WHERE ${where})`,
+      params
+    );
+    const result = await query(`DELETE FROM leads WHERE ${where}`, params);
+    const deleted = result.rowCount ?? 0;
+
+    res.json({
+      message: `Deleted ${deleted} lead${deleted === 1 ? '' : 's'} from category "${categoryId}"${country ? ` (country: ${country})` : ''}`,
+      deleted,
+      categoryId,
+    });
+  } catch (err) {
+    console.error('[Leads] Clear-by-trait error:', err);
+    res.status(500).json({ error: 'Failed to clear leads by category' });
+  }
+});
+
+// DELETE /leads/:id — only admins and management can delete individual leads
+router.delete('/:id', requireAdmin as any, async (req: AuthRequest, res: Response) => {
+  try {
+    const isManagement = req.user!.role === 'management';
+    if (isManagement) {
+      // Scope delete to management's country — they cannot delete leads from other countries
+      const cpResult = await query('SELECT country FROM profiles WHERE id = $1', [req.user!.id]);
+      const country = cpResult.rows[0]?.country;
+      if (!country) return res.status(400).json({ error: 'Country not found for your account' });
+      const result = await query(
+        'DELETE FROM leads WHERE id = $1 AND country = $2 RETURNING id',
+        [req.params.id, country]
+      );
+      if (result.rowCount === 0) return res.status(404).json({ error: 'Lead not found in your country' });
+    } else {
+      await query('DELETE FROM leads WHERE id = $1', [req.params.id]);
+    }
     res.json({ message: 'Lead deleted' });
   } catch (err) { res.status(500).json({ error: 'Failed to delete lead' }); }
 });
@@ -1066,5 +1287,7 @@ router.post('/unassign-all', requireAdmin as any, async (req: AuthRequest, res: 
     res.json({ message: `Unassigned ${result.rowCount} leads` });
   } catch (err) { res.status(500).json({ error: 'Failed to unassign leads' }); }
 });
+
+
 
 export default router;

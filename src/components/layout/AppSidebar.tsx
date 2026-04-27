@@ -10,6 +10,7 @@ import {
   Home,
   LogOut,
   CheckSquare,
+  HelpCircle,
   LucideProps
 } from "lucide-react";
 import WhatsAppLogo from "@/assets/whatsapp-logo.svg";
@@ -87,6 +88,12 @@ const navigationItems = [
     url: "/settings",
     icon: Settings,
     description: "System configuration"
+  },
+  {
+    title: "Help",
+    url: "/help/agent",
+    icon: HelpCircle,
+    description: "How-to guides & support"
   },
 ];
 

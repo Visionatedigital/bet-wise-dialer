@@ -8,10 +8,14 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Alert,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useLeads } from "../../src/hooks/useLeads";
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "../../src/api/client";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
 
@@ -33,8 +37,67 @@ function maskPhone(phone: string): string {
 export default function LeadsScreen() {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [clearingLeads, setClearingLeads] = useState(false);
+  const [clearingStatus, setClearingStatus] = useState<string | null>(null);
   const { data: leads, isLoading, refetch } = useLeads();
+  const queryClient = useQueryClient();
   const router = useRouter();
+
+  const confirmClearAllLeads = () => {
+    Alert.alert(
+      "Clear All Leads",
+      "This will permanently delete ALL leads and their history from the database. This cannot be undone.\n\nAre you sure?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Yes, delete all",
+          style: "destructive",
+          onPress: async () => {
+            setClearingLeads(true);
+            try {
+              const res = await api.delete<{ message: string; deleted: number }>("/leads/clear-all");
+              Alert.alert("Done", res.message || "All leads cleared from the database.");
+              queryClient.invalidateQueries({ queryKey: ["leads"] });
+              queryClient.invalidateQueries({ queryKey: ["distribution-stats"] });
+              refetch();
+            } catch (err: any) {
+              Alert.alert("Error", err?.message || "Failed to clear leads.");
+            } finally {
+              setClearingLeads(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const confirmClearByStatus = (categoryId: string, categoryTitle: string) => {
+    Alert.alert(
+      `Clear "${categoryTitle}" Leads`,
+      `This will permanently delete all leads in the "${categoryTitle}" category. This cannot be undone.\n\nAre you sure?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Yes, delete",
+          style: "destructive",
+          onPress: async () => {
+            setClearingStatus(categoryId);
+            try {
+              const res = await api.delete<{ message: string; deleted: number }>("/leads/clear-by-status", { status: categoryId });
+              Alert.alert("Done", res.message);
+              queryClient.invalidateQueries({ queryKey: ["leads"] });
+              queryClient.invalidateQueries({ queryKey: ["distribution-stats"] });
+              refetch();
+            } catch (err: any) {
+              Alert.alert("Error", err?.message || "Failed to clear leads.");
+            } finally {
+              setClearingStatus(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
@@ -72,24 +135,24 @@ export default function LeadsScreen() {
   // Category tiles view
   if (!activeCategory) {
     return (
-      <View style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={colors.brand.green} />}
+        contentContainerStyle={{ paddingBottom: 32 }}
+      >
         <View style={styles.summaryHeader}>
           <Text style={styles.totalText}>
             {leads?.length || 0} Total Leads
           </Text>
         </View>
 
-        <FlatList
-          data={CATEGORIES}
-          keyExtractor={(c) => c.id}
-          refreshControl={
-            <RefreshControl refreshing={false} onRefresh={refetch} tintColor={colors.brand.green} />
-          }
-          contentContainerStyle={{ padding: 16, gap: 10 }}
-          renderItem={({ item }) => {
+        <View style={{ padding: 16, gap: 10 }}>
+          {CATEGORIES.map((item) => {
             const count = grouped[item.id]?.length || 0;
+            const isClearing = clearingStatus === item.id;
             return (
               <TouchableOpacity
+                key={item.id}
                 style={[styles.categoryCard, { backgroundColor: item.bg, borderColor: item.border }]}
                 onPress={() => setActiveCategory(item.id)}
                 activeOpacity={0.7}
@@ -106,13 +169,56 @@ export default function LeadsScreen() {
                       {count}
                     </Text>
                   </View>
+                  {/* Per-category trash */}
+                  <TouchableOpacity
+                    style={styles.trashBtn}
+                    onPress={() => confirmClearByStatus(item.id, item.title)}
+                    disabled={isClearing || count === 0}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {isClearing ? (
+                      <ActivityIndicator size={12} color={colors.status.error} />
+                    ) : (
+                      <Feather
+                        name="trash-2"
+                        size={14}
+                        color={count === 0 ? colors.border.default : colors.status.error}
+                      />
+                    )}
+                  </TouchableOpacity>
                   <Feather name="chevron-right" size={16} color={item.text} />
                 </View>
               </TouchableOpacity>
             );
-          }}
-        />
-      </View>
+          })}
+        </View>
+
+        {/* Danger zone */}
+        <View style={styles.dangerSection}>
+          <View style={styles.dangerHeader}>
+            <Feather name="alert-triangle" size={13} color={colors.status.error} />
+            <Text style={styles.dangerTitle}>Danger Zone</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.dangerBtn, clearingLeads && { opacity: 0.5 }]}
+            onPress={confirmClearAllLeads}
+            disabled={clearingLeads}
+            activeOpacity={0.8}
+          >
+            {clearingLeads ? (
+              <ActivityIndicator color={colors.status.error} size="small" />
+            ) : (
+              <Feather name="trash-2" size={15} color={colors.status.error} />
+            )}
+            <Text style={styles.dangerBtnText}>
+              {clearingLeads ? "Clearing…" : "Clear All Leads"}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.dangerHint}>
+            Permanently deletes all leads and call history from the database.
+          </Text>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -390,4 +496,17 @@ const styles = StyleSheet.create({
   // Due date
   dueRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.04)" },
   dueText: { fontSize: 11, color: colors.text.muted },
+
+  trashBtn: {
+    padding: 4,
+    marginRight: 2,
+  },
+
+  // Danger zone
+  dangerSection: { marginHorizontal: 16, marginTop: 8, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: "#fecaca", backgroundColor: "#fff5f5" },
+  dangerHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  dangerTitle: { fontSize: 11, fontWeight: "700", color: colors.status.error, textTransform: "uppercase", letterSpacing: 0.5 },
+  dangerBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1.5, borderColor: colors.status.error, borderRadius: 8, paddingVertical: 11 },
+  dangerBtnText: { fontSize: 13, fontWeight: "700", color: colors.status.error },
+  dangerHint: { fontSize: 11, color: colors.text.muted, marginTop: 8, textAlign: "center", lineHeight: 15 },
 });

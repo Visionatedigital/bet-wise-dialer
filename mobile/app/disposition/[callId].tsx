@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { parseCallbackIntent } from "../../src/utils/parseCallbackIntent";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
+import { getCurrencyFromPhone } from "../../src/utils/formatCurrency";
 
 const DISPOSITIONS = [
   { value: "interested", label: "Interested", color: colors.status.success, bg: "#dcfce7" },
@@ -19,6 +20,7 @@ export default function DispositionScreen() {
   const params = useLocalSearchParams<{ callId: string; leadId: string; leadName: string; phone: string; campaignId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const currency = getCurrencyFromPhone(params.phone || '');
   const [disposition, setDisposition] = useState("");
   const [notes, setNotes] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
@@ -68,7 +70,7 @@ export default function DispositionScreen() {
 
         {disposition === "interested" && (
           <>
-            <Text style={styles.sectionTitle}>Promised Deposit (UGX)</Text>
+            <Text style={styles.sectionTitle}>Promised Deposit ({currency})</Text>
             <TextInput style={styles.input} placeholder="e.g. 50000" placeholderTextColor={colors.text.muted} value={depositAmount} onChangeText={setDepositAmount} keyboardType="numeric" />
           </>
         )}

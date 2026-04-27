@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -11,6 +11,7 @@ import { useAgentsAvailable } from "../../src/hooks/useDistribution";
 import { KpiCard } from "../../src/components/KpiCard";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
+import { FloatingAssistant } from "../../src/components/FloatingAssistant";
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length < 6) return phone || "";
@@ -110,7 +111,11 @@ function ManagerDashboard() {
                 }
               >
                 <View style={[styles.agentAvatar, isOnline && styles.agentAvatarOnline]}>
-                  <Text style={styles.agentAvatarText}>{initials}</Text>
+                  {agent.avatar_url ? (
+                    <Image source={{ uri: agent.avatar_url }} style={styles.agentAvatarImg} />
+                  ) : (
+                    <Text style={styles.agentAvatarText}>{initials}</Text>
+                  )}
                   <View style={[styles.statusDot, isOnline ? styles.statusDotOnline : styles.statusDotOffline]} />
                 </View>
                 <View style={styles.agentInfo}>
@@ -399,6 +404,8 @@ export default function HomeScreen() {
         )}
       </View>
       {isManager ? <ManagerDashboard /> : <AgentDashboard />}
+      {/* Floating AI assistant — only for managers */}
+      {isManager && <FloatingAssistant managerName={user?.full_name} />}
     </View>
   );
 }
@@ -449,6 +456,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   agentAvatarOnline: { backgroundColor: "#16a34a" },
+  agentAvatarImg: { width: "100%", height: "100%", borderRadius: 21 },
   agentAvatarText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   statusDot: { position: "absolute", bottom: 0, right: 0, width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: colors.bg.card },
   statusDotOnline: { backgroundColor: "#22c55e" },

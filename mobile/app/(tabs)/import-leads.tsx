@@ -117,13 +117,24 @@ export default function ImportLeadsScreen() {
         const wb = XLSX.read(b64, { type: "base64" });
         json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
       } else {
-        const text = await FileSystem.readAsStringAsync(file.uri);
+        let text = await FileSystem.readAsStringAsync(file.uri);
+        // Strip UTF-8 BOM if present
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
         const lines = text.split(/\r?\n/).filter((l) => l.trim());
         const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
         json = lines.slice(1).map((line) => {
-          const vals = line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
+          // Handle quoted fields (may contain commas)
+          const vals: string[] = [];
+          let cur = "", inQuote = false;
+          for (let ci = 0; ci < line.length; ci++) {
+            const ch = line[ci];
+            if (ch === '"') { inQuote = !inQuote; }
+            else if (ch === "," && !inQuote) { vals.push(cur.trim()); cur = ""; }
+            else { cur += ch; }
+          }
+          vals.push(cur.trim());
           const obj: any = {};
-          headers.forEach((h, i) => { obj[h] = vals[i]; });
+          headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
           return obj;
         });
       }
@@ -194,31 +205,14 @@ export default function ImportLeadsScreen() {
     if (rows.length === 0) return;
     setImporting(true);
     setResult(null);
+    setProgress({ current: 0, total: 1 });
 
     try {
-      const BATCH = 100;
-      const batches = Math.ceil(rows.length / BATCH);
-      setProgress({ current: 0, total: batches });
-
-      const acc: ImportResult = { total: 0, inserted: 0, enriched: 0, recycled: 0, skipped: 0, upgraded: 0, downgraded: 0, distributed: 0 };
-
-      for (let i = 0; i < rows.length; i += BATCH) {
-        const batch = rows.slice(i, i + BATCH);
-        const resp = await api.post<ImportResult>("/leads/import-csv", {
-          leads: batch, source_filename: fileName,
-        });
-        acc.total += resp.total;
-        acc.inserted += resp.inserted;
-        acc.enriched += resp.enriched;
-        acc.recycled += resp.recycled;
-        acc.skipped += resp.skipped;
-        acc.upgraded += resp.upgraded;
-        acc.downgraded += resp.downgraded;
-        acc.distributed += resp.distributed;
-        setProgress({ current: Math.floor(i / BATCH) + 1, total: batches });
-      }
-
-      setResult(acc);
+      const resp = await api.post<ImportResult>("/leads/import-csv", {
+        leads: rows, source_filename: fileName,
+      });
+      setProgress({ current: 1, total: 1 });
+      setResult(resp);
       queryClient.invalidateQueries({ queryKey: ["distribution-stats"] });
       queryClient.invalidateQueries({ queryKey: ["agents-available"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });

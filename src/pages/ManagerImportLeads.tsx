@@ -1,70 +1,110 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Upload, FileText, CheckCircle2, AlertCircle, Users, RefreshCcw,
-  UserPlus, History, ArrowRight, Info,
+  Upload, FileSpreadsheet, Users, CheckCircle2, ChevronDown, ChevronRight,
+  Crown, TrendingUp, Zap, Moon, ArrowRight, Loader2, X, Trash2, AlertTriangle,
 } from "lucide-react";
 import { api } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { detectCountryFromPhone, formatPhoneForCountry } from "@/config/countries";
 import * as XLSX from "xlsx";
+import { cn } from "@/lib/utils";
 
-// Column names from the betting-platform export (Chinese headers).
-const PLATFORM_COLUMNS: Record<string, string> = {
-  'username': 'phone',
-  '最后登录时间': 'last_login',
-  '分类': 'category',
-  '总票数': 'total_bets',
-  '体育票数': 'sports_bets',
-  '游戏票数': 'game_bets',
-  '充值金额(美金)': 'deposit_usd',
-  '充值金额(本币)': 'deposit_local',
-  '投注总金额': 'total_bet_amount',
-  '总ggr': 'total_ggr',
+// ─── Column mapping: betting-platform (Chinese) → internal ────────────────────
+const COL_MAP: Record<string, string> = {
+  username: "phone",
+  "最后登录时间": "last_login",
+  "分类": "category",
+  "总票数": "total_bets",
+  "体育票数": "sports_bets",
+  "游戏票数": "game_bets",
+  "充值金额(美金)": "deposit_usd",
+  "充值金额(本币)": "deposit_local",
+  "投注总金额": "total_bet_amount",
+  "总ggr": "total_ggr",
+  "体育ggr": "sports_ggr",
+  "游戏ggr": "game_ggr",
+  "是否充值": "has_deposited",
 };
 
-function parseNum(v: any): number {
-  if (v == null || v === "") return 0;
-  if (typeof v === "number") return v;
-  return parseFloat(String(v).replace(/[^0-9.-]/g, "")) || 0;
-}
+// ─── Categories ────────────────────────────────────────────────────────────────
+type Tier = "high_staker" | "medium_staker" | "frequent_bettor" | "low_staker" | "dormant";
 
-function excelDate(v: any): Date | null {
-  if (!v) return null;
-  if (typeof v === "string") { const d = new Date(v); return isNaN(d.getTime()) ? null : d; }
-  if (typeof v === "number") return new Date(Math.floor(v - 25569) * 86400000);
-  return null;
-}
+// Status-based categories matching the Manage Leads screen
+const STATUS_CATEGORIES = [
+  { id: "unassigned", label: "New / Unassigned", color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
+  { id: "no_answer", label: "No Answer", color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" },
+  { id: "unreachable", label: "Unreachable", color: "text-red-700", bg: "bg-red-50", border: "border-red-200" },
+  { id: "interested", label: "Interested", color: "text-green-700", bg: "bg-green-50", border: "border-green-200" },
+  { id: "not_interested", label: "Not Interested", color: "text-gray-600", bg: "bg-gray-50", border: "border-gray-200" },
+  { id: "answered_no_response", label: "No Response", color: "text-purple-700", bg: "bg-purple-50", border: "border-purple-200" },
+] as const;
 
-function classify(deposit_usd: number, deposit_local: number, total_bets: number, last_login: Date | null) {
-  if (deposit_usd >= 1000 || deposit_local >= 3_500_000)
-    return { segment: "vip", priority: "high", trait: "High Staker", score: Math.min(95, 70 + Math.floor(deposit_usd / 500)) };
-  if (deposit_usd >= 200 || deposit_local >= 700_000)
-    return { segment: "semi-active", priority: "medium", trait: "Medium Staker", score: Math.min(70, 40 + Math.floor(deposit_usd / 100)) };
-  if (total_bets >= 500)
-    return { segment: "semi-active", priority: "medium", trait: "Frequent Bettor", score: 45 };
-  if (last_login) {
-    const days = Math.floor((Date.now() - last_login.getTime()) / 86400000);
-    if (days > 60) return { segment: "dormant", priority: "low", trait: "Dormant", score: 15 };
-  }
-  return {
-    segment: deposit_usd > 50 ? "semi-active" : "dormant",
-    priority: deposit_usd > 50 ? "medium" : "low",
-    trait: deposit_usd > 0 ? "Low Staker" : null,
-    score: deposit_usd > 50 ? 35 : 20,
-  };
-}
+const TIERS: {
+  id: Tier;
+  label: string;
+  description: string;
+  color: string;
+  bg: string;
+  border: string;
+  icon: React.ElementType;
+}[] = [
+  {
+    id: "high_staker",
+    label: "High Stakers",
+    description: "≥ $1,000 deposited or ≥ 3.5M local",
+    color: "text-amber-700",
+    bg: "bg-amber-50",
+    border: "border-amber-200",
+    icon: Crown,
+  },
+  {
+    id: "medium_staker",
+    label: "Medium Stakers",
+    description: "≥ $200 deposited or ≥ 700K local",
+    color: "text-blue-700",
+    bg: "bg-blue-50",
+    border: "border-blue-200",
+    icon: TrendingUp,
+  },
+  {
+    id: "frequent_bettor",
+    label: "Frequent Bettors",
+    description: "500+ bets placed",
+    color: "text-purple-700",
+    bg: "bg-purple-50",
+    border: "border-purple-200",
+    icon: Zap,
+  },
+  {
+    id: "low_staker",
+    label: "Low Stakers",
+    description: "< $200 deposited, active",
+    color: "text-green-700",
+    bg: "bg-green-50",
+    border: "border-green-200",
+    icon: TrendingUp,
+  },
+  {
+    id: "dormant",
+    label: "Dormant",
+    description: "Inactive 60+ days or no deposits",
+    color: "text-gray-600",
+    bg: "bg-gray-50",
+    border: "border-gray-200",
+    icon: Moon,
+  },
+];
 
-type BuiltLead = {
+// ─── Types ─────────────────────────────────────────────────────────────────────
+type ParsedLead = {
+  id: string; // client-only key
   phone: string;
   name: string;
+  tier: Tier;
   segment: string;
   priority: string;
   score: number;
@@ -75,60 +115,262 @@ type BuiltLead = {
   lifetime_value: number;
   deposit_count: number;
   last_bet_date: string | null;
-  betting_patterns: any;
+  betting_patterns: Record<string, any>;
 };
 
-type ImportResult = {
-  total: number;
-  inserted: number;
-  enriched: number;
-  recycled: number;
-  skipped: number;
-  upgraded: number;
-  downgraded: number;
-  distributed: number;
-  skipped_detail?: { phone: string; reason: string }[];
-};
+type Agent = { id: string; full_name: string; assigned_leads: number };
 
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+function num(v: any): number {
+  if (v == null || v === "") return 0;
+  if (typeof v === "number") return v;
+  return parseFloat(String(v).replace(/[^0-9.-]/g, "")) || 0;
+}
+
+function toDate(v: any): Date | null {
+  if (!v) return null;
+  if (typeof v === "string") { const d = new Date(v); return isNaN(d.getTime()) ? null : d; }
+  if (typeof v === "number") return new Date(Math.floor(v - 25569) * 86400000);
+  return null;
+}
+
+function classifyTier(deposit_usd: number, deposit_local: number, total_bets: number, last_login: Date | null): {
+  tier: Tier; segment: string; priority: string; score: number; trait: string | null;
+} {
+  if (deposit_usd >= 1000 || deposit_local >= 3_500_000)
+    return { tier: "high_staker", segment: "vip", priority: "high", trait: "High Staker", score: Math.min(95, 70 + Math.floor(deposit_usd / 500)) };
+  if (deposit_usd >= 200 || deposit_local >= 700_000)
+    return { tier: "medium_staker", segment: "semi-active", priority: "medium", trait: "Medium Staker", score: Math.min(70, 40 + Math.floor(deposit_usd / 100)) };
+  if (total_bets >= 500)
+    return { tier: "frequent_bettor", segment: "semi-active", priority: "medium", trait: "Frequent Bettor", score: 45 };
+  if (deposit_usd > 50)
+    return { tier: "low_staker", segment: "semi-active", priority: "medium", trait: "Low Staker", score: 35 };
+  if (last_login) {
+    const days = Math.floor((Date.now() - last_login.getTime()) / 86400000);
+    if (days > 60) return { tier: "dormant", segment: "dormant", priority: "low", trait: "Dormant", score: 15 };
+  }
+  return { tier: "dormant", segment: "dormant", priority: "low", trait: null, score: 20 };
+}
+
+function parseRows(json: any[]): ParsedLead[] {
+  const seen = new Set<string>();
+  return json
+    .map((raw, i) => {
+      // Normalize column names
+      const r: any = {};
+      for (const [k, v] of Object.entries(raw)) {
+        r[COL_MAP[k] ?? k.toLowerCase()] = v;
+      }
+
+      const rawPhone = String(r.phone ?? r.number ?? r.phonenumber ?? r.username ?? "").trim();
+      if (!rawPhone) return null;
+      const country = detectCountryFromPhone(rawPhone);
+      const phone = formatPhoneForCountry(rawPhone, country);
+      const digits = phone.replace(/\D/g, "");
+      if (digits.length < 10) return null;
+      if (seen.has(digits)) return null;
+      seen.add(digits);
+
+      const deposit_usd = num(r.deposit_usd);
+      const deposit_local = num(r.deposit_local);
+      const total_bets = num(r.total_bets);
+      const last_login = toDate(r.last_login);
+      const { tier, segment, priority, trait, score } = classifyTier(deposit_usd, deposit_local, total_bets, last_login);
+
+      const cat = String(r.category ?? "");
+      const sports_bets = num(r.sports_bets);
+      const game_bets = num(r.game_bets);
+      const preferred_product =
+        cat.includes("体育") ? "Sports" :
+        cat.includes("游戏") ? "Gaming" :
+        cat.includes("彩票") ? "Lottery" :
+        sports_bets > game_bets ? "Sports" :
+        game_bets > 0 ? "Gaming" : null;
+
+      return {
+        id: `lead-${i}-${digits}`,
+        phone,
+        name: r.name ?? `User ${digits.slice(-4)}`,
+        tier, segment, priority, score, lead_score: score, trait,
+        preferred_product,
+        last_deposit_ugx: deposit_local || Math.round(deposit_usd * 3700),
+        lifetime_value: deposit_local || Math.round(deposit_usd * 3700),
+        deposit_count: total_bets,
+        last_bet_date: last_login ? last_login.toISOString().split("T")[0] : null,
+        betting_patterns: {
+          deposit_usd, deposit_local, total_bets, sports_bets, game_bets,
+          total_ggr: num(r.total_ggr), total_bet_amount: num(r.total_bet_amount),
+          last_login: last_login?.toISOString() ?? null, platform_category: cat,
+        },
+      } as ParsedLead;
+    })
+    .filter((x): x is ParsedLead => !!x);
+}
+
+// ─── Step indicator ────────────────────────────────────────────────────────────
+function StepPill({ n, label, active, done }: { n: number; label: string; active: boolean; done: boolean }) {
+  return (
+    <div className={cn("flex items-center gap-2 text-sm font-medium transition-colors",
+      active ? "text-foreground" : done ? "text-muted-foreground" : "text-muted-foreground/40")}>
+      <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
+        done ? "bg-green-500 text-white" : active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground/40")}>
+        {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : n}
+      </span>
+      {label}
+    </div>
+  );
+}
+
+// ─── Preview-only collapsible (Step 2) ────────────────────────────────────────
+function TierPreview({
+  tier, leads,
+}: {
+  tier: typeof TIERS[number];
+  leads: ParsedLead[];
+}) {
+  const [open, setOpen] = useState(false);
+  const Icon = tier.icon;
+  return (
+    <div className={cn("rounded-xl border overflow-hidden", tier.border)}>
+      <button
+        className={cn("w-full flex items-center justify-between px-4 py-3 text-left", tier.bg)}
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="flex items-center gap-3">
+          <Icon className={cn("h-4 w-4", tier.color)} />
+          <span className={cn("font-semibold", tier.color)}>{tier.label}</span>
+          <Badge variant="secondary" className="text-xs">{leads.length} leads</Badge>
+          <span className="text-xs text-muted-foreground hidden sm:inline">{tier.description}</span>
+        </div>
+        {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+      </button>
+      {open && (
+        <div className="divide-y max-h-48 overflow-y-auto">
+          {leads.map(lead => (
+            <div key={lead.id} className="flex items-center gap-3 px-4 py-2 text-sm">
+              <span className="font-mono text-xs w-36 shrink-0 text-muted-foreground">{lead.phone}</span>
+              <span className="flex-1 truncate">{lead.name}</span>
+              {lead.preferred_product && (
+                <Badge variant="outline" className="text-xs shrink-0">{lead.preferred_product}</Badge>
+              )}
+              {lead.betting_patterns.deposit_usd > 0 && (
+                <span className="text-xs text-muted-foreground shrink-0">
+                  ${lead.betting_patterns.deposit_usd.toLocaleString()}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Category panel (Step 3 — with checkboxes) ────────────────────────────────
+function TierPanel({
+  tier, leads, selectedIds, onToggle, onSelectAll,
+}: {
+  tier: typeof TIERS[number];
+  leads: ParsedLead[];
+  selectedIds: Set<string>;
+  onToggle: (id: string) => void;
+  onSelectAll: (ids: string[], check: boolean) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const Icon = tier.icon;
+  const allSelected = leads.length > 0 && leads.every(l => selectedIds.has(l.id));
+  const someSelected = leads.some(l => selectedIds.has(l.id));
+
+  return (
+    <div className={cn("rounded-xl border overflow-hidden", tier.border)}>
+      {/* Header */}
+      <button
+        className={cn("w-full flex items-center justify-between px-4 py-3 text-left", tier.bg)}
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="flex items-center gap-3">
+          <Checkbox
+            checked={allSelected}
+            data-state={someSelected && !allSelected ? "indeterminate" : undefined}
+            onCheckedChange={(v) => {
+              onSelectAll(leads.map(l => l.id), !!v);
+            }}
+            onClick={e => e.stopPropagation()}
+            className="border-current"
+          />
+          <Icon className={cn("h-4 w-4", tier.color)} />
+          <span className={cn("font-semibold", tier.color)}>{tier.label}</span>
+          <Badge variant="secondary" className="text-xs">{leads.length} leads</Badge>
+          <span className="text-xs text-muted-foreground hidden sm:inline">{tier.description}</span>
+        </div>
+        {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+      </button>
+
+      {/* Rows */}
+      {open && leads.length > 0 && (
+        <div className="divide-y">
+          {leads.map(lead => (
+            <label
+              key={lead.id}
+              className={cn(
+                "flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/40 transition-colors text-sm",
+                selectedIds.has(lead.id) && "bg-primary/5"
+              )}
+            >
+              <Checkbox
+                checked={selectedIds.has(lead.id)}
+                onCheckedChange={() => onToggle(lead.id)}
+              />
+              <span className="font-mono text-xs w-32 shrink-0">{lead.phone}</span>
+              <span className="flex-1 text-muted-foreground truncate">{lead.name}</span>
+              {lead.preferred_product && (
+                <Badge variant="outline" className="text-xs shrink-0">{lead.preferred_product}</Badge>
+              )}
+              {lead.betting_patterns.deposit_usd > 0 && (
+                <span className="text-xs text-muted-foreground shrink-0">
+                  ${lead.betting_patterns.deposit_usd.toLocaleString()}
+                </span>
+              )}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main page ──────────────────────────────────────────────────────────────────
 export default function ManagerImportLeads() {
-  const [file, setFile] = useState<File | null>(null);
-  const [rows, setRows] = useState<BuiltLead[]>([]);
-  const [preview, setPreview] = useState<BuiltLead[]>([]);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [dragging, setDragging] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [leads, setLeads] = useState<ParsedLead[]>([]);
   const [importing, setImporting] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const [result, setResult] = useState<ImportResult | null>(null);
-  const [history, setHistory] = useState<any[]>([]);
-  const [agents, setAgents] = useState<any[]>([]);
-  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
-  const [distributing, setDistributing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [assigningAgent, setAssigningAgent] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearingLeads, setClearingLeads] = useState(false);
+  const [clearingStatus, setClearingStatus] = useState<string | null>(null);
+  const [showClearByCategory, setShowClearByCategory] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    loadHistory();
-    loadAgents();
-  }, []);
-
-  const loadHistory = async () => {
-    try {
-      const data = await api.get<any[]>("/leads/import-batches?limit=10");
-      setHistory(data.filter((b) => b.batch_type === "new_leads"));
-    } catch { /* ignore */ }
-  };
+  useEffect(() => { loadAgents(); }, []);
 
   const loadAgents = async () => {
     try {
-      const data = await api.get<any[]>("/leads/agents-available");
+      const data = await api.get<Agent[]>("/leads/agents-available");
       setAgents(data);
-    } catch { /* ignore */ }
+    } catch { /* silent */ }
   };
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const isExcel = f.name.match(/\.(xlsx|xls)$/i);
-    const isCsv = f.name.match(/\.csv$/i);
-    if (!isExcel && !isCsv) { toast.error("Upload a CSV or Excel file"); return; }
-    setFile(f);
-    setResult(null);
+  const processFile = (file: File) => {
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    const isCsv = /\.csv$/i.test(file.name);
+    if (!isExcel && !isCsv) { toast.error("Please upload a CSV or Excel (.xlsx/.xls) file"); return; }
+
+    setFileName(file.name);
 
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -139,336 +381,386 @@ export default function ManagerImportLeads() {
           json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
         } else {
           const text = ev.target?.result as string;
-          const lines = text.split("\n").filter((l) => l.trim());
-          const headers = lines[0].split(",").map((h) => h.trim());
-          json = lines.slice(1).map((line) => {
-            const vals = line.split(",").map((v) => v.trim());
+          const lines = text.split("\n").filter(l => l.trim());
+          const headers = lines[0].split(",").map(h => h.trim());
+          json = lines.slice(1).map(line => {
+            const vals = line.split(",").map(v => v.trim());
             const obj: any = {};
             headers.forEach((h, i) => { obj[h] = vals[i]; });
             return obj;
           });
         }
 
-        const normalized = json.map((row) => {
-          const mapped: any = {};
-          for (const [k, v] of Object.entries(row)) {
-            const out = PLATFORM_COLUMNS[k] || k.toLowerCase();
-            mapped[out] = v;
-          }
-          return mapped;
-        });
-
-        const built: BuiltLead[] = normalized
-          .map((r) => {
-            const rawPhone = String(r.phone || r.number || r.phoneNumber || r.username || "").trim();
-            if (!rawPhone) return null;
-            const country = detectCountryFromPhone(rawPhone);
-            const phone = formatPhoneForCountry(rawPhone, country);
-            if (phone.replace(/\D/g, "").length < 10) return null;
-
-            const deposit_usd = parseNum(r.deposit_usd);
-            const deposit_local = parseNum(r.deposit_local);
-            const total_bets = parseNum(r.total_bets);
-            const last_login = excelDate(r.last_login);
-            const { segment, priority, trait, score } = classify(deposit_usd, deposit_local, total_bets, last_login);
-
-            const cat = String(r.category || "");
-            const preferred_product =
-              cat.includes("体育") ? "Sports" :
-              cat.includes("游戏") ? "Gaming" :
-              cat.includes("彩票") ? "Lottery" :
-              parseNum(r.sports_bets) > parseNum(r.game_bets) ? "Sports" :
-              parseNum(r.game_bets) > 0 ? "Gaming" : null;
-
-            return {
-              phone,
-              name: r.name || `User ${rawPhone.replace(/\D/g, "").slice(-4)}`,
-              segment, priority, score, lead_score: score, trait,
-              preferred_product,
-              last_deposit_ugx: deposit_local || Math.round(deposit_usd * 3700),
-              lifetime_value: deposit_local || Math.round(deposit_usd * 3700),
-              deposit_count: total_bets,
-              last_bet_date: last_login ? last_login.toISOString().split("T")[0] : null,
-              betting_patterns: {
-                deposit_usd, deposit_local, total_bets,
-                sports_bets: parseNum(r.sports_bets),
-                game_bets: parseNum(r.game_bets),
-                total_ggr: parseNum(r.total_ggr),
-                total_bet_amount: parseNum(r.total_bet_amount),
-                last_login: last_login?.toISOString() || null,
-                platform_category: cat,
-              },
-            } as BuiltLead;
-          })
-          .filter((x): x is BuiltLead => !!x);
-
-        setRows(built);
-        setPreview(built.slice(0, 5));
+        const parsed = parseRows(json);
+        if (parsed.length === 0) { toast.error("No valid phone numbers found in the file"); return; }
+        setLeads(parsed);
+        setSelectedIds(new Set());
+        setStep(2);
+        toast.success(`Parsed ${parsed.length} leads from ${file.name}`);
       } catch (err) {
         console.error(err);
-        toast.error("Failed to parse file");
+        toast.error("Failed to parse file — check format");
       }
     };
-    if (isExcel) reader.readAsArrayBuffer(f);
-    else reader.readAsText(f);
+    if (isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
+  };
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  }, []);
+
+  const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    e.target.value = "";
   };
 
   const runImport = async () => {
-    if (rows.length === 0) { toast.error("No rows to import"); return; }
+    if (leads.length === 0) return;
     setImporting(true);
-    setResult(null);
-
     try {
       const BATCH = 100;
-      const batches = Math.ceil(rows.length / BATCH);
-      setProgress({ current: 0, total: batches });
-
-      const acc: ImportResult = {
-        total: 0, inserted: 0, enriched: 0, recycled: 0, skipped: 0,
-        upgraded: 0, downgraded: 0, distributed: 0, skipped_detail: [],
-      };
-
-      for (let i = 0; i < rows.length; i += BATCH) {
-        const batch = rows.slice(i, i + BATCH);
-        const resp = await api.post<ImportResult>("/leads/import-csv", {
-          leads: batch,
-          source_filename: file?.name,
-        });
-        acc.total += resp.total;
-        acc.inserted += resp.inserted;
-        acc.enriched += resp.enriched;
-        acc.recycled += resp.recycled;
-        acc.skipped += resp.skipped;
-        acc.upgraded += resp.upgraded;
-        acc.downgraded += resp.downgraded;
-        acc.distributed += resp.distributed;
-        if (resp.skipped_detail) acc.skipped_detail!.push(...resp.skipped_detail);
-        setProgress({ current: Math.floor(i / BATCH) + 1, total: batches });
+      for (let i = 0; i < leads.length; i += BATCH) {
+        const batch = leads.slice(i, i + BATCH);
+        await api.post("/leads/import-csv", { leads: batch, source_filename: fileName });
       }
-
-      setResult(acc);
-      toast.success(`Processed ${acc.total} rows`);
-      loadHistory();
+      toast.success(`${leads.length} leads imported successfully`);
+      setStep(3);
     } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || "Import failed");
+      toast.error(err?.message ?? "Import failed");
     } finally {
       setImporting(false);
     }
   };
 
-  const distributeNow = async () => {
-    if (selectedAgents.length === 0) { toast.error("Select at least one agent"); return; }
-    setDistributing(true);
+  const toggleId = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = (ids: string[], check: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => check ? next.add(id) : next.delete(id));
+      return next;
+    });
+  };
+
+  const assignLeads = async () => {
+    if (!assigningAgent || selectedIds.size === 0) return;
+    setAssigning(true);
     try {
-      const resp = await api.post<{ total_distributed: number }>("/leads/distribute", {
-        agent_ids: selectedAgents,
+      const resp = await api.post<{ updated: number }>("/leads/bulk-assign", {
+        lead_ids: [...selectedIds],
+        agent_id: assigningAgent,
       });
-      toast.success(`Distributed ${resp.total_distributed} leads`);
-      setResult((r) => r ? { ...r, distributed: r.distributed + resp.total_distributed } : r);
+      const agentName = agents.find(a => a.id === assigningAgent)?.full_name ?? "agent";
+      toast.success(`${resp.updated} leads assigned to ${agentName}`);
+      // Refresh agent load counts
+      loadAgents();
+      setSelectedIds(new Set());
     } catch (err: any) {
-      toast.error(err?.message || "Distribution failed");
+      toast.error(err?.message ?? "Assignment failed");
     } finally {
-      setDistributing(false);
+      setAssigning(false);
     }
   };
 
+  const reset = () => {
+    setStep(1); setLeads([]); setFileName(null);
+    setSelectedIds(new Set()); setAssigningAgent(null);
+  };
+
+  const clearAllLeads = async () => {
+    setClearingLeads(true);
+    try {
+      const result = await api.delete<{ message: string; deleted: number }>("/leads/clear-all");
+      toast.success(result.message || "All leads cleared from database");
+      reset();
+      setShowClearConfirm(false);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to clear leads");
+    } finally {
+      setClearingLeads(false);
+    }
+  };
+
+  const clearByStatus = async (status: string, label: string) => {
+    setClearingStatus(status);
+    try {
+      const result = await api.delete<{ message: string; deleted: number }>("/leads/clear-by-status", { status });
+      toast.success(result.message || `"${label}" leads cleared`);
+    } catch (err: any) {
+      toast.error(err?.message ?? `Failed to clear "${label}" leads`);
+    } finally {
+      setClearingStatus(null);
+    }
+  };
+
+  // Group leads by tier
+  const byTier = Object.fromEntries(
+    TIERS.map(t => [t.id, leads.filter(l => l.tier === t.id)])
+  ) as Record<Tier, ParsedLead[]>;
+
+  const totalSelected = selectedIds.size;
+
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-6xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Import New Leads</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Upload a betting-platform export. Duplicates are merged intelligently — never blindly skipped.
-          </p>
+      <div className="p-6 max-w-4xl mx-auto space-y-6">
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Import Leads</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Upload a file, review leads by category, then assign to agents.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {step > 1 && (
+              <Button variant="ghost" size="sm" onClick={reset}>
+                <X className="h-4 w-4 mr-1" /> Start over
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setShowClearByCategory(v => !v); setShowClearConfirm(false); }}
+              className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:border-destructive"
+            >
+              <Trash2 className="h-4 w-4 mr-1" /> Clear Leads
+            </Button>
+          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">1. Upload File</CardTitle>
-            <CardDescription>
-              Supports the betting-platform Chinese-header export, or a generic CSV with a <code>phone</code> column.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="file">CSV or Excel</Label>
-              <Input id="file" type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} disabled={importing} />
+        {/* ── Clear panel ─────────────────────────────────────────── */}
+        {showClearByCategory && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <p className="font-semibold text-destructive text-sm">Clear Leads</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => { setShowClearByCategory(false); setShowClearConfirm(false); }}>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
 
-            {file && rows.length > 0 && (
-              <Alert>
-                <FileText className="h-4 w-4" />
-                <AlertDescription className="flex items-center justify-between">
-                  <span><strong>{file.name}</strong> — {rows.length} valid rows parsed</span>
-                  <Badge variant="secondary">{(file.size / 1024).toFixed(1)} KB</Badge>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {preview.length > 0 && (
-              <div>
-                <div className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" /> Preview (first 5 rows)
-                </div>
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted">
-                      <tr>
-                        <th className="text-left p-2">Phone</th>
-                        <th className="text-left p-2">Deposit USD</th>
-                        <th className="text-left p-2">Bets</th>
-                        <th className="text-left p-2">Tier</th>
-                        <th className="text-left p-2">Product</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {preview.map((r, i) => (
-                        <tr key={i} className="border-t">
-                          <td className="p-2 font-mono">{r.phone}</td>
-                          <td className="p-2">${r.betting_patterns?.deposit_usd?.toLocaleString() || 0}</td>
-                          <td className="p-2">{r.betting_patterns?.total_bets?.toLocaleString() || 0}</td>
-                          <td className="p-2">
-                            {r.trait && <Badge variant="outline">{r.trait}</Badge>}
-                          </td>
-                          <td className="p-2 text-muted-foreground">{r.preferred_product || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">2. Run Import</CardTitle>
-            <CardDescription>
-              Each phone is checked against existing leads. Active pipeline leads are only enriched (their disposition is preserved); dead leads past 30 days are recycled; new numbers are inserted.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={runImport} disabled={!file || rows.length === 0 || importing} size="lg" className="w-full">
-              {importing
-                ? `Importing ${progress.current}/${progress.total} batches…`
-                : <><Upload className="h-4 w-4 mr-2" /> Import {rows.length} rows</>}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {result && (
-          <Card className="border-primary/40">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-600" /> Import Complete
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <Stat label="New leads" value={result.inserted} icon={<UserPlus className="h-4 w-4" />} accent="text-blue-600" />
-                <Stat label="Enriched existing" value={result.enriched} icon={<RefreshCcw className="h-4 w-4" />} accent="text-amber-600" />
-                <Stat label="Recycled (dead)" value={result.recycled} icon={<History className="h-4 w-4" />} accent="text-purple-600" />
-                <Stat label="Skipped" value={result.skipped} icon={<AlertCircle className="h-4 w-4" />} accent="text-muted-foreground" />
-              </div>
-
-              <Separator />
-
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded-md dark:bg-green-950/30">
-                  <span className="text-green-700 dark:text-green-400">Score upgraded</span>
-                  <span className="font-semibold text-green-700 dark:text-green-400">{result.upgraded}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-red-50 rounded-md dark:bg-red-950/30">
-                  <span className="text-red-700 dark:text-red-400">Score downgraded</span>
-                  <span className="font-semibold text-red-700 dark:text-red-400">{result.downgraded}</span>
-                </div>
-              </div>
-
-              {result.skipped_detail && result.skipped_detail.length > 0 && (
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    {result.skipped_detail.length} number(s) were skipped because they were marked dead within the last 30 days.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {(result.inserted + result.recycled) > 0 && (
-                <div className="space-y-3 pt-2 border-t">
-                  <div>
-                    <div className="font-medium text-sm">3. Distribute to Agents</div>
-                    <div className="text-xs text-muted-foreground">
-                      {result.inserted + result.recycled} fresh leads are currently unassigned. Pick agents to split between:
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {agents.map((a) => (
-                      <label key={a.id} className={`px-3 py-1.5 rounded-md border text-xs cursor-pointer flex items-center gap-2 ${selectedAgents.includes(a.id) ? "bg-primary text-primary-foreground border-primary" : "bg-background"}`}>
-                        <input
-                          type="checkbox"
-                          className="hidden"
-                          checked={selectedAgents.includes(a.id)}
-                          onChange={(e) => setSelectedAgents(e.target.checked
-                            ? [...selectedAgents, a.id]
-                            : selectedAgents.filter((x) => x !== a.id))}
-                        />
-                        <Users className="h-3 w-3" /> {a.full_name} ({a.assigned_leads || 0})
-                      </label>
-                    ))}
-                  </div>
-                  <Button onClick={distributeNow} disabled={selectedAgents.length === 0 || distributing} variant="default" size="sm">
-                    {distributing ? "Distributing…" : <>Distribute fairly <ArrowRight className="h-4 w-4 ml-1" /></>}
+            {/* Per-category buttons */}
+            <div>
+              <p className="text-xs text-muted-foreground mb-2 font-medium">Clear by call status:</p>
+              <div className="flex flex-wrap gap-2">
+                {STATUS_CATEGORIES.map(cat => (
+                  <Button
+                    key={cat.id}
+                    variant="outline"
+                    size="sm"
+                    disabled={clearingStatus === cat.id || !!clearingLeads}
+                    onClick={() => clearByStatus(cat.id, cat.label)}
+                    className={cn("text-xs", cat.color, cat.border, cat.bg, "hover:opacity-80")}
+                  >
+                    {clearingStatus === cat.id ? (
+                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Clearing…</>
+                    ) : (
+                      <><Trash2 className="h-3 w-3 mr-1" />{cat.label}</>
+                    )}
                   </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {history.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <History className="h-4 w-4" /> Recent Imports
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {history.map((b) => (
-                  <div key={b.id} className="flex items-center justify-between p-3 border rounded-md text-sm">
-                    <div>
-                      <div className="font-medium">{b.source_filename || "Untitled import"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(b.created_at).toLocaleString()} · {b.user_name}
-                      </div>
-                    </div>
-                    <div className="flex gap-2 text-xs">
-                      <Badge variant="outline">+{b.new_count} new</Badge>
-                      <Badge variant="outline">{b.updated_count} enriched</Badge>
-                      {b.recycled_count > 0 && <Badge variant="outline">{b.recycled_count} recycled</Badge>}
-                      {b.skipped_count > 0 && <Badge variant="secondary">{b.skipped_count} skipped</Badge>}
-                    </div>
-                  </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Divider + clear all */}
+            <div className="border-t border-destructive/20 pt-3">
+              {!showClearConfirm ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowClearConfirm(true)}
+                  disabled={!!clearingStatus || clearingLeads}
+                  className="border-destructive text-destructive hover:bg-destructive/10 w-full"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Clear ALL leads (all statuses)
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 justify-between">
+                  <p className="text-xs text-destructive font-semibold">Are you sure? This cannot be undone.</p>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setShowClearConfirm(false)} disabled={clearingLeads}>
+                      Cancel
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={clearAllLeads} disabled={clearingLeads}>
+                      {clearingLeads ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Clearing…</> : "Yes, delete all"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step pills */}
+        <div className="flex items-center gap-4 flex-wrap">
+          <StepPill n={1} label="Upload file" active={step === 1} done={step > 1} />
+          <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+          <StepPill n={2} label="Review & import" active={step === 2} done={step > 2} />
+          <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+          <StepPill n={3} label="Assign to agents" active={step === 3} done={false} />
+        </div>
+
+        {/* ── STEP 1: Upload ─────────────────────────────────────────── */}
+        {step === 1 && (
+          <div
+            className={cn(
+              "relative rounded-2xl border-2 border-dashed transition-all duration-200 cursor-pointer",
+              dragging
+                ? "border-primary bg-primary/5 scale-[1.01]"
+                : "border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/30"
+            )}
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={onFileInput}
+            />
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center gap-4">
+              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <FileSpreadsheet className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-base">Drop your file here, or click to browse</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Supports CSV and Excel (.xlsx / .xls)
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Betting platform exports (Chinese headers) are auto-detected
+                </p>
+              </div>
+              <Button size="sm" className="pointer-events-none">
+                <Upload className="h-4 w-4 mr-2" /> Choose file
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2: Review categories & import ────────────────────── */}
+        {step === 2 && (
+          <div className="space-y-4">
+            {/* Summary bar */}
+            <div className="flex items-center justify-between p-4 rounded-xl border bg-muted/30">
+              <div className="flex items-center gap-3">
+                <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-sm">{fileName}</p>
+                  <p className="text-xs text-muted-foreground">{leads.length} valid leads parsed</p>
+                </div>
+              </div>
+              <div className="flex gap-2 flex-wrap justify-end">
+                {TIERS.filter(t => byTier[t.id].length > 0).map(t => (
+                  <Badge key={t.id} variant="outline" className={cn("text-xs", t.color)}>
+                    {byTier[t.id].length} {t.label}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            {/* Category panels (display only at this step — no selection yet) */}
+            <div className="space-y-3">
+              {TIERS.filter(t => byTier[t.id].length > 0).map(tier => (
+                <TierPreview key={tier.id} tier={tier} leads={byTier[tier.id]} />
+              ))}
+            </div>
+
+            {/* Import action */}
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={runImport}
+              disabled={importing}
+            >
+              {importing ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Importing…</>
+              ) : (
+                <><CheckCircle2 className="h-4 w-4 mr-2" /> Confirm & Import {leads.length} Leads</>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {/* ── STEP 3: Assign to agents ─────────────────────────────── */}
+        {step === 3 && (
+          <div className="space-y-4">
+            {/* Success banner */}
+            <div className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50">
+              <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-green-800 text-sm">{leads.length} leads imported successfully</p>
+                <p className="text-xs text-green-700 mt-0.5">
+                  Select leads below and assign them to an agent.
+                </p>
+              </div>
+            </div>
+
+            {/* Assign bar — sticky */}
+            <div className={cn(
+              "sticky top-4 z-10 flex items-center gap-3 p-3 rounded-xl border shadow-md bg-background transition-all",
+              totalSelected > 0 ? "border-primary/50 shadow-primary/10" : "border-border"
+            )}>
+              <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+              <select
+                className="flex-1 text-sm bg-transparent outline-none min-w-0"
+                value={assigningAgent ?? ""}
+                onChange={e => setAssigningAgent(e.target.value || null)}
+              >
+                <option value="">Select an agent…</option>
+                {agents.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.full_name} ({a.assigned_leads} leads)
+                  </option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                onClick={assignLeads}
+                disabled={!assigningAgent || totalSelected === 0 || assigning}
+                className="shrink-0"
+              >
+                {assigning ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>Assign {totalSelected > 0 ? totalSelected : ""} leads <ArrowRight className="h-4 w-4 ml-1" /></>
+                )}
+              </Button>
+            </div>
+
+            {/* Leads by category with checkboxes */}
+            <div className="space-y-3">
+              {TIERS.filter(t => byTier[t.id].length > 0).map(tier => (
+                <TierPanel
+                  key={tier.id}
+                  tier={tier}
+                  leads={byTier[tier.id]}
+                  selectedIds={selectedIds}
+                  onToggle={toggleId}
+                  onSelectAll={selectAll}
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </DashboardLayout>
-  );
-}
-
-function Stat({ label, value, icon, accent }: { label: string; value: number; icon: React.ReactNode; accent: string }) {
-  return (
-    <div className="p-3 border rounded-md">
-      <div className={`flex items-center gap-2 ${accent}`}>
-        {icon}
-        <span className="text-xs font-medium">{label}</span>
-      </div>
-      <div className="text-2xl font-bold mt-1">{value}</div>
-    </div>
   );
 }

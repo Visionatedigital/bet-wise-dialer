@@ -167,6 +167,16 @@ export default function TabLayout() {
           drawerIcon: ({ color }) => <Feather name="settings" size={18} color={color} />,
         }}
       />
+
+      {/* ── Help (everyone) ── */}
+      <Drawer.Screen
+        name="help"
+        options={{
+          title: "Help",
+          drawerLabel: "Help",
+          drawerIcon: ({ color }) => <Feather name="help-circle" size={18} color={color} />,
+        }}
+      />
     </Drawer>
   );
 }

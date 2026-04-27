@@ -47,7 +47,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
     const result = await query(
       `UPDATE profiles SET
         full_name = COALESCE($1, full_name),
-        avatar_url = COALESCE($2, avatar_url),
+        avatar_url = CASE WHEN $8 THEN $2 ELSE COALESCE($2, avatar_url) END,
         status = COALESCE($3, status),
         manager_id = COALESCE($4, manager_id),
         current_call_start = $5,
@@ -55,7 +55,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
         last_status_change = CASE WHEN $3 IS NOT NULL THEN NOW() ELSE last_status_change END,
         updated_at = NOW()
        WHERE id = $6 RETURNING *`,
-      [full_name, avatar_url, status, manager_id, current_call_start, req.params.id, safeCountry]
+      [full_name, avatar_url ?? null, status, manager_id, current_call_start, req.params.id, safeCountry, 'avatar_url' in req.body]
     );
 
     // Return merged profile with current email

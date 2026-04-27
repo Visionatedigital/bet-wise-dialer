@@ -9,6 +9,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, full_name: string, country?: string) => Promise<string>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthState>({
   login: async () => {},
   signup: async () => "",
   logout: async () => {},
+  refreshUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -80,8 +82,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    try {
+      const me = await api.get<User>("/auth/me");
+      setUser(me);
+    } catch {}
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, error, login, signup, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

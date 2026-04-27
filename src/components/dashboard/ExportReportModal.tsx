@@ -58,8 +58,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
   const [selectedAgent, setSelectedAgent] = useState(initialSelectedAgent);
   const [availableAgents, setAvailableAgents] = useState<AgentOption[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
-  const [reportType, setReportType] = useState<"summary" | "excel">("summary");
-  const [fileType, setFileType] = useState<"docx" | "xlsx" | "pdf" | "csv">("csv");
+  const [reportType, setReportType] = useState<"summary" | "excel">("excel");
+  const [fileType, setFileType] = useState<"docx" | "xlsx" | "pdf" | "csv">("xlsx");
 
   // Update selectedAgent when initialSelectedAgent changes
   useEffect(() => {
@@ -890,7 +890,73 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             summarySheet.addRow(row);
           }
         });
-        
+
+        // ── Per-Agent Breakdown sheet (team reports only) ──────────────────────
+        if (selectedAgent === 'all') {
+          const agentBreakdownSheet = excelWorkbook.addWorksheet('Per Agent Breakdown');
+
+          // Header row
+          agentBreakdownSheet.addRow([
+            'Agent Name', 'Email',
+            'Total Calls', 'Calls/Hour',
+            'Connects', 'Connect Rate',
+            'Conversions', 'Conversion Rate',
+            'Total Revenue (UGX)', 'Avg Handle Time'
+          ]);
+
+          // Group enrichedCallActivities by user_id
+          const agentCallMap = new Map<string, any[]>();
+          enrichedCallActivities.forEach(call => {
+            const uid = call.user_id;
+            if (!agentCallMap.has(uid)) agentCallMap.set(uid, []);
+            agentCallMap.get(uid)!.push(call);
+          });
+
+          const daysForBreakdown: Record<string, number> = {
+            today: 1, week: 7, month: 30, quarter: 90,
+            '7d': 7, '30d': 30, '90d': 90
+          };
+          const breakdownDays = daysForBreakdown[dateRange] || 30;
+          const breakdownWorkingHours = breakdownDays * 8;
+
+          agentCallMap.forEach((agentCalls, uid) => {
+            const prof = profiles?.find((p: any) => p.id === uid);
+            const agentName = prof?.full_name || prof?.email || 'Unknown';
+            const agentEmail = prof?.email || '';
+
+            const totalCalls = agentCalls.length;
+            const connects = agentCalls.filter(c => {
+              if (c.status === 'converted') return true;
+              if (c.status === 'connected') return (Number(c.duration_seconds) || 0) > 0;
+              return false;
+            }).length;
+            const conversions = agentCalls.filter(c => c.status === 'converted').length;
+            const revenue = agentCalls.reduce((s, c) => s + (Number(c.deposit_amount) || 0), 0);
+
+            const connectedCalls = agentCalls.filter(c => {
+              if (c.status === 'converted') return true;
+              if (c.status === 'connected') return (Number(c.duration_seconds) || 0) > 0;
+              return false;
+            });
+            const totalDurSec = connectedCalls.reduce((s, c) => s + (Number(c.duration_seconds) || 0), 0);
+            const avgHandleSec = connects > 0 ? Math.round(totalDurSec / connects) : 0;
+            const ahtFormatted = `${Math.floor(avgHandleSec / 60)}:${(avgHandleSec % 60).toString().padStart(2, '0')}`;
+
+            const connectRate = totalCalls > 0 ? ((connects / totalCalls) * 100).toFixed(1) + '%' : '0%';
+            const convRate = connects > 0 ? ((conversions / connects) * 100).toFixed(1) + '%' : '0%';
+            const callsPerHour = breakdownWorkingHours > 0 ? (totalCalls / breakdownWorkingHours).toFixed(1) : '0.0';
+
+            agentBreakdownSheet.addRow([
+              agentName, agentEmail,
+              totalCalls, parseFloat(callsPerHour),
+              connects, connectRate,
+              conversions, convRate,
+              revenue, ahtFormatted
+            ]);
+          });
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
         // Create Call Log sheet
         const callLogSheet = excelWorkbook.addWorksheet('Call Log');
         
