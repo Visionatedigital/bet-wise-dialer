@@ -56,7 +56,7 @@ export default function ApproveAgentsScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            await api.patch(`/users/${id}/reject`);
+            await api.patch(`/users/${id}/reject`, {});
             queryClient.invalidateQueries({ queryKey: ["users"] });
           } catch {
             Alert.alert("Error", "Failed to reject agent");
