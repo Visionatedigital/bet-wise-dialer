@@ -21,7 +21,12 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       sql += ` AND user_id = $${paramCount++}`;
       params.push(req.user!.id);
     } else if (isManagement) {
-      sql += ` AND user_id IN (SELECT id FROM profiles WHERE country = (SELECT country FROM profiles WHERE id = $${paramCount++}))`;
+      sql += ` AND user_id IN (
+        SELECT p.id FROM profiles p 
+        JOIN user_roles ur ON ur.user_id = p.id 
+        WHERE p.country = (SELECT country FROM profiles WHERE id = $${paramCount++})
+        AND ur.role != 'crm'
+      )`;
       params.push(req.user!.id);
       if (user_id) {
         sql += ` AND user_id = $${paramCount++}`;

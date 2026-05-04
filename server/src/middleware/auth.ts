@@ -29,3 +29,10 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
   }
   next();
 }
+
+export function requireAdminOrCrm(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user || !['admin', 'management', 'crm'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  next();
+}

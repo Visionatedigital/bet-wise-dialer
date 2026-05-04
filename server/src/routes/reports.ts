@@ -27,11 +27,11 @@ router.get('/admin', async (req: AuthRequest, res: Response) => {
         ? query(`SELECT COUNT(*) FROM user_roles ur JOIN profiles p ON p.id = ur.user_id WHERE ur.role = 'agent' AND p.country = ${cSub}`, [managerId])
         : query("SELECT COUNT(*) FROM user_roles WHERE role = 'agent'"),
       isManagement
-        ? query(`SELECT COUNT(*) FROM leads WHERE country = ${cSub}`, [managerId])
-        : query('SELECT COUNT(*) FROM leads'),
+        ? query(`SELECT COUNT(*) FROM leads WHERE country = ${cSub} AND crm_owner_id IS NULL`, [managerId])
+        : query('SELECT COUNT(*) FROM leads WHERE crm_owner_id IS NULL'),
       isManagement
-        ? query(`SELECT COUNT(*) FROM call_activities ca JOIN profiles p ON p.id = ca.user_id WHERE p.country = ${cSub}`, [managerId])
-        : query('SELECT COUNT(*) FROM call_activities'),
+        ? query(`SELECT COUNT(*) FROM call_activities ca JOIN profiles p ON p.id = ca.user_id LEFT JOIN leads l ON l.phone = ca.phone_number WHERE p.country = ${cSub} AND (l.id IS NULL OR l.crm_owner_id IS NULL)`, [managerId])
+        : query('SELECT COUNT(*) FROM call_activities ca LEFT JOIN leads l ON l.phone = ca.phone_number WHERE (l.id IS NULL OR l.crm_owner_id IS NULL)'),
     ]);
 
     let callsRecentRes = callsTotalRes;
@@ -53,8 +53,8 @@ router.get('/admin', async (req: AuthRequest, res: Response) => {
     }
 
     const leadsSegmentRes = isManagement
-      ? await query(`SELECT segment, COUNT(*) as count FROM leads WHERE country = ${cSub} GROUP BY segment`, [managerId])
-      : await query('SELECT segment, COUNT(*) as count FROM leads GROUP BY segment');
+      ? await query(`SELECT segment, COUNT(*) as count FROM leads WHERE country = ${cSub} AND crm_owner_id IS NULL GROUP BY segment`, [managerId])
+      : await query('SELECT segment, COUNT(*) as count FROM leads WHERE crm_owner_id IS NULL GROUP BY segment');
 
     const callsByStatus = { connected: 0, converted: 0, failed: 0 };
     callsByStatusRes.rows.forEach((r: any) => {
@@ -123,6 +123,7 @@ router.get('/daily-call-notes', async (req: AuthRequest, res: Response) => {
        JOIN profiles p ON p.id = ca.user_id
        LEFT JOIN leads l ON l.phone = ca.phone_number
        WHERE ca.created_at BETWEEN $1 AND $2
+         AND (l.id IS NULL OR l.crm_owner_id IS NULL)
          ${countryClause}
        ORDER BY p.full_name ASC, ca.created_at ASC`,
       params
@@ -147,6 +148,7 @@ router.get('/daily-call-notes', async (req: AuthRequest, res: Response) => {
        FROM leads l
        JOIN profiles p ON p.id = l.user_id
        WHERE l.last_contact_at BETWEEN $1 AND $2
+         AND l.crm_owner_id IS NULL
          ${countryClause2}
        ORDER BY p.full_name ASC, l.last_contact_at ASC`,
       params2

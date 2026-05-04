@@ -7,16 +7,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Users, Shield } from "lucide-react";
+import { LayoutDashboard, Users, Shield, HeartHandshake } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 interface DashboardSelectionDialogProps {
   open: boolean;
-  onSelect: (dashboard: 'agent' | 'management' | 'admin') => void;
+  onSelect: (dashboard: 'agent' | 'management' | 'admin' | 'crm') => void;
 }
 
 export function DashboardSelectionDialog({ open, onSelect }: DashboardSelectionDialogProps) {
-  const [selected, setSelected] = useState<'agent' | 'management' | 'admin' | null>(null);
+  const [selected, setSelected] = useState<'agent' | 'management' | 'admin' | 'crm' | null>(null);
 
   const dashboards = [
     {
@@ -24,6 +24,12 @@ export function DashboardSelectionDialog({ open, onSelect }: DashboardSelectionD
       title: 'Agent Dashboard',
       description: 'Access agent view with call queue, campaigns, and leads',
       icon: Users,
+    },
+    {
+      id: 'crm' as const,
+      title: 'CRM Dashboard',
+      description: 'Customer Relationship Team tools and smart leads',
+      icon: HeartHandshake,
     },
     {
       id: 'management' as const,

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
-import { query } from '../db';
-import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
+import { pool, query } from '../db';
+import { authenticate, requireAdmin, requireAdminOrCrm, AuthRequest } from '../middleware/auth';
 import {
   classifyLead,
   computeCooldownUntil,
@@ -46,7 +46,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       }
     } else if (user_id === 'unassigned') {
       sql += ` AND l.user_id IS NULL`;
-    } else if (user_id) {
+    } else if (user_id && (isAdmin || isManagement)) {
+      // Only apply additional user_id filter if admin/mgmt (CRM is already filtered above)
       sql += ` AND l.user_id = $${paramCount++}`;
       params.push(user_id);
     }
@@ -110,7 +111,7 @@ router.get('/unassigned', requireAdmin as any, async (req: AuthRequest, res: Res
     const result = await query(
       `SELECT l.*, c.name as campaign_name FROM leads l
        LEFT JOIN campaigns c ON c.id = l.campaign_id
-       WHERE l.user_id IS NULL ${countryClause}
+       WHERE l.user_id IS NULL AND l.crm_owner_id IS NULL ${countryClause}
        ORDER BY COALESCE(l.lead_score, l.score, 0) DESC, l.created_at ASC
        LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,
       listParams
@@ -229,9 +230,15 @@ router.get('/category-counts', requireAdmin as any, async (req: AuthRequest, res
 //   - already converted       → enrich + track repeat-deposit deltas
 //   - marked dead >30 days    → recycle (reset to new with recycled flag)
 //   - marked dead <30 days    → skip (too soon)
-router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Response) => {
+router.post('/import-csv', requireAdminOrCrm as any, async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect();
   try {
     const { numbers, leads: richLeads, distribute_to, source_filename } = req.body;
+    
+    // Fetch user profile to get country
+    const profileRes = await client.query('SELECT country FROM profiles WHERE id = $1', [req.user!.id]);
+    const userCountry = profileRes.rows[0]?.country;
+
 
     // Normalize both input shapes into a common rich array.
     type Incoming = {
@@ -314,8 +321,11 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
       return res.status(400).json({ error: 'No valid leads found' });
     }
 
+    // Start transaction
+    await client.query('BEGIN');
+
     // Look up existing leads by digits-only match (handles + vs no-+ variations).
-    const existingRows = await query(
+    const existingRows = await client.query(
       `SELECT id, phone, lifecycle_stage, call_count, last_contact_at, last_activity,
               score, lead_score, import_count, betting_patterns, user_id
        FROM leads
@@ -354,7 +364,7 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
     }
 
     // INSERT net-new leads.
-    const BATCH_SIZE = 100;
+    const BATCH_SIZE = 500;
     const newlyInsertedIds: string[] = [];
     for (let i = 0; i < newRecords.length; i += BATCH_SIZE) {
       const batch = newRecords.slice(i, i + BATCH_SIZE);
@@ -362,24 +372,34 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
       const insertParams: any[] = [];
       let p = 1;
       for (const lead of batch) {
-        const country = detectCountry(lead.phone);
+        let country = detectCountry(lead.phone);
+        const isCrm = req.user!.role === 'crm';
+        
+        // CRM agents are strictly bound to their country
+        if (isCrm && userCountry) {
+          country = userCountry;
+        }
+
         insertValues.push(
-          `($${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++})`
+          `($${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++})`
         );
         insertParams.push(
           lead.name, lead.phone, lead.segment, lead.priority, lead.score,
           lead.last_deposit_ugx, lead.lifetime_value, lead.deposit_count,
           lead.preferred_product, lead.trait,
           lead.betting_patterns ? JSON.stringify(lead.betting_patterns) : null,
-          lead.last_bet_date, lead.lead_score, country, 'new'
+          lead.last_bet_date, lead.lead_score, country, 'new',
+          isCrm ? req.user!.id : null, // user_id
+          isCrm ? req.user!.id : null  // crm_owner_id
         );
       }
-      const ins = await query(
+      const ins = await client.query(
         `INSERT INTO leads (
            name, phone, segment, priority, score,
            last_deposit_ugx, lifetime_value, deposit_count,
            preferred_product, trait, betting_patterns,
-           last_bet_date, lead_score, country, lifecycle_stage
+           last_bet_date, lead_score, country, lifecycle_stage,
+           user_id, crm_owner_id
          ) VALUES ${insertValues.join(', ')} RETURNING id`,
         insertParams
       );
@@ -387,23 +407,28 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
     }
 
     // Emit imported events for newly-inserted leads.
-    if (newlyInsertedIds.length > 0) {
+    for (let i = 0; i < newlyInsertedIds.length; i += BATCH_SIZE) {
+      const batch = newlyInsertedIds.slice(i, i + BATCH_SIZE);
       const eventParams: any[] = [];
       const eventValues: string[] = [];
       let p = 1;
-      for (const id of newlyInsertedIds) {
+      for (const id of batch) {
         eventValues.push(`($${p++}, $${p++}, $${p++}, $${p++})`);
         eventParams.push(id, req.user!.id, 'imported', JSON.stringify({ source_filename }));
       }
-      await query(
+      await client.query(
         `INSERT INTO lead_events (lead_id, user_id, event_type, event_data) VALUES ${eventValues.join(', ')}`,
         eventParams
       );
     }
 
-    // UPDATE existing leads. Rules vary by decision but we always bump import_count.
+    // UPDATE existing leads via enrichUpdates.
     let upgraded = 0;
     let downgraded = 0;
+    // For large volumes, individual updates are still slow even in a transaction.
+    // However, a transaction helps significantly. We'll also batch the lead_events.
+    const enrichmentEventData: Array<{ lead_id: string; data: any }> = [];
+    
     for (const { row, fresh, decision } of enrichUpdates) {
       const prevScore = Number(row.lead_score ?? row.score ?? 0);
       const newScore = fresh.lead_score;
@@ -414,7 +439,6 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
       const values: any[] = [];
       let p = 1;
 
-      // Always refresh betting snapshot + import tracking.
       fields.push(`betting_patterns = $${p++}`);
       values.push(fresh.betting_patterns ? JSON.stringify(fresh.betting_patterns) : null);
       fields.push(`last_deposit_ugx = $${p++}`);
@@ -430,7 +454,6 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
       fields.push(`last_imported_at = NOW()`);
       fields.push(`import_count = COALESCE(import_count, 1) + 1`);
 
-      // update_full: lead was never called — refresh classification too.
       if (decision.action === 'update_full') {
         fields.push(`segment = $${p++}`); values.push(fresh.segment);
         fields.push(`priority = $${p++}`); values.push(fresh.priority);
@@ -438,44 +461,55 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
         fields.push(`lead_score = $${p++}`); values.push(fresh.lead_score);
         fields.push(`trait = $${p++}`); values.push(fresh.trait);
       }
-      // update_enrich_only: active in pipeline — do NOT touch segment/priority/stage
-      // to avoid disrupting the agent's working state. Only refresh data.
-      // update_with_delta: converted — same as enrich_only; deltas are tracked via events.
 
       fields.push(`updated_at = NOW()`);
-      const sql = `UPDATE leads SET ${fields.join(', ')} WHERE id = $${p}`;
       values.push(row.id);
-      await query(sql, values);
 
-      await query(
-        `INSERT INTO lead_events (lead_id, user_id, event_type, event_data) VALUES ($1, $2, $3, $4)`,
-        [row.id, req.user!.id, 'enriched', JSON.stringify({
+      // Extra safety for CRM: ensure country matches if user is CRM
+      if (req.user!.role === 'crm' && userCountry) {
+        fields.push(`country = $${p++}`);
+        values.push(userCountry);
+      }
+
+      await client.query(`UPDATE leads SET ${fields.join(', ')} WHERE id = $${p}`, values);
+
+      enrichmentEventData.push({
+        lead_id: row.id,
+        data: {
           reason: decision.reason,
           source_filename,
           prev_score: prevScore,
           new_score: newScore,
           score_change: newScore - prevScore,
-        })]
+        }
+      });
+    }
+
+    // Batch insert enrichment events.
+    for (let i = 0; i < enrichmentEventData.length; i += BATCH_SIZE) {
+      const batch = enrichmentEventData.slice(i, i + BATCH_SIZE);
+      const eventParams: any[] = [];
+      const eventValues: string[] = [];
+      let p = 1;
+      for (const item of batch) {
+        eventValues.push(`($${p++}, $${p++}, $${p++}, $${p++})`);
+        eventParams.push(item.lead_id, req.user!.id, 'enriched', JSON.stringify(item.data));
+      }
+      await client.query(
+        `INSERT INTO lead_events (lead_id, user_id, event_type, event_data) VALUES ${eventValues.join(', ')}`,
+        eventParams
       );
     }
 
-    // RECYCLE dead leads past cooldown: reset to new, mark recycled.
+    // RECYCLE dead leads.
     for (const { row, fresh } of recycles) {
-      await query(
+      await client.query(
         `UPDATE leads SET
-           lifecycle_stage = 'new',
-           status = NULL,
-           last_activity = NULL,
-           cooldown_until = NULL,
-           recycled_from_dead_at = NOW(),
-           last_imported_at = NOW(),
+           lifecycle_stage = 'new', status = NULL, last_activity = NULL, cooldown_until = NULL,
+           recycled_from_dead_at = NOW(), last_imported_at = NOW(),
            import_count = COALESCE(import_count, 1) + 1,
-           betting_patterns = $1,
-           last_deposit_ugx = $2,
-           lifetime_value = $3,
-           deposit_count = $4,
-           last_bet_date = $5,
-           preferred_product = COALESCE($6, preferred_product),
+           betting_patterns = $1, last_deposit_ugx = $2, lifetime_value = $3, deposit_count = $4,
+           last_bet_date = $5, preferred_product = COALESCE($6, preferred_product),
            segment = $7, priority = $8, score = $9, lead_score = $10, trait = $11,
            updated_at = NOW()
          WHERE id = $12`,
@@ -487,29 +521,34 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
           row.id,
         ]
       );
-      await query(
+      await client.query(
         `INSERT INTO lead_events (lead_id, user_id, event_type, event_data) VALUES ($1, $2, $3, $4)`,
         [row.id, req.user!.id, 'recycled', JSON.stringify({ source_filename })]
       );
     }
 
-    // Distribute newly-inserted and recycled leads if requested.
+    // Distribute newly-inserted and recycled leads.
     let distributed = 0;
     if (distribute_to && Array.isArray(distribute_to) && distribute_to.length > 0) {
       const recycleIds = recycles.map((r) => r.row.id);
       const idsToDistribute = [...newlyInsertedIds, ...recycleIds];
-      for (let i = 0; i < idsToDistribute.length; i++) {
-        const agentId = distribute_to[i % distribute_to.length];
-        await query(
-          `UPDATE leads SET user_id = $1, assigned_by = $2, assigned_at = NOW() WHERE id = $3`,
-          [agentId, req.user!.id, idsToDistribute[i]]
-        );
+      
+      // Batch distribution updates.
+      for (let i = 0; i < idsToDistribute.length; i += BATCH_SIZE) {
+        const batch = idsToDistribute.slice(i, i + BATCH_SIZE);
+        for (let j = 0; j < batch.length; j++) {
+          const agentId = distribute_to[(i + j) % distribute_to.length];
+          await client.query(
+            `UPDATE leads SET user_id = $1, assigned_by = $2, assigned_at = NOW() WHERE id = $3`,
+            [agentId, req.user!.id, batch[j]]
+          );
+        }
       }
       distributed = idsToDistribute.length;
     }
 
     // Log the batch.
-    await query(
+    await client.query(
       `INSERT INTO import_batches (
          user_id, batch_type, source_filename, total_rows,
          new_count, updated_count, recycled_count, skipped_count,
@@ -523,6 +562,8 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
       ]
     );
 
+    await client.query('COMMIT');
+
     res.status(201).json({
       total: incoming.length,
       inserted: newlyInsertedIds.length,
@@ -533,13 +574,15 @@ router.post('/import-csv', requireAdmin as any, async (req: AuthRequest, res: Re
       downgraded,
       distributed,
       skipped_detail: skipped.slice(0, 50),
-      // Backwards compat for older clients:
       imported: newlyInsertedIds.length,
       duplicates: enrichUpdates.length + skipped.length,
     });
   } catch (err: any) {
+    await client.query('ROLLBACK');
     console.error('[Leads] CSV import error:', err);
     res.status(500).json({ error: 'Failed to import leads' });
+  } finally {
+    client.release();
   }
 });
 
@@ -778,7 +821,7 @@ router.get('/export-phones', requireAdmin as any, async (req: AuthRequest, res: 
 });
 
 // GET /leads/import-batches - recent import history (country-scoped for management)
-router.get('/import-batches', requireAdmin as any, async (req: AuthRequest, res: Response) => {
+router.get('/import-batches', requireAdminOrCrm as any, async (req: AuthRequest, res: Response) => {
   try {
     const { limit = 20 } = req.query;
     const isManagement = req.user!.role === 'management';
@@ -790,6 +833,12 @@ router.get('/import-batches', requireAdmin as any, async (req: AuthRequest, res:
              WHERE b.user_id IN (
                SELECT id FROM profiles WHERE country = (SELECT country FROM profiles WHERE id = $1)
              )
+             ORDER BY b.created_at DESC LIMIT $2`;
+      params = [req.user!.id, Number(limit)];
+    } else if (req.user!.role === 'crm') {
+      sql = `SELECT b.*, p.full_name AS user_name
+             FROM import_batches b LEFT JOIN profiles p ON p.id = b.user_id
+             WHERE b.user_id = $1
              ORDER BY b.created_at DESC LIMIT $2`;
       params = [req.user!.id, Number(limit)];
     } else {

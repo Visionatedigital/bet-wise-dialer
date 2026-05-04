@@ -17,6 +17,8 @@ import notificationsRoutes from './routes/notifications';
 import monitorRoutes from './routes/monitor';
 import aiRoutes from './routes/ai';
 import reportsRoutes from './routes/reports';
+import crmRoutes from './routes/crm';
+import whatsappRoutes from './routes/whatsapp';
 
 const app = express();
 const httpServer = createServer(app);
@@ -45,6 +47,8 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/monitor', monitorRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/crm', crmRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // Socket.io for Realtime data
 io.on('connection', (socket) => {

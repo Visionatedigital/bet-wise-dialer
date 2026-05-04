@@ -6,17 +6,22 @@ import { Button } from '@/components/ui/button';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  allowedRoles?: string[];
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && !user) {
-      navigate('/auth');
+    if (!loading) {
+      if (!user) {
+        navigate('/auth');
+      } else if (allowedRoles && !allowedRoles.includes(user.role)) {
+        navigate('/');
+      }
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, allowedRoles]);
 
   if (loading) {
     return (

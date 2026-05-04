@@ -12,6 +12,7 @@ import { KpiCard } from "../../src/components/KpiCard";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
 import { FloatingAssistant } from "../../src/components/FloatingAssistant";
+import { CrmDashboard } from "../../src/components/CrmDashboard";
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length < 6) return phone || "";
@@ -378,6 +379,7 @@ function AgentDashboard() {
 export default function HomeScreen() {
   const { user } = useAuth();
   const isManager = user?.role === "management" || user?.role === "admin";
+  const isCrm = user?.role === "crm";
 
   return (
     <View style={{ flex: 1 }}>
@@ -403,9 +405,9 @@ export default function HomeScreen() {
           </View>
         )}
       </View>
-      {isManager ? <ManagerDashboard /> : <AgentDashboard />}
+      {isManager ? <ManagerDashboard /> : isCrm ? <CrmDashboard /> : <AgentDashboard />}
       {/* Floating AI assistant — only for managers */}
-      {isManager && <FloatingAssistant managerName={user?.full_name} />}
+      {isManager && <FloatingAssistant managerName={user?.full_name || undefined} />}
     </View>
   );
 }

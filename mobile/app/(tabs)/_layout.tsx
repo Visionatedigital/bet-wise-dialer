@@ -65,7 +65,8 @@ function CustomDrawerContent(props: any) {
 export default function TabLayout() {
   const { user } = useAuth();
   const isManager = user?.role === "management" || user?.role === "admin";
-  const isAgent = !isManager;
+  const isCrm = user?.role === "crm";
+  const isAgent = user?.role === "agent";
 
   return (
     <Drawer
@@ -97,6 +98,7 @@ export default function TabLayout() {
           headerTitleStyle: { fontWeight: "900", color: colors.brand.dark, letterSpacing: 0.5 },
           drawerLabel: "Dashboard",
           drawerIcon: ({ color }) => <Feather name="home" size={18} color={color} />,
+          drawerItemStyle: isCrm ? { display: "none" } : { borderRadius: 8, marginHorizontal: 8 },
         }}
       />
 
@@ -155,6 +157,35 @@ export default function TabLayout() {
           drawerLabel: "Approve Agents",
           drawerIcon: ({ color }) => <Feather name="user-check" size={18} color={color} />,
           drawerItemStyle: isManager ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
+        }}
+      />
+
+      {/* ── CRM-only screens ── */}
+      <Drawer.Screen
+        name="crm-dashboard"
+        options={{
+          title: "CRM Dashboard",
+          drawerLabel: "CRM Dashboard",
+          drawerIcon: ({ color }) => <Feather name="heart" size={18} color={color} />,
+          drawerItemStyle: isCrm ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
+        }}
+      />
+      <Drawer.Screen
+        name="contacts"
+        options={{
+          title: "Contacts",
+          drawerLabel: "Contacts",
+          drawerIcon: ({ color }) => <Feather name="users" size={18} color={color} />,
+          drawerItemStyle: isCrm ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
+        }}
+      />
+      <Drawer.Screen
+        name="crm-import"
+        options={{
+          title: "Import Clients",
+          drawerLabel: "Import Clients",
+          drawerIcon: ({ color }) => <Feather name="user-plus" size={18} color={color} />,
+          drawerItemStyle: isCrm ? { borderRadius: 8, marginHorizontal: 8 } : { display: "none" },
         }}
       />
 

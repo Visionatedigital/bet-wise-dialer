@@ -16,15 +16,20 @@ import { formatPhoneForCountry } from "../../src/config/countries";
 // Chinese header mappings from the betting-platform export.
 const PLATFORM_COLUMNS: Record<string, string> = {
   'username': 'phone',
+  '手机号': 'phone',
   '最后登录时间': 'last_login',
   '分类': 'category',
   '总票数': 'total_bets',
   '体育票数': 'sports_bets',
   '游戏票数': 'game_bets',
   '充值金额(美金)': 'deposit_usd',
+  '近一年充值金额(美元)': 'deposit_usd',
   '充值金额(本币)': 'deposit_local',
+  '召回日期内充值金额': 'deposit_local',
   '投注总金额': 'total_bet_amount',
+  '召回日期内总投注金额': 'total_bets',
   '总ggr': 'total_ggr',
+  '召回日内总盈利': 'total_ggr',
 };
 
 function parseNum(v: any): number {
@@ -115,7 +120,38 @@ export default function ImportLeadsScreen() {
       if (isExcel) {
         const b64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
         const wb = XLSX.read(b64, { type: "base64" });
-        json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+        // Robust: look for the first sheet that has any data
+        for (const name of wb.SheetNames) {
+          const sheet = wb.Sheets[name];
+          const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          if (!rawRows || rawRows.length === 0) continue;
+
+          // Check if first row contains a phone-like number. If so, it might be headerless.
+          const firstRow = rawRows[0];
+          const firstRowHasPhone = firstRow.some(v => {
+            const s = String(v || "").replace(/\D/g, "");
+            return s.length >= 9 && s.length <= 15;
+          });
+
+          // Detect if first row has text headers (at least one non-numeric string > 3 chars)
+          const hasTextHeaders = firstRow.some(v => 
+            typeof v === "string" && v.length > 3 && !/^\d+$/.test(v.replace(/\+/g, ""))
+          );
+
+          if (!hasTextHeaders && firstRowHasPhone) {
+            // Headerless: use array indices or fake headers
+            json = rawRows.map(r => {
+              const obj: any = {};
+              r.forEach((val, i) => { obj[`col_${i}`] = val; });
+              return obj;
+            });
+          } else {
+            // Has headers: standard parsing
+            json = XLSX.utils.sheet_to_json(sheet);
+          }
+
+          if (json.length > 0) break;
+        }
       } else {
         let text = await FileSystem.readAsStringAsync(file.uri);
         // Strip UTF-8 BOM if present
@@ -142,10 +178,23 @@ export default function ImportLeadsScreen() {
       const built: BuiltLead[] = json.map((row) => {
         const mapped: any = {};
         for (const [k, v] of Object.entries(row)) {
-          const out = PLATFORM_COLUMNS[k] || k.toLowerCase();
+          const cleanK = String(k).trim();
+          const out = PLATFORM_COLUMNS[cleanK] || cleanK.toLowerCase();
           mapped[out] = v;
         }
-        const rawPhone = String(mapped.phone || mapped.number || mapped.phoneNumber || mapped.username || "").trim();
+        let rawPhone = String(mapped.phone || mapped.number || mapped.phonenumber || mapped['phone number'] || mapped.mobile || mapped.msisdn || mapped.username || mapped['手机号'] || mapped.contact || "").trim();
+        
+        // Fallback: search all row values for a string that looks like a phone number (9-15 digits)
+        if (!rawPhone) {
+          for (const val of Object.values(row)) {
+            const s = String(val || "").replace(/\D/g, "");
+            if (s.length >= 9 && s.length <= 15) {
+              rawPhone = s;
+              break;
+            }
+          }
+        }
+        
         if (!rawPhone) return null;
         const phone = formatPhoneForCountry(rawPhone, country);
         if (phone.replace(/\D/g, "").length < 10) return null;

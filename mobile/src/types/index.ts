@@ -3,7 +3,7 @@ export interface User {
   email: string;
   full_name: string | null;
   avatar_url: string | null;
-  role: "agent" | "management" | "admin";
+  role: "agent" | "management" | "admin" | "crm";
   approved?: boolean;
   status?: string;
   country?: string;
@@ -43,6 +43,14 @@ export interface Lead {
   trait?: string | null;
   preferred_product?: string | null;
   last_contact_at?: string | null;
+  vip_level?: string | null;
+  risk_status?: string | null;
+  favourite_game?: string | null;
+  last_login_at?: string | null;
+  last_deposit_at?: string | null;
+  total_deposits?: number | null;
+  current_bonus?: number | null;
+  preferred_contact_time?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -81,4 +89,32 @@ export interface DailyMetrics {
   conversions: number;
   total_handle_time_seconds: number;
   total_deposit_value: number;
+}
+
+export interface ContactTimelineEvent {
+  id: string;
+  contact_id: string;
+  agent_id?: string;
+  event_type: string;
+  title: string;
+  summary?: string;
+  outcome?: string;
+  next_action?: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export interface CrmCallLog {
+  id: string;
+  contact_id: string;
+  agent_id: string;
+  phone_number: string;
+  call_outcome: string;
+  client_mood?: string;
+  reason_for_contact?: string;
+  result?: string;
+  next_action?: string;
+  notes?: string;
+  ai_summary?: string;
+  created_at: string;
 }

@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ENUMS
 DO $$ BEGIN
-    CREATE TYPE app_role AS ENUM ('admin', 'moderator', 'user', 'management', 'agent');
+    CREATE TYPE app_role AS ENUM ('admin', 'moderator', 'user', 'management', 'agent', 'crm');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================
@@ -296,12 +296,19 @@ DO $$ BEGIN
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS attributed_deposit_ugx NUMERIC DEFAULT 0;
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS recycled_from_dead_at TIMESTAMPTZ;
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS cooldown_until TIMESTAMPTZ;
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS relationship_status TEXT DEFAULT 'new';
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS crm_owner_id UUID REFERENCES users(id);
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_crm_contact_at TIMESTAMPTZ;
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS crm_priority INTEGER DEFAULT 0;
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS idx_leads_lead_score ON leads(lead_score);
 CREATE INDEX IF NOT EXISTS idx_leads_last_enriched_at ON leads(last_enriched_at);
 CREATE INDEX IF NOT EXISTS idx_leads_cooldown_until ON leads(cooldown_until);
 CREATE INDEX IF NOT EXISTS idx_leads_lifecycle_stage ON leads(lifecycle_stage);
+CREATE INDEX IF NOT EXISTS idx_leads_crm_owner ON leads(crm_owner_id) WHERE crm_owner_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_relationship_status ON leads(relationship_status);
+CREATE INDEX IF NOT EXISTS idx_leads_crm_priority ON leads(crm_priority DESC);
 
 CREATE TABLE IF NOT EXISTS lead_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -334,6 +341,43 @@ CREATE TABLE IF NOT EXISTS import_batches (
 );
 
 CREATE INDEX IF NOT EXISTS idx_import_batches_user ON import_batches(user_id, created_at DESC);
+
+-- ============================================================
+-- CRM NOTES — relationship logs per lead
+-- ============================================================
+CREATE TABLE IF NOT EXISTS crm_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id),
+    note_text TEXT NOT NULL,
+    relationship_status TEXT NOT NULL DEFAULT 'warm',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_notes_lead ON crm_notes(lead_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crm_notes_user ON crm_notes(user_id, created_at DESC);
+
+-- ============================================================
+-- CRM INTERACTIONS — tracks call/whatsapp/sms touchpoints
+-- ============================================================
+CREATE TABLE IF NOT EXISTS crm_interactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id),
+    channel TEXT NOT NULL,
+    direction TEXT NOT NULL DEFAULT 'outbound',
+    summary TEXT,
+    duration_seconds INTEGER,
+    outcome TEXT,
+    follow_up_date TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_interactions_lead ON crm_interactions(lead_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crm_interactions_user ON crm_interactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crm_interactions_channel ON crm_interactions(channel);
+CREATE INDEX IF NOT EXISTS idx_crm_interactions_follow_up ON crm_interactions(follow_up_date) WHERE follow_up_date IS NOT NULL;
 
 -- ============================================================
 -- SEED: Default admin user

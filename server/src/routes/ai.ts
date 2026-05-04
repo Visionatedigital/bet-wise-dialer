@@ -378,4 +378,74 @@ router.get('/suggestion', requireAdmin as any, async (req: AuthRequest, res: Res
   }
 });
 
+// ─── POST /ai/whisper ── Agent coaching tip for CRM ──────────────────────────
+router.post('/whisper', async (req: AuthRequest, res: Response) => {
+  try {
+    const { contact_id, last_message, conversation_context } = req.body;
+    
+    // 1. Fetch Lead context
+    const leadResult = await query(
+      `SELECT name, phone, segment, trait, last_deposit_ugx, last_bet_date, favourite_game, 
+              risk_status, vip_level, lifetime_value, deposit_count, analysis_notes
+       FROM leads WHERE id = $1`,
+      [contact_id]
+    );
+    const lead = leadResult.rows[0];
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    // 2. Fetch last few messages for context
+    const messagesResult = await query(
+      `SELECT body, direction FROM whatsapp_messages 
+       WHERE contact_id = $1 ORDER BY timestamp DESC LIMIT 5`,
+      [contact_id]
+    );
+    const history = messagesResult.rows.reverse().map(m => `${m.direction === 'inbound' ? 'Client' : 'Agent'}: ${m.body}`).join('\n');
+
+    // 3. Generate Whisper with OpenAI
+    const systemPrompt = `You are a CRM Coaching Assistant for BangBet agents. Your goal is to provide a short, non-intrusive "whisper" tip to help the agent handle a specific client.
+    
+    CLIENT PROFILE:
+    - Name: ${lead.name}
+    - Segment: ${lead.segment} / ${lead.trait}
+    - VIP Level: ${lead.vip_level || 'Normal'}
+    - Risk Status: ${lead.risk_status || 'Stable'}
+    - Favourite Game: ${lead.favourite_game || 'Unknown'}
+    - Lifetime Value: UGX ${lead.lifetime_value || 0}
+    - Last Deposit: UGX ${lead.last_deposit_ugx || 0}
+    
+    RECENT HISTORY:
+    ${history}
+    
+    TASK:
+    Analyze the situation. If there's an incoming message, help the agent understand the underlying intent/sentiment. Suggest a specific angle for the reply. 
+    If there's a risk sign (gambling harm), flag it immediately for escalation.
+    
+    Format: Keep it under 150 characters. Be actionable.`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: last_message || 'Provide a general coaching tip for this client.' }
+      ],
+      max_tokens: 100,
+      temperature: 0.7,
+    });
+
+    const whisperText = completion.choices[0].message.content;
+
+    // 4. Save whisper to DB
+    const whisperInsert = await query(
+      `INSERT INTO ai_whispers (contact_id, agent_id, whisper_text, whisper_type, sentiment)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [contact_id, req.user!.id, whisperText, 'coaching', 'neutral']
+    );
+
+    res.json(whisperInsert.rows[0]);
+  } catch (err: any) {
+    console.error('[AI Whisper] Error:', err);
+    res.status(500).json({ error: 'Failed to generate whisper' });
+  }
+});
+
 export default router;

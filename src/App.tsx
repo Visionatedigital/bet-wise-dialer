@@ -36,6 +36,8 @@ const ManagerImportLeads = lazy(() => import("./pages/ManagerImportLeads"));
 const ManagerRefreshPerformance = lazy(() => import("./pages/ManagerRefreshPerformance"));
 const ManagerHelp = lazy(() => import("./pages/ManagerHelp"));
 const AgentHelp = lazy(() => import("./pages/AgentHelp"));
+const CrmDashboard = lazy(() => import("./pages/CrmDashboard"));
+const CrmImportLeads = lazy(() => import("./pages/CrmImportLeads"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -209,6 +211,16 @@ const App = () => (
                     <Route path="/help/agent" element={
                       <ProtectedRoute>
                         <AgentHelp />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/crm/dashboard" element={
+                      <ProtectedRoute allowedRoles={['crm', 'admin']}>
+                        <CrmDashboard />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/crm/import-leads" element={
+                      <ProtectedRoute allowedRoles={['crm', 'admin']}>
+                        <CrmImportLeads />
                       </ProtectedRoute>
                     } />
                     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

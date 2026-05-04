@@ -53,13 +53,16 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
   // Column name mappings for the betting platform export (Chinese headers)
   const BETTING_PLATFORM_COLUMNS: Record<string, string> = {
     'username': 'phone',
+    '手机号': 'phone',
     '最后登录时间': 'last_login',
     '分类': 'category',                   // 体育=sports, 游戏=gaming
     '总票数': 'total_bets',
     '体育票数': 'sports_bets',
     '游戏票数': 'game_bets',
     '充值金额(美金)': 'deposit_usd',
+    '近一年充值金额(美元)': 'deposit_usd',
     '充值金额(本币)': 'deposit_local',
+    '召回日期内充值金额': 'deposit_local',
     // Benefit columns — split by category and type
     '账面体育coupon成本': 'sports_coupon_cost',
     '体育coupon': 'sports_coupon',
@@ -77,6 +80,8 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
     '充值金额': 'deposit_amount',
     '投注总金额': 'total_bet_amount',
     '总ggr': 'total_ggr',
+    '召回日内总盈利': 'total_ggr',
+    '召回日期内总投注金额': 'total_bets',
     '体育投注金额': 'sports_bet_amount',
     '游戏投注金额': 'game_bet_amount',
     '体育ggr': 'sports_ggr',
@@ -90,11 +95,13 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
   const normalizeRow = (row: any): Record<string, any> => {
     const normalized: Record<string, any> = {};
     for (const [key, value] of Object.entries(row)) {
-      const mapped = BETTING_PLATFORM_COLUMNS[key];
+      const cleanKey = String(key).trim();
+      const mapped = BETTING_PLATFORM_COLUMNS[cleanKey];
       if (mapped) {
         normalized[mapped] = value;
       } else {
-        normalized[key] = value;
+        normalized[cleanKey.toLowerCase()] = value;
+        normalized[cleanKey] = value;
       }
     }
     return normalized;
@@ -229,7 +236,7 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
         } else {
           setDetectedFormat('generic');
           const previewData = jsonData.slice(0, 5).map((row: any) => {
-            const phone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || '').trim();
+            const phone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || row.phonenumber || row['phone number'] || row.mobile || row.username || row['手机号'] || row.contact || '').trim();
             const name = String(row.name || row.Name || row.customer || row.Customer || phone).trim();
             return { name: name || 'Unknown', phone };
           });
@@ -296,7 +303,26 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
             const data = new Uint8Array(e.target?.result as ArrayBuffer);
             const workbook = XLSX.read(data, { type: 'array' });
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+            // Detect if headerless
+            const rawRows: any[][] = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+            const firstRow = rawRows[0] || [];
+            const hasPhone = firstRow.some(v => {
+              const s = String(v || "").replace(/\D/g, "");
+              return s.length >= 9 && s.length <= 15;
+            });
+            const hasTextHeaders = firstRow.some(v => typeof v === "string" && v.length > 3 && !/^\d+$/.test(String(v).replace(/\+/g, '')));
+            
+            let jsonData: any[] = [];
+            if (!hasTextHeaders && hasPhone) {
+              jsonData = rawRows.map(r => {
+                const obj: any = {};
+                r.forEach((v, i) => { obj[`col_${i}`] = v; });
+                return obj;
+              });
+            } else {
+              jsonData = XLSX.utils.sheet_to_json(firstSheet);
+            }
+
             const headers = Object.keys(jsonData[0] || {});
             const isBettingFile = isBettingPlatformFile(headers);
 
@@ -380,7 +406,18 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
                 };
               } else {
                 // Generic import (legacy)
-                const rawPhone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || row.username || '').trim();
+                let rawPhone = String(row.phone || row.Phone || row.number || row.Number || row.phoneNumber || row.phonenumber || row['phone number'] || row.mobile || row.username || row['手机号'] || row.contact || '').trim();
+                
+                if (!rawPhone) {
+                  for (const val of Object.values(row)) {
+                    const s = String(val || "").replace(/\D/g, "");
+                    if (s.length >= 9 && s.length <= 15) {
+                      rawPhone = s;
+                      break;
+                    }
+                  }
+                }
+                
                 const phone = formatPhoneNumber(rawPhone);
                 const name = String(row.name || row.Name || row.customer || row.Customer || '').trim();
                 const segment = detectSegment(row);

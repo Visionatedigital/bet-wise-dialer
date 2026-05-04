@@ -18,8 +18,9 @@ router.get('/', requireAdmin as any, async (req: AuthRequest, res: Response) => 
     const params: any[] = [];
 
     if (isManagement) {
-      // Managers only see users from their own country
-      sql += ` WHERE p.country = (SELECT country FROM profiles WHERE id = $1)`;
+      // Managers only see users from their own country and EXCLUDE CRM agents
+      sql += ` WHERE p.country = (SELECT country FROM profiles WHERE id = $1)
+               AND u.id NOT IN (SELECT user_id FROM user_roles WHERE role = 'crm')`;
       params.push(req.user!.id);
     }
 
