@@ -26,23 +26,23 @@ export function CrmSidebar() {
 
   const getNavClasses = ({ isActive }: { isActive: boolean }) =>
     isActive
-      ? "bg-[#333333]/20 text-[#333333] font-bold"
-      : "text-[#333333]/80 hover:bg-[#333333]/10 hover:text-[#333333] font-medium";
+      ? "bg-[hsl(var(--crm-sidebar-accent))] text-[hsl(var(--crm-sidebar-accent-fg))] font-bold shadow-sm"
+      : "text-[hsl(var(--crm-sidebar-fg))]/70 hover:bg-[hsl(var(--crm-sidebar-accent))]/50 hover:text-[hsl(var(--crm-sidebar-fg))] font-medium transition-all duration-200";
 
   return (
     <Sidebar
       collapsible="icon"
-      className="bg-[#FFE600] text-[#333333] border-r border-[#E6CF00] [&_[data-sidebar=sidebar]]:bg-[#FFE600]"
+      className="bg-[hsl(var(--crm-sidebar-bg))] text-[hsl(var(--crm-sidebar-fg))] border-r border-[hsl(var(--crm-sidebar-border))] [&_[data-sidebar=sidebar]]:bg-[hsl(var(--crm-sidebar-bg))]"
     >
-      <SidebarHeader className="border-b border-[#333333]/10 p-4">
+      <SidebarHeader className="border-b border-[hsl(var(--crm-sidebar-border))]/50 p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-500 text-[#FFE600]">
-            <HeartHandshake className="h-4 w-4" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFE600] shadow-lg shadow-yellow-500/20 text-black transform transition-transform hover:scale-105">
+            <HeartHandshake className="h-5 w-5" />
           </div>
           {!collapsed && (
-            <div>
-              <h1 className="text-lg font-black text-[#333333] tracking-tight uppercase">Bangbet</h1>
-              <p className="text-xs text-[#333333]/70 font-medium">CRM</p>
+            <div className="animate-fade-in">
+              <h1 className="text-xl font-black text-white tracking-tighter uppercase italic">Bangbet</h1>
+              <p className="text-[10px] text-primary/70 font-bold uppercase tracking-[0.2em] -mt-1">CRM Portal</p>
             </div>
           )}
         </div>
@@ -50,7 +50,7 @@ export function CrmSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[#333333]/50 font-bold uppercase tracking-wider text-[10px]">
+          <SidebarGroupLabel className="text-[hsl(var(--crm-sidebar-fg))]/30 font-bold uppercase tracking-widest text-[9px] px-4">
             Client Relations
           </SidebarGroupLabel>
           <SidebarGroupContent>

@@ -196,7 +196,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen w-full bg-dashboard-bg overflow-x-hidden">
+      <div className={`flex min-h-screen w-full overflow-x-hidden ${isCrm ? 'bg-[#fffdf5] dark:bg-slate-950' : 'bg-dashboard-bg'}`}>
 
         {isAdminUser && (!localStorage.getItem('adminViewMode') || localStorage.getItem('adminViewMode') === 'admin') ? (
           <AdminSidebar />

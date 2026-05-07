@@ -5,46 +5,37 @@ import {
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
-// expo-sharing loaded dynamically to avoid module-level crash if native module missing
+import * as XLSX from "xlsx";
 import { useAgentsAvailable } from "../../src/hooks/useDistribution";
-import { api, API_BASE, getToken } from "../../src/api/client";
+import { api } from "../../src/api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { colors } from "../../src/theme/colors";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { getCurrencyFromCountry } from "../../src/utils/formatCurrency";
 
-// Catches render errors and shows them instead of a blank screen
-class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: string | null }> {
-  constructor(props: any) {
-    super(props);
-    this.state = { error: null };
-  }
-  static getDerivedStateFromError(e: Error) { return { error: e.message }; }
-  render() {
-    if (this.state.error) {
-      return (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: colors.bg.dashboard }}>
-          <Feather name="alert-triangle" size={32} color={colors.status.error} />
-          <Text style={{ marginTop: 12, fontSize: 15, fontWeight: "700", color: colors.text.primary, textAlign: "center" }}>
-            Something went wrong
-          </Text>
-          <Text style={{ marginTop: 8, fontSize: 12, color: colors.text.muted, textAlign: "center" }}>
-            {this.state.error}
-          </Text>
-        </View>
-      );
-    }
-    return this.props.children;
-  }
-}
+const USD_TO_UGX = 3700;
 
-const PLATFORM_COLUMNS: Record<string, string> = {
-  'username': 'phone',
-  '最后登录时间': 'last_login_date',
-  '总票数': 'total_bets',
-  '充值金额(美金)': 'deposit_usd',
-  '充值金额(本币)': 'deposit_local',
-  '分类': 'category',
+// Chinese column header mappings — only deposit & wagered columns matter for this sheet.
+const COL_MAP: Record<string, string> = {
+  // phone
+  "username": "phone",
+  "手机号": "phone",
+  "phone": "phone",
+  "phonenumber": "phone",
+  "number": "phone",
+  // deposit (充值金额 = "deposit amount")
+  "充值金额": "deposit_usd",
+  "充值金额(美金)": "deposit_usd",
+  "充值金额(美元)": "deposit_usd",
+  "近一年充值金额(美元)": "deposit_usd",
+  "充值金额(本币)": "deposit_local",
+  "召回日期内充值金额": "deposit_local",
+  // wagered (投注总金额 = "total bet amount")
+  "投注总金额": "total_bet_amount",
+  "召回日期内总投注金额": "total_bet_amount",
+  "总票数": "total_bets",
+  // last login
+  "最后登录时间": "last_login",
 };
 
 function parseNum(v: any): number {
@@ -60,7 +51,12 @@ function excelDateIso(v: any): string | null {
 }
 
 type RefreshRow = {
-  phone: string; deposit_usd: number; deposit_local: number; total_bets: number; last_login_date: string | null;
+  phone: string;
+  deposit_usd: number;
+  deposit_local: number;
+  total_bet_amount: number;
+  total_bets: number;
+  last_login_date: string | null;
 };
 type RefreshResult = {
   matched: number; unmatched: number;
@@ -69,9 +65,24 @@ type RefreshResult = {
   converted_ids: string[]; upgraded_ids: string[]; unmatched_phones: string[];
 };
 
-function RefreshPerformanceScreen() {
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: string | null }> {
+  constructor(props: any) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e: Error) { return { error: e.message }; }
+  render() {
+    if (this.state.error) return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: colors.bg.dashboard }}>
+        <Feather name="alert-triangle" size={32} color={colors.status.error} />
+        <Text style={{ marginTop: 12, fontSize: 15, fontWeight: "700", color: colors.text.primary, textAlign: "center" }}>Something went wrong</Text>
+        <Text style={{ marginTop: 8, fontSize: 12, color: colors.text.muted, textAlign: "center" }}>{this.state.error}</Text>
+      </View>
+    );
+    return this.props.children;
+  }
+}
+
+function RecycleLeadsScreen() {
   const { user } = useAuth();
-  const currency = getCurrencyFromCountry(user?.country || 'UG');
+  const currency = getCurrencyFromCountry(user?.country || "UG");
   const { data: agents, refetch: refetchAgents } = useAgentsAvailable();
   const queryClient = useQueryClient();
 
@@ -79,7 +90,6 @@ function RefreshPerformanceScreen() {
   const [rows, setRows] = useState<RefreshRow[]>([]);
   const [preview, setPreview] = useState<RefreshRow[]>([]);
   const [importing, setImporting] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [result, setResult] = useState<RefreshResult | null>(null);
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
@@ -95,37 +105,6 @@ function RefreshPerformanceScreen() {
     } catch { /* ignore */ }
   };
 
-  const exportPhones = async () => {
-    setExporting(true);
-    try {
-      const token = await getToken();
-      const res = await fetch(`${API_BASE}/leads/export-phones`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`Export failed (${res.status})`);
-      const csv = await res.text();
-
-      const dest = `${FileSystem.cacheDirectory}phones-${new Date().toISOString().slice(0, 10)}.csv`;
-      await FileSystem.writeAsStringAsync(dest, csv);
-
-      try {
-        const Sharing = await import("expo-sharing");
-        const available = await Sharing.isAvailableAsync();
-        if (available) {
-          await Sharing.shareAsync(dest, { mimeType: "text/csv", dialogTitle: "Send phone list to tech team" });
-        } else {
-          Alert.alert("Saved", `File saved to:\n${dest}`);
-        }
-      } catch {
-        Alert.alert("Saved", `File saved to:\n${dest}`);
-      }
-    } catch (err: any) {
-      Alert.alert("Export failed", err?.message || "Could not export phones");
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const pickFile = async () => {
     try {
       const res = await DocumentPicker.getDocumentAsync({ type: ["*/*"], copyToCacheDirectory: true });
@@ -136,11 +115,11 @@ function RefreshPerformanceScreen() {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const isCsv = /\.csv$/i.test(file.name);
       if (!isExcel && !isCsv) {
-        Alert.alert("Wrong file type", "Upload a .csv, .xlsx or .xls file");
+        Alert.alert("Wrong file type", "Please upload a .xlsx, .xls or .csv file");
         return;
       }
 
-      let json: any[];
+      let json: any[] = [];
       if (isExcel) {
         const b64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
         const wb = XLSX.read(b64, { type: "base64" });
@@ -161,17 +140,36 @@ function RefreshPerformanceScreen() {
         .map((row) => {
           const mapped: any = {};
           for (const [k, v] of Object.entries(row)) {
-            const out = PLATFORM_COLUMNS[k] || k.toLowerCase();
+            const cleanK = String(k).trim();
+            const out = COL_MAP[cleanK] || COL_MAP[cleanK.toLowerCase()] || cleanK.toLowerCase();
             mapped[out] = v;
           }
-          const phone = String(mapped.phone || mapped.number || "").trim();
+
+          // Resolve phone — look for any key containing phone/number/username
+          let phone = String(mapped.phone || mapped.number || mapped.username || "").trim();
+          if (!phone) {
+            for (const [k, v] of Object.entries(row)) {
+              const lk = String(k).toLowerCase();
+              if (lk.includes("phone") || lk.includes("number") || lk.includes("手机")) {
+                phone = String(v || "").trim();
+                if (phone) break;
+              }
+            }
+          }
           if (!phone) return null;
+
+          const deposit_usd = parseNum(mapped.deposit_usd);
+          const deposit_local_raw = parseNum(mapped.deposit_local);
+          // Convert USD to UGX if no local value
+          const deposit_local = deposit_local_raw > 0 ? deposit_local_raw : Math.round(deposit_usd * USD_TO_UGX);
+
           return {
             phone,
-            deposit_usd: parseNum(mapped.deposit_usd),
-            deposit_local: parseNum(mapped.deposit_local),
+            deposit_usd,
+            deposit_local,
+            total_bet_amount: parseNum(mapped.total_bet_amount),
             total_bets: parseNum(mapped.total_bets),
-            last_login_date: excelDateIso(mapped.last_login_date),
+            last_login_date: excelDateIso(mapped.last_login),
           } as RefreshRow;
         })
         .filter((x): x is RefreshRow => !!x);
@@ -180,7 +178,6 @@ function RefreshPerformanceScreen() {
       setRows(parsed);
       setPreview(parsed.slice(0, 3));
       setResult(null);
-
       Alert.alert("File loaded", `${parsed.length} rows parsed from ${file.name}`);
     } catch (err: any) {
       Alert.alert("Error", err?.message || "Failed to parse file");
@@ -222,6 +219,7 @@ function RefreshPerformanceScreen() {
 
       setResult(acc);
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["deposit-analytics"] });
       loadHistory();
     } catch (err: any) {
       Alert.alert("Refresh failed", err?.message || "Unknown error");
@@ -255,6 +253,8 @@ function RefreshPerformanceScreen() {
     }
   };
 
+  const totalDepositUGX = rows.reduce((s, r) => s + r.deposit_local, 0);
+
   return (
     <ScrollView
       style={styles.container}
@@ -264,49 +264,65 @@ function RefreshPerformanceScreen() {
       <View style={styles.intro}>
         <Text style={styles.introTitle}>Recycle Leads</Text>
         <Text style={styles.introSub}>
-          Fresh deposits are auto-attributed to agent calls only when platform activity happened after the call.
+          Upload the platform export (deposit & wagered data). Fresh deposits are attributed to agent calls and lead scores are updated automatically.
         </Text>
       </View>
 
-      {/* Step 1: export phones */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>1. Export Phone List</Text>
-        <TouchableOpacity
-          style={[styles.outlineBtn, exporting && { opacity: 0.6 }]}
-          onPress={exportPhones} disabled={exporting} activeOpacity={0.7}
-        >
-          {exporting ? <ActivityIndicator color={colors.brand.green} /> : (
-            <>
-              <Feather name="download" size={16} color={colors.brand.green} />
-              <Text style={styles.outlineBtnText}>Download & share phones.csv</Text>
-            </>
-          )}
-        </TouchableOpacity>
-        <Text style={styles.helperText}>
-          Hand the file to the tech team. They fill in fresh platform data and send it back.
+      {/* Info card */}
+      <View style={styles.infoCard}>
+        <Feather name="info" size={14} color="#0369a1" />
+        <Text style={styles.infoText}>
+          The xlsx file should contain deposit amount (充值金额) and total wagered (投注总金额) columns. USD values are automatically converted to UGX.
         </Text>
       </View>
 
-      {/* Step 2: upload enriched */}
+      {/* Upload section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>2. Upload Enriched File</Text>
+        <Text style={styles.sectionTitle}>Upload Enriched File</Text>
         <TouchableOpacity style={styles.uploadBtn} onPress={pickFile} activeOpacity={0.7} disabled={importing}>
           <Feather name="upload" size={22} color={colors.brand.green} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.uploadBtnTitle}>{fileName || "Tap to pick enriched CSV/Excel"}</Text>
-            <Text style={styles.uploadBtnSub}>{rows.length > 0 ? `${rows.length} rows parsed` : "From the tech team"}</Text>
+            <Text style={styles.uploadBtnTitle}>{fileName || "Tap to pick Excel / CSV file"}</Text>
+            <Text style={styles.uploadBtnSub}>
+              {rows.length > 0 ? `${rows.length} rows parsed` : "Platform export from tech team"}
+            </Text>
           </View>
+          {rows.length > 0 && <Feather name="check-circle" size={18} color={colors.status.success} />}
         </TouchableOpacity>
 
+        {/* Summary before import */}
+        {rows.length > 0 && !result && (
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Total rows</Text>
+              <Text style={styles.summaryValue}>{rows.length.toLocaleString()}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Total deposit (UGX)</Text>
+              <Text style={[styles.summaryValue, { color: "#047857" }]}>
+                {currency} {Math.round(totalDepositUGX).toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>USD → UGX rate</Text>
+              <Text style={styles.summaryValue}>1 USD = {USD_TO_UGX.toLocaleString()} UGX</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Preview */}
         {preview.length > 0 && (
           <View style={styles.previewCard}>
-            <Text style={styles.previewHeader}>Preview</Text>
+            <Text style={styles.previewHeader}>Preview (first 3 rows)</Text>
             {preview.map((r, i) => (
               <View key={i} style={styles.previewRow}>
                 <Text style={styles.previewPhone}>{r.phone}</Text>
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.previewTrait}>${r.deposit_usd.toLocaleString()}</Text>
-                  <Text style={styles.previewMeta}>{r.total_bets.toLocaleString()} bets</Text>
+                  <Text style={styles.previewTrait}>
+                    Dep: {currency} {Math.round(r.deposit_local).toLocaleString()}
+                    {r.deposit_usd > 0 ? ` ($${r.deposit_usd.toLocaleString()})` : ""}
+                  </Text>
+                  <Text style={styles.previewMeta}>Wagered: {r.total_bet_amount.toLocaleString()} · Bets: {r.total_bets}</Text>
                 </View>
               </View>
             ))}
@@ -314,10 +330,10 @@ function RefreshPerformanceScreen() {
         )}
       </View>
 
-      {/* Step 3: run */}
+      {/* Run refresh */}
       {rows.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>3. Run Refresh</Text>
+          <Text style={styles.sectionTitle}>Run Refresh</Text>
           <TouchableOpacity
             style={[styles.primaryBtn, importing && { opacity: 0.5 }]}
             onPress={runRefresh} disabled={importing} activeOpacity={0.8}
@@ -337,7 +353,7 @@ function RefreshPerformanceScreen() {
         </View>
       )}
 
-      {/* Step 4: results */}
+      {/* Results */}
       {result && (
         <View style={styles.section}>
           <View style={styles.resultHeader}>
@@ -345,7 +361,6 @@ function RefreshPerformanceScreen() {
             <Text style={styles.resultHeaderText}>Refresh complete</Text>
           </View>
 
-          {/* Attribution headline */}
           <View style={styles.attributionCard}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <Feather name="dollar-sign" size={16} color="#047857" />
@@ -369,7 +384,7 @@ function RefreshPerformanceScreen() {
           {result.upgraded_ids.length > 0 && (
             <View style={styles.distributeSection}>
               <Text style={styles.sectionTitle}>
-                4. Redistribute {result.upgraded_ids.length} upgraded leads
+                Redistribute {result.upgraded_ids.length} upgraded leads
               </Text>
               <View style={styles.agentList}>
                 {(agents || []).map((a) => {
@@ -408,7 +423,7 @@ function RefreshPerformanceScreen() {
             <View style={styles.warnBox}>
               <Feather name="info" size={14} color={colors.text.secondary} />
               <Text style={styles.warnText}>
-                {result.unmatched} phone(s) had no matching lead. Import them on the Import Leads screen first.
+                {result.unmatched} phone(s) had no matching lead. Import them via Import Leads first.
               </Text>
             </View>
           )}
@@ -422,9 +437,7 @@ function RefreshPerformanceScreen() {
           {history.map((b) => (
             <View key={b.id} style={styles.historyRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.historyTitle} numberOfLines={1}>
-                  {b.source_filename || "Untitled refresh"}
-                </Text>
+                <Text style={styles.historyTitle} numberOfLines={1}>{b.source_filename || "Untitled refresh"}</Text>
                 <Text style={styles.historyMeta}>{new Date(b.created_at).toLocaleString()}</Text>
               </View>
               <View style={styles.historyStats}>
@@ -462,16 +475,20 @@ const styles = StyleSheet.create({
   introTitle: { fontSize: 20, fontWeight: "800", color: colors.text.primary },
   introSub: { fontSize: 12, color: colors.text.secondary, marginTop: 4, lineHeight: 17 },
 
+  infoCard: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginHorizontal: 16, marginTop: 14, backgroundColor: "#e0f2fe", padding: 12, borderRadius: 8, borderWidth: 1, borderColor: "#bae6fd" },
+  infoText: { flex: 1, fontSize: 11, color: "#0369a1", lineHeight: 15 },
+
   section: { marginHorizontal: 16, marginTop: 18 },
   sectionTitle: { fontSize: 11, fontWeight: "700", color: colors.text.secondary, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 },
-
-  outlineBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.bg.card, paddingVertical: 13, borderRadius: 10, borderWidth: 1.5, borderColor: colors.brand.green },
-  outlineBtnText: { fontSize: 13, fontWeight: "700", color: colors.brand.green },
-  helperText: { fontSize: 11, color: colors.text.muted, marginTop: 8, lineHeight: 15 },
 
   uploadBtn: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: colors.bg.card, padding: 18, borderRadius: 10, borderWidth: 1.5, borderColor: colors.brand.green, borderStyle: "dashed" },
   uploadBtnTitle: { fontSize: 14, fontWeight: "700", color: colors.text.primary },
   uploadBtnSub: { fontSize: 11, color: colors.text.muted, marginTop: 2 },
+
+  summaryCard: { marginTop: 10, backgroundColor: colors.bg.card, borderRadius: 10, padding: 14, borderWidth: 1, borderColor: colors.border.default },
+  summaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border.default },
+  summaryLabel: { fontSize: 12, color: colors.text.secondary },
+  summaryValue: { fontSize: 13, fontWeight: "700", color: colors.text.primary },
 
   previewCard: { backgroundColor: colors.bg.card, borderRadius: 10, padding: 12, marginTop: 10, borderWidth: 1, borderColor: colors.border.default },
   previewHeader: { fontSize: 10, fontWeight: "700", color: colors.text.secondary, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
@@ -503,7 +520,6 @@ const styles = StyleSheet.create({
   agentChipText: { fontSize: 12, fontWeight: "600", color: colors.text.primary },
   checkbox: { width: 14, height: 14, borderRadius: 4, borderWidth: 1.5, borderColor: colors.border.default, alignItems: "center", justifyContent: "center" },
   checkboxSelected: { backgroundColor: colors.brand.green, borderColor: colors.brand.green },
-
   distributeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.brand.green, paddingVertical: 13, borderRadius: 10 },
   distributeBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
 
@@ -518,10 +534,10 @@ const styles = StyleSheet.create({
   historySep: { fontSize: 11, color: colors.border.default },
 });
 
-export default function RefreshPerformanceScreenWrapper() {
+export default function RecycleLeadsWrapper() {
   return (
     <ErrorBoundary>
-      <RefreshPerformanceScreen />
+      <RecycleLeadsScreen />
     </ErrorBoundary>
   );
 }

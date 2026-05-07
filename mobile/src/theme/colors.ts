@@ -4,10 +4,12 @@ export const colors = {
   brand: {
     yellow: "#FFE600",
     yellowDark: "#E6CF00",
-    green: "#00963f",
-    greenLight: "#22c55e",
+    green: "#22c55e",
+    greenLight: "#4ade80",
     greenHover: "#16a34a",
     dark: "#333333",
+    crm: "#22c55e", 
+    crmDark: "#15803d",
   },
 
   // Backgrounds (light mode from CSS --background: 0 0% 100%)

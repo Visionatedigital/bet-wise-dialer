@@ -14,12 +14,13 @@ router.get('/', requireAdmin as any, async (req: AuthRequest, res: Response) => 
                       array_agg(r.role) FILTER (WHERE r.role IS NOT NULL) as roles
                FROM users u
                LEFT JOIN profiles p ON p.id = u.id
-               LEFT JOIN user_roles r ON r.user_id = u.id`;
+               LEFT JOIN user_roles r ON r.user_id = u.id
+               WHERE p.status IS DISTINCT FROM 'deleted'`;
     const params: any[] = [];
 
     if (isManagement) {
       // Managers only see users from their own country and EXCLUDE CRM agents
-      sql += ` WHERE p.country = (SELECT country FROM profiles WHERE id = $1)
+      sql += ` AND p.country = (SELECT country FROM profiles WHERE id = $1)
                AND u.id NOT IN (SELECT user_id FROM user_roles WHERE role = 'crm')`;
       params.push(req.user!.id);
     }
@@ -183,7 +184,12 @@ router.delete('/:id', requireAdmin as any, async (req: AuthRequest, res: Respons
       );
       if (check.rows.length === 0) return res.status(403).json({ error: 'Cannot delete users outside your country' });
     }
-    await query('DELETE FROM users WHERE id = $1', [req.params.id]);
+    
+    // Soft Delete: Unassign leads and mark profile as deleted
+    await query('UPDATE leads SET user_id = NULL WHERE user_id = $1', [req.params.id]);
+    await query('UPDATE leads SET crm_owner_id = NULL WHERE crm_owner_id = $1', [req.params.id]);
+    await query("UPDATE profiles SET status = 'deleted', approved = false, rejected = true WHERE id = $1", [req.params.id]);
+    
     res.json({ message: 'User deleted' });
   } catch (err) { res.status(500).json({ error: 'Failed to delete user' }); }
 });

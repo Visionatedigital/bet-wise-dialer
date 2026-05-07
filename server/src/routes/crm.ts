@@ -11,14 +11,20 @@ router.get('/contacts', async (req: AuthRequest, res: Response) => {
     const { filter = 'all', limit = 100, offset = 0 } = req.query;
     const agentId = req.user!.id;
     const role = req.user!.role;
+    const isAdmin = role === 'admin' || role === 'moderator';
+    const isManagement = role === 'management';
 
     let sql = `SELECT * FROM leads WHERE 1=1`;
     const params: any[] = [];
     let paramCount = 1;
 
-    // Filter by assigned agent unless admin
-    if (role !== 'admin') {
+    // Filter by assigned agent unless admin or management
+    if (!isAdmin && !isManagement) {
       sql += ` AND (user_id = $${paramCount} OR crm_owner_id = $${paramCount})`;
+      params.push(agentId);
+      paramCount++;
+    } else if (isManagement) {
+      sql += ` AND country = (SELECT country FROM profiles WHERE id = $${paramCount})`;
       params.push(agentId);
       paramCount++;
     }

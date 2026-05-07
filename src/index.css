@@ -57,7 +57,7 @@
     --call-ringing: 38 92% 50%;
     --call-hold: 221 83% 53%;
     
-    /* Sidebar */
+    /* Sidebar - Original Dark Theme */
     --sidebar-background: 220 13% 18%;
     --sidebar-foreground: 220 9% 89%;
     --sidebar-primary: 160 84% 39%;
@@ -66,6 +66,13 @@
     --sidebar-accent-foreground: 220 13% 18%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 160 84% 39%;
+
+    /* CRM Premium Theme - Exclusive to CRM Account */
+    --crm-sidebar-bg: 142 71% 25%; /* Deeper green for contrast */
+    --crm-sidebar-fg: 0 0% 100%;
+    --crm-sidebar-accent: 38 100% 50%; /* Company Yellow #FFE600 roughly */
+    --crm-sidebar-accent-fg: 0 0% 0%; /* Black text on yellow */
+    --crm-sidebar-border: 142 71% 20%;
   }
 
   .dark {

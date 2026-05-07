@@ -8,11 +8,14 @@ import { usePendingCallbacks } from "../../src/hooks/useCallbacks";
 import { useRecentCalls } from "../../src/hooks/useRecentCalls";
 import { useNewLeads, useCooldownDueLeads } from "../../src/hooks/useLeads";
 import { useAgentsAvailable } from "../../src/hooks/useDistribution";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../src/api/client";
 import { KpiCard } from "../../src/components/KpiCard";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
 import { FloatingAssistant } from "../../src/components/FloatingAssistant";
 import { CrmDashboard } from "../../src/components/CrmDashboard";
+import { getCurrencyFromCountry } from "../../src/utils/formatCurrency";
 
 function maskPhone(phone: string): string {
   if (!phone || phone.length < 6) return phone || "";
@@ -162,7 +165,11 @@ function ManagerDashboard() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/(tabs)/refresh-performance")} activeOpacity={0.8}>
             <Feather name="refresh-ccw" size={20} color={colors.brand.dark} />
-            <Text style={styles.quickBtnText}>Refresh Data</Text>
+            <Text style={styles.quickBtnText}>Recycle Leads</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/(tabs)/deposit-analytics")} activeOpacity={0.8}>
+            <Feather name="bar-chart-2" size={20} color={colors.brand.dark} />
+            <Text style={styles.quickBtnText}>Deposits</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickBtn} onPress={() => router.push("/(tabs)/approve-agents")} activeOpacity={0.8}>
             <Feather name="user-check" size={20} color={colors.brand.dark} />
@@ -182,7 +189,27 @@ function AgentDashboard() {
   const { data: recentCalls } = useRecentCalls();
   const { data: newLeads } = useNewLeads(10);
   const { data: cooldownLeads } = useCooldownDueLeads(10);
+  const { user } = useAuth();
   const router = useRouter();
+  const currency = getCurrencyFromCountry((user as any)?.country || "UG");
+
+  // Agent deposit summary from their assigned leads
+  const { data: depositStats } = useQuery<{ total_deposited_ugx: number; converted_count: number; depositors_count: number }>({
+    queryKey: ["agent-deposit-summary"],
+    queryFn: async () => {
+      try {
+        const data = await api.get<any>("/reports/deposit-analytics");
+        return data.totals;
+      } catch { return { total_deposited_ugx: 0, converted_count: 0, depositors_count: 0 }; }
+    },
+    refetchInterval: 60_000,
+  });
+
+  function fmtShort(n: number) {
+    if (n >= 1_000_000) return `${currency} ${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${currency} ${(n / 1_000).toFixed(0)}K`;
+    return `${currency} ${Math.round(n).toLocaleString()}`;
+  }
 
   const overdueCount = callbacks?.filter((c) => new Date(c.scheduled_for) < new Date()).length || 0;
   const dueCallbackCount = callbacks?.filter((c) => {
@@ -204,6 +231,23 @@ function AgentDashboard() {
         <KpiCard label="Connects" value={metrics?.connects ?? 0} color={colors.status.success} />
         <KpiCard label="Converts" value={metrics?.conversions ?? 0} color={colors.status.info} />
       </View>
+
+      {/* Deposit summary from assigned leads */}
+      {depositStats && depositStats.total_deposited_ugx > 0 && (
+        <View style={styles.depositSummary}>
+          <View style={styles.depositSummaryLeft}>
+            <Feather name="trending-up" size={16} color="#047857" />
+            <View style={{ marginLeft: 10 }}>
+              <Text style={styles.depositSummaryLabel}>Your Leads' Total Deposits</Text>
+              <Text style={styles.depositSummaryValue}>{fmtShort(depositStats.total_deposited_ugx)}</Text>
+            </View>
+          </View>
+          <View style={styles.depositSummaryRight}>
+            <Text style={styles.depositSummaryMeta}>{depositStats.depositors_count} depositors</Text>
+            <Text style={styles.depositSummaryMeta}>{depositStats.converted_count} converted</Text>
+          </View>
+        </View>
+      )}
 
       {/* Start Calling */}
       <TouchableOpacity style={styles.startButton} onPress={() => router.push("/(tabs)/leads")} activeOpacity={0.8}>
@@ -492,6 +536,14 @@ const styles = StyleSheet.create({
   startButton: { backgroundColor: colors.brand.green, marginHorizontal: 20, marginTop: 20, borderRadius: 8, padding: 16, flexDirection: "row", alignItems: "center", gap: 14 },
   startText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   startSub: { color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 1 },
+
+  // Deposit summary (agent)
+  depositSummary: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: 20, marginTop: 14, backgroundColor: "#ecfdf5", borderRadius: 10, padding: 14, borderWidth: 1, borderColor: "#a7f3d0" },
+  depositSummaryLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
+  depositSummaryLabel: { fontSize: 11, color: "#047857", fontWeight: "600" },
+  depositSummaryValue: { fontSize: 20, fontWeight: "800", color: "#065f46", marginTop: 2 },
+  depositSummaryRight: { alignItems: "flex-end", gap: 2 },
+  depositSummaryMeta: { fontSize: 11, color: "#047857", fontWeight: "600" },
 
   // Empty states
   emptyBox: { backgroundColor: colors.bg.card, borderRadius: 8, padding: 24, alignItems: "center", borderWidth: 1, borderColor: colors.border.default },

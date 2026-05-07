@@ -19,6 +19,7 @@ import aiRoutes from './routes/ai';
 import reportsRoutes from './routes/reports';
 import crmRoutes from './routes/crm';
 import whatsappRoutes from './routes/whatsapp';
+import { startNotificationWorker } from './services/notificationWorker';
 
 const app = express();
 const httpServer = createServer(app);
@@ -54,10 +55,21 @@ app.use('/api/whatsapp', whatsappRoutes);
 io.on('connection', (socket) => {
   console.log(`[Socket.io] Client connected: ${socket.id}`);
   
+  // Join user room for targeted notifications
+  socket.on('authenticate', (userId) => {
+    if (userId) {
+      socket.join(`user_${userId}`);
+      console.log(`[Socket.io] User ${userId} joined their notification room`);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`[Socket.io] Client disconnected: ${socket.id}`);
   });
 });
+
+// Start background workers
+startNotificationWorker(io);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: '1.0.0' });

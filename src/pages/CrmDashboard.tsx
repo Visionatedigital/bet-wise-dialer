@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { HARDCODED_CRM_LEADS } from "@/utils/hardcodedLeads";
 
 // Helper to generate AI Insights locally for demo purposes
 const generateAIInsight = (lead: Lead) => {
@@ -65,7 +66,7 @@ export default function CrmDashboard() {
       // Fetch leads assigned to this CRM user
       const data = await api.get<any[]>("/leads?user_id=" + user?.id);
 
-      const formattedLeads: Lead[] = (data || []).map(lead => ({
+      const apiLeads: Lead[] = (data || []).map(lead => ({
         id: lead.id,
         name: lead.name,
         phone: lead.phone,
@@ -80,18 +81,56 @@ export default function CrmDashboard() {
         campaign: lead.campaign_name || "CRM Direct",
         priority: lead.priority as "high" | "medium" | "low",
       }));
+
+      // Map hardcoded leads to Lead type
+      const hardcodedMapped: Lead[] = HARDCODED_CRM_LEADS.map(hl => ({
+        id: hl.id,
+        name: hl.name,
+        phone: hl.phone,
+        segment: hl.segment as any,
+        lastActivity: "Never",
+        lastDepositUgx: 0,
+        score: hl.score,
+        tags: ["Pinned"],
+        ownerUserId: user?.id || "",
+        campaign: "Pinned Portfolio",
+        priority: hl.segment === 'vip' ? "high" : "medium",
+      }));
+
+      // Merge avoiding duplicate phone numbers
+      const merged = [...hardcodedMapped];
+      apiLeads.forEach(al => {
+        if (!merged.find(ml => ml.phone === al.phone)) {
+          merged.push(al);
+        }
+      });
       
       // Sort: VIPs and High Priority first, then by Score
-      formattedLeads.sort((a, b) => {
+      merged.sort((a, b) => {
         if (a.segment === 'vip' && b.segment !== 'vip') return -1;
         if (a.segment !== 'vip' && b.segment === 'vip') return 1;
         return (b.score || 0) - (a.score || 0);
       });
 
-      setLeads(formattedLeads);
+      setLeads(merged);
     } catch (error) {
       console.error('Error fetching leads:', error);
-      toast.error('Failed to load your clients');
+      // Fallback to only hardcoded if API fails
+      const hardcodedMapped: Lead[] = HARDCODED_CRM_LEADS.map(hl => ({
+        id: hl.id,
+        name: hl.name,
+        phone: hl.phone,
+        segment: hl.segment as any,
+        lastActivity: "Never",
+        lastDepositUgx: 0,
+        score: hl.score,
+        tags: ["Pinned"],
+        ownerUserId: user?.id || "",
+        campaign: "Pinned Portfolio",
+        priority: hl.segment === 'vip' ? "high" : "medium",
+      }));
+      setLeads(hardcodedMapped);
+      toast.error('Failed to load dynamic clients, showing pinned portfolio');
     } finally {
       setLoading(false);
     }
@@ -123,91 +162,151 @@ export default function CrmDashboard() {
   const vipClients = leads.filter(l => l.segment === 'vip').length;
 
   return (
+  return (
     <DashboardLayout>
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
         
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Smart CRM</h1>
-            <p className="text-muted-foreground mt-1">Manage your relationships and follow up on smart AI insights.</p>
+        {/* Premium CRM Hero */}
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-green-500 to-green-700 p-10 text-white shadow-2xl shadow-green-900/10 dark:shadow-none">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge className="bg-[#FFE600] text-green-950 border-none px-4 py-1.5 text-[11px] uppercase tracking-[0.2em] font-black">
+                  VIP Relationship Hub
+                </Badge>
+              </div>
+              <div>
+                <h1 className="text-5xl font-black tracking-tighter mb-2">
+                  Smart <span className="text-[#FFE600]">CRM</span>
+                </h1>
+                <p className="text-emerald-50/70 max-w-md text-lg font-medium leading-relaxed">
+                  Deepen client relationships and drive retention with AI-powered engagement tools.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex gap-4">
+              <div className="bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 flex flex-col items-center justify-center min-w-[140px] shadow-lg">
+                <span className="text-4xl font-black text-white mb-1">{totalClients}</span>
+                <span className="text-[10px] text-emerald-100/60 uppercase tracking-widest font-bold">Portfolios</span>
+              </div>
+              <div className="bg-[#FFE600]/10 backdrop-blur-xl p-6 rounded-[2rem] border border-[#FFE600]/30 flex flex-col items-center justify-center min-w-[140px] shadow-lg">
+                <span className="text-4xl font-black text-[#FFE600] mb-1">{vipClients}</span>
+                <span className="text-[10px] text-[#FFE600]/80 uppercase tracking-widest font-bold text-[#FFE600]">VIP Status</span>
+              </div>
+            </div>
           </div>
-          <div className="flex gap-4">
-            <Card className="w-40 border-primary/20 bg-primary/5">
-              <CardContent className="p-4 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-primary">{totalClients}</span>
-                <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Clients</span>
-              </CardContent>
-            </Card>
-            <Card className="w-40 border-amber-500/20 bg-amber-50 dark:bg-amber-950/20">
-              <CardContent className="p-4 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-amber-600 dark:text-amber-500">{vipClients}</span>
-                <span className="text-xs text-amber-700/70 dark:text-amber-500/70 uppercase tracking-wider font-semibold">VIP Clients</span>
-              </CardContent>
-            </Card>
-          </div>
+          
+          {/* Decorative Elements */}
+          <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-emerald-400/5 blur-[100px]" />
+          <div className="absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-[#FFE600]/10 blur-[100px]" />
         </div>
 
         {/* Lead Ranking & Smart Suggestions */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" /> AI Recommended Actions
-          </h2>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-black tracking-tight flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                <Bot className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              Recommended Engagements
+            </h2>
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-400 uppercase tracking-wider">
+              <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+              Prioritized by AI Score
+            </div>
+          </div>
           
           {loading ? (
-            <div className="text-center py-12 text-muted-foreground">Loading your clients...</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="h-64 rounded-3xl bg-slate-100 animate-pulse" />
+              ))}
+            </div>
           ) : leads.length === 0 ? (
-            <Card className="border-dashed bg-muted/30">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Target className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                <h3 className="text-lg font-medium">No clients assigned</h3>
-                <p className="text-sm text-muted-foreground mb-4">Import your client list to get started.</p>
-                <Button onClick={() => window.location.href = '/crm/import-leads'}>Import Clients</Button>
+            <Card className="border-none shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
+              <CardContent className="flex flex-col items-center justify-center py-24">
+                <div className="h-24 w-24 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-6">
+                  <Target className="h-12 w-12 text-slate-200" />
+                </div>
+                <h3 className="text-2xl font-bold mb-2">No active portfolios</h3>
+                <p className="text-slate-500 mb-8 max-w-xs text-center">Import your high-value client list to begin AI relationship management.</p>
+                <Button 
+                  onClick={() => window.location.href = '/crm/import-leads'}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-6 rounded-2xl font-bold"
+                >
+                  Import Clients
+                </Button>
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {leads.map(lead => {
                 const insight = generateAIInsight(lead);
                 return (
-                  <Card key={lead.id} className="overflow-hidden border-border/50 hover:border-primary/30 transition-all shadow-sm hover:shadow-md">
-                    <div className="flex items-start">
-                      {/* Left Side: Info */}
-                      <div className="flex-1 p-5">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-lg">{lead.name}</h3>
-                            {lead.segment === 'vip' && <Star className="h-4 w-4 text-amber-500 fill-amber-500" />}
+                  <Card key={lead.id} className="group overflow-hidden border-none shadow-xl hover:shadow-2xl hover:translate-y-[-4px] transition-all duration-500 bg-white dark:bg-slate-900 rounded-[2.5rem]">
+                    <div className="flex flex-col md:flex-row h-full">
+                      {/* Main Info */}
+                      <div className="flex-1 p-8">
+                        <div className="flex items-center justify-between mb-6">
+                          <div className="flex items-center gap-4">
+                            <div className="relative">
+                              <img 
+                                src={`https://picsum.photos/seed/${lead.phone}/100`} 
+                                className="h-12 w-12 rounded-full object-cover border-2 border-white dark:border-emerald-900 shadow-sm"
+                                alt={lead.name}
+                              />
+                              <div className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white dark:border-emerald-900 ${lead.segment === 'vip' ? 'bg-[#FFE600]' : 'bg-[#22c55e]'}`} />
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-emerald-950 dark:text-white flex items-center gap-2 text-lg">
+                                {lead.name}
+                                {lead.segment === 'vip' && <Star className="h-4 w-4 text-[#FFE600] fill-[#FFE600]" />}
+                              </h3>
+                              <p className="text-sm text-emerald-600/70 font-medium">
+                                {lead.phone} • {lead.lastActivity}
+                              </p>
+                            </div>
                           </div>
-                          <Badge variant={insight.priority === 'high' ? 'destructive' : 'secondary'} className="text-xs">
+                          <Badge className={`${
+                            insight.priority === 'high' ? 'bg-rose-50 text-rose-600 border-rose-100' : 
+                            'bg-emerald-50 text-emerald-600 border-emerald-100'
+                          } px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm`}>
                             {insight.tag}
                           </Badge>
                         </div>
-                        <div className="flex items-center text-sm text-muted-foreground mb-4">
-                          <Phone className="h-3.5 w-3.5 mr-1" /> {lead.phone}
-                          <span className="mx-2">•</span>
-                          <History className="h-3.5 w-3.5 mr-1" /> Last active: {lead.lastActivity}
+
+                        <div className="flex flex-wrap items-center gap-6 text-sm font-bold text-slate-400 mb-8">
+                          <div className="flex items-center">
+                            <Phone className="h-4 w-4 mr-2 text-emerald-500/50" /> {lead.phone}
+                          </div>
+                          <div className="flex items-center">
+                            <History className="h-4 w-4 mr-2 text-blue-500/50" /> {lead.lastActivity}
+                          </div>
                         </div>
                         
-                        {/* AI Insight Box */}
-                        <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 mb-4">
-                          <p className="text-sm text-foreground/90 flex items-start gap-2">
-                            <Bot className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                            <span>{insight.message}</span>
-                          </p>
+                        {/* AI Insight Glass Box */}
+                        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 mb-8 group-hover:bg-emerald-50/50 dark:group-hover:bg-emerald-900/20 transition-colors duration-500">
+                          <div className="flex items-start gap-4">
+                            <div className="h-8 w-8 rounded-xl bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center shrink-0">
+                              <Bot className="h-5 w-5 text-emerald-600" />
+                            </div>
+                            <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 font-medium italic">
+                              "{insight.message}"
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 mt-auto">
+                        <div className="flex flex-wrap items-center gap-3">
                           <Button 
-                            size="sm" 
-                            className="bg-green-600 hover:bg-green-700"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl px-6 py-5 font-bold shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
                             onClick={() => openWhatsApp(lead.phone, insight.suggestedText)}
                           >
-                            <MessageSquare className="h-4 w-4 mr-1.5" /> WhatsApp
+                            <MessageSquare className="h-4 w-4 mr-2" /> WhatsApp
                           </Button>
                           <Button 
-                            size="sm" 
                             variant="outline"
+                            className="rounded-2xl px-6 py-5 font-bold border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95"
                             onClick={() => {
                               startCall({
                                 id: lead.id,
@@ -219,30 +318,31 @@ export default function CrmDashboard() {
                               });
                             }}
                           >
-                            <Phone className="h-4 w-4 mr-1.5" /> Call
+                            <Phone className="h-4 w-4 mr-2 text-emerald-600" /> Call
                           </Button>
                           <Button 
-                            size="sm" 
                             variant="ghost"
+                            className="rounded-2xl p-4 font-bold text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all ml-auto"
                             onClick={() => {
                               setActiveLead(lead);
                               setNoteModalOpen(true);
                             }}
                           >
-                            <Edit3 className="h-4 w-4 mr-1.5" /> Log Update
+                            <Edit3 className="h-5 w-5" />
                           </Button>
                         </div>
                       </div>
                       
-                      {/* Right Side: Data Highlights */}
-                      <div className="w-32 bg-muted/30 p-4 border-l flex flex-col justify-center items-center text-center shrink-0">
-                        <div className="mb-4">
-                          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Score</div>
-                          <div className="text-2xl font-bold text-primary">{lead.score}</div>
+                      {/* Metric Sidebar */}
+                      <div className="w-full md:w-40 bg-slate-50/50 dark:bg-slate-800/20 p-8 border-l border-slate-100 dark:border-slate-800 flex flex-col justify-center items-center text-center shrink-0">
+                        <div className="mb-8">
+                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">AI Score</div>
+                          <div className="text-5xl font-black text-emerald-600 drop-shadow-sm">{lead.score}</div>
                         </div>
+                        <div className="h-px w-12 bg-slate-200 dark:bg-slate-700 mb-8" />
                         <div>
-                          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Last Dep.</div>
-                          <div className="text-sm font-semibold truncate w-full" title={formatUGX(lead.lastDepositUgx || 0)}>
+                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Last Dep.</div>
+                          <div className="text-sm font-black text-slate-900 dark:text-white truncate w-full">
                             {lead.lastDepositUgx ? formatUGX(lead.lastDepositUgx) : '-'}
                           </div>
                         </div>

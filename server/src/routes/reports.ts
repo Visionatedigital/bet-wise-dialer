@@ -196,5 +196,116 @@ router.get('/daily-call-notes', async (req: AuthRequest, res: Response) => {
   }
 });
 
-export default router;
 
+// GET /reports/deposit-analytics
+// Overall deposit performance: total deposits, top numbers, top agents.
+// Scoped to manager's country for management role.
+router.get('/deposit-analytics', async (req: AuthRequest, res: Response) => {
+  try {
+    const isManagement = req.user!.role === 'management';
+    const managerId = req.user!.id;
+    const cSub = `(SELECT country FROM profiles WHERE id = $1)`;
+    const params = isManagement ? [managerId] : [];
+    const countryFilter = isManagement ? `AND l.country = ${cSub}` : '';
+    const countryFilterCA = isManagement ? `AND p.country = ${cSub}` : '';
+
+    // 1. Overall deposit totals
+    const totalsRes = await query(
+      `SELECT
+        COALESCE(SUM(COALESCE(l.lifetime_value, l.last_deposit_ugx, 0)), 0) AS total_deposited_ugx,
+        COALESCE(SUM(COALESCE(l.attributed_deposit_ugx, 0)), 0)             AS attributed_ugx,
+        COUNT(l.id) FILTER (WHERE l.lifecycle_stage = 'converted')           AS converted_count,
+        COUNT(l.id) FILTER (WHERE COALESCE(l.lifetime_value, l.last_deposit_ugx, 0) > 0) AS depositors_count,
+        COUNT(l.id)                                                          AS total_leads
+       FROM leads l
+       WHERE 1=1 ${countryFilter}`,
+      params
+    );
+
+    // 2. Top 10 depositing phone numbers (ever)
+    const topLeadsRes = await query(
+      `SELECT
+        l.phone,
+        l.name,
+        l.trait,
+        l.lifecycle_stage,
+        COALESCE(l.lifetime_value, l.last_deposit_ugx, 0) AS deposited_ugx,
+        COALESCE(l.attributed_deposit_ugx, 0)             AS attributed_ugx,
+        p.full_name AS assigned_agent
+       FROM leads l
+       LEFT JOIN profiles p ON p.id = l.user_id
+       WHERE COALESCE(l.lifetime_value, l.last_deposit_ugx, 0) > 0
+         ${countryFilter}
+       ORDER BY COALESCE(l.lifetime_value, l.last_deposit_ugx, 0) DESC
+       LIMIT 10`,
+      params
+    );
+
+    // 3. Top agents by total deposited value of their assigned leads
+    const topAgentsRes = await query(
+      `SELECT
+        p.id,
+        p.full_name,
+        p.email,
+        COUNT(l.id)                                                              AS total_leads,
+        COUNT(l.id) FILTER (WHERE l.lifecycle_stage = 'converted')               AS conversions,
+        COALESCE(SUM(COALESCE(l.attributed_deposit_ugx, 0)), 0)                  AS attributed_ugx,
+        COALESCE(SUM(COALESCE(l.lifetime_value, l.last_deposit_ugx, 0)), 0)      AS total_deposited_ugx
+       FROM profiles p
+       JOIN user_roles ur ON ur.user_id = p.id AND ur.role = 'agent'
+       LEFT JOIN leads l ON l.user_id = p.id
+       WHERE 1=1 ${countryFilterCA.replace('l.country', 'p.country').replace('AND p.country', 'AND p.country')}
+       GROUP BY p.id, p.full_name, p.email
+       ORDER BY attributed_ugx DESC
+       LIMIT 10`,
+      params
+    );
+
+    // 4. Monthly trend (last 6 months)
+    const trendRes = await query(
+      `SELECT
+        TO_CHAR(DATE_TRUNC('month', ib.created_at), 'YYYY-MM') AS month,
+        COUNT(DISTINCT ib.id) AS refreshes,
+        COALESCE(SUM(ib.attributed_deposit_ugx), 0) AS attributed_ugx
+       FROM import_batches ib
+       WHERE ib.batch_type = 'performance_refresh'
+         AND ib.created_at >= NOW() - INTERVAL '6 months'
+       GROUP BY DATE_TRUNC('month', ib.created_at)
+       ORDER BY month ASC`,
+      []
+    );
+
+    const totals = totalsRes.rows[0];
+    res.json({
+      totals: {
+        total_deposited_ugx: Number(totals.total_deposited_ugx),
+        attributed_ugx: Number(totals.attributed_ugx),
+        converted_count: Number(totals.converted_count),
+        depositors_count: Number(totals.depositors_count),
+        total_leads: Number(totals.total_leads),
+      },
+      top_leads: topLeadsRes.rows.map(r => ({
+        ...r,
+        deposited_ugx: Number(r.deposited_ugx),
+        attributed_ugx: Number(r.attributed_ugx),
+      })),
+      top_agents: topAgentsRes.rows.map(r => ({
+        ...r,
+        total_leads: Number(r.total_leads),
+        conversions: Number(r.conversions),
+        attributed_ugx: Number(r.attributed_ugx),
+        total_deposited_ugx: Number(r.total_deposited_ugx),
+      })),
+      monthly_trend: trendRes.rows.map(r => ({
+        month: r.month,
+        refreshes: Number(r.refreshes),
+        attributed_ugx: Number(r.attributed_ugx),
+      })),
+    });
+  } catch (err) {
+    console.error('[Reports] deposit-analytics error:', err);
+    res.status(500).json({ error: 'Failed to generate deposit analytics' });
+  }
+});
+
+export default router;

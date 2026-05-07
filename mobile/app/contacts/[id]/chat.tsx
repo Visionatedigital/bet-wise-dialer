@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,17 +17,11 @@ import { useLead } from "../../../src/hooks/useLeads";
 import { api } from "../../../src/api/client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-// Mock messages for UI development
-const MOCK_MESSAGES = [
-  { id: '1', body: "Hi, I'm interested in the bonus.", direction: 'inbound', created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: '2', body: "Sure! Which bonus are you referring to?", direction: 'outbound', created_at: new Date(Date.now() - 3500000).toISOString() },
-  { id: '3', body: "The 100% reload bonus.", direction: 'inbound', created_at: new Date(Date.now() - 3400000).toISOString() },
-];
-
 export default function WhatsAppChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: lead, isLoading: leadLoading } = useLead(id);
   const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<any[]>([]);
   const [whisperVisible, setWhisperVisible] = useState(true);
   const [whisper, setWhisper] = useState<any>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -39,6 +33,7 @@ export default function WhatsAppChatScreen() {
 
   useEffect(() => {
     if (id) fetchWhisper.mutate();
+    // In a real app we would also fetch historical messages here.
   }, [id]);
 
   if (leadLoading) {
@@ -49,10 +44,30 @@ export default function WhatsAppChatScreen() {
     );
   }
 
-  const sendMessage = () => {
-    if (!message.trim()) return;
-    // TODO: Implement actual send flow
+  const sendMessage = async () => {
+    const textToSend = message.trim();
+    if (!textToSend) return;
+    
+    // Add to UI immediately
+    const newMessage = {
+      id: Date.now().toString(),
+      body: textToSend,
+      direction: 'outbound',
+      created_at: new Date().toISOString()
+    };
+    setMessages(prev => [...prev, newMessage]);
     setMessage("");
+
+    try {
+      await api.post('/whatsapp/send', {
+        contact_id: id,
+        phone: lead.phone,
+        body: textToSend
+      });
+    } catch (error) {
+      console.error("Failed to send WhatsApp message", error);
+      // Ideally show a failure state for this message
+    }
   };
 
   const renderMessage = ({ item }: any) => {
@@ -116,7 +131,7 @@ export default function WhatsAppChatScreen() {
 
       <FlatList
         ref={flatListRef}
-        data={MOCK_MESSAGES}
+        data={messages}
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.chatContent}

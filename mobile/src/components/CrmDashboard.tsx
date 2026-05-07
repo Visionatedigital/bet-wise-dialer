@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Linking } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Linking, Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../api/client";
 import { colors } from "../theme/colors";
 
 export function CrmDashboard() {
   const { user } = useAuth();
+  const router = useRouter();
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,81 +39,105 @@ export function CrmDashboard() {
     fetchLeads();
   }, [user]);
 
-  const openWhatsApp = (phone: string, name: string, segment: string) => {
-    const cleanPhone = phone.replace(/\D/g, "");
-    const msg = segment === 'vip' 
-      ? `Hi ${name.split(' ')[0]}, this is your VIP Manager from Bangbet. We have exclusive odds for you this weekend!` 
-      : `Hi ${name.split(' ')[0]}, checking in from Bangbet! How has your betting experience been lately?`;
-    Linking.openURL(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`);
+  const openWhatsApp = (id: string) => {
+    router.push(`/contacts/${id}/chat`);
   };
 
   const openPhone = (phone: string) => {
-    Linking.openURL(`tel:${phone}`);
+    const cleanPhone = phone.replace(/\s+/g, '');
+    const ph = cleanPhone.startsWith("+") ? cleanPhone : `+${cleanPhone}`;
+    Linking.openURL(`tel:${ph}`);
   };
 
   return (
     <ScrollView
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLeads} tintColor={colors.brand.green} />}
+      style={[styles.container, { backgroundColor: "#fffef0" }]} // Ultra light company yellow
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLeads} tintColor="#22c55e" />}
     >
-      <Text style={styles.sectionTitle}>Smart CRM Insights</Text>
+      <View style={{ marginTop: 20 }} />
       
       <View style={styles.statsRow}>
-        <View style={[styles.statCard, { borderLeftColor: colors.brand.green, borderLeftWidth: 4 }]}>
-          <Text style={styles.statValue}>{leads.length}</Text>
-          <Text style={styles.statLabel}>Total Clients</Text>
+        <View style={[styles.statCard, { backgroundColor: "#166534" }]}>
+          <View style={styles.statIconBox}>
+            <Feather name="users" size={16} color="#ffffff" />
+          </View>
+          <Text style={[styles.statValue, { color: "#ffffff" }]}>{leads.length}</Text>
+          <Text style={[styles.statLabel, { color: "rgba(255,255,255,0.6)" }]}>Clients</Text>
         </View>
-        <View style={[styles.statCard, { borderLeftColor: "#f59e0b", borderLeftWidth: 4 }]}>
-          <Text style={styles.statValue}>{leads.filter(l => l.segment === 'vip').length}</Text>
-          <Text style={styles.statLabel}>VIPs</Text>
+        <View style={[styles.statCard, { backgroundColor: "#FFE600" }]}>
+          <View style={[styles.statIconBox, { backgroundColor: "rgba(0,0,0,0.1)" }]}>
+            <Feather name="star" size={16} color="#333" />
+          </View>
+          <Text style={[styles.statValue, { color: "#333" }]}>{leads.filter(l => l.segment === 'vip').length}</Text>
+          <Text style={[styles.statLabel, { color: "rgba(0,0,0,0.5)" }]}>VIP Tier</Text>
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>Client List</Text>
+      <View style={styles.listHeader}>
+        <Text style={styles.sectionTitle}>Prioritized Portfolio</Text>
+        <TouchableOpacity onPress={fetchLeads} style={styles.refreshBtn}>
+          <Feather name="refresh-cw" size={12} color="#22c55e" />
+          <Text style={[styles.refreshText, { color: "#22c55e" }]}>Sync</Text>
+        </TouchableOpacity>
+      </View>
 
       {leads.length === 0 && !loading ? (
         <View style={styles.emptyBox}>
-          <Feather name="users" size={24} color={colors.text.muted} />
-          <Text style={styles.emptyText}>No clients assigned to you yet.</Text>
+          <View style={styles.emptyIconCircle}>
+            <Feather name="user-plus" size={32} color="#d6d3d1" />
+          </View>
+          <Text style={styles.emptyTitle}>No clients found</Text>
+          <Text style={styles.emptyText}>Import high-value leads to start managing relationships.</Text>
         </View>
       ) : (
         leads.map((lead) => (
-          <View key={lead.id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View>
-                <Text style={styles.leadName}>{lead.name}</Text>
-                <Text style={styles.leadPhone}>{lead.phone}</Text>
-              </View>
-              {lead.segment === 'vip' && (
-                <View style={styles.vipBadge}>
-                  <Feather name="star" size={10} color="#b45309" />
-                  <Text style={styles.vipText}>VIP</Text>
-                </View>
-              )}
-            </View>
-            
-            <View style={styles.insightBox}>
-              <Feather name="cpu" size={14} color={colors.brand.green} />
-              <Text style={styles.insightText}>
-                {lead.segment === 'vip' 
-                  ? "High-value client. Recommend a courtesy call to build relationship." 
-                  : lead.segment === 'dormant' 
-                  ? "Client is dormant. Send a WhatsApp re-engagement message." 
-                  : "Active client. Follow up on recent betting activity."}
-              </Text>
+          <TouchableOpacity 
+            key={lead.id} 
+            style={styles.compactCard}
+            onPress={() => router.push(`/crm-lead/${lead.id}`)}
+          >
+            {/* Round Avatar with Status Indicator */}
+            <View style={styles.avatarWrapper}>
+              <Image 
+                source={{ uri: `https://picsum.photos/seed/${lead.phone}/100` }} 
+                style={styles.avatar} 
+              />
+              <View style={[styles.statusIndicator, { backgroundColor: lead.segment === 'vip' ? "#FFE600" : "#22c55e" }]} />
             </View>
 
-            <View style={styles.actionsRow}>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => openPhone(lead.phone)}>
-                <Feather name="phone" size={14} color={colors.text.primary} />
-                <Text style={styles.actionText}>Call</Text>
+            {/* Lead Content */}
+            <View style={styles.leadInfo}>
+              <View style={styles.nameRow}>
+                <Text style={styles.leadName} numberOfLines={1}>{lead.name}</Text>
+                {lead.segment === 'vip' && (
+                  <View style={styles.vipMiniTag}>
+                    <Text style={styles.vipMiniTagText}>VIP</Text>
+                  </View>
+                )}
+              </View>
+              
+              <Text style={styles.activityLabel}>
+                Last seen: <Text style={{ fontWeight: '700' }}>{lead.lastActivity || 'Yesterday'}</Text>
+              </Text>
+
+              <View style={styles.aiRecommendation}>
+                <Feather name="zap" size={10} color="#166534" style={{ marginTop: 2 }} />
+                <Text style={styles.aiRecommendationText}>
+                  {lead.segment === 'vip' ? "Exclusive VIP courtesy call recommended" : "Re-engage via personalized WhatsApp bonus"}
+                </Text>
+              </View>
+            </View>
+
+            {/* Quick Actions */}
+            <View style={styles.quickActions}>
+              <TouchableOpacity onPress={() => openWhatsApp(lead.id)} style={styles.actionIcon}>
+                <Feather name="message-circle" size={18} color="#22c55e" />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.waBtn]} onPress={() => openWhatsApp(lead.phone, lead.name, lead.segment)}>
-                <Feather name="message-circle" size={14} color="#fff" />
-                <Text style={[styles.actionText, { color: "#fff" }]}>WhatsApp</Text>
+              <TouchableOpacity onPress={() => openPhone(lead.phone)} style={[styles.actionIcon, { marginTop: 10 }]}>
+                <Feather name="phone" size={18} color="#475569" />
               </TouchableOpacity>
             </View>
-          </View>
+          </TouchableOpacity>
         ))
       )}
       <View style={{ height: 40 }} />
@@ -120,24 +146,118 @@ export function CrmDashboard() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg.dashboard },
-  sectionTitle: { fontSize: 13, fontWeight: "700", color: colors.text.secondary, textTransform: "uppercase", letterSpacing: 0.5, marginHorizontal: 20, marginTop: 20, marginBottom: 10 },
+  container: { flex: 1 },
   statsRow: { flexDirection: "row", gap: 12, marginHorizontal: 20 },
-  statCard: { flex: 1, backgroundColor: colors.bg.card, borderRadius: 8, padding: 16, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
-  statValue: { fontSize: 24, fontWeight: "700", color: colors.text.primary },
-  statLabel: { fontSize: 11, color: colors.text.muted, fontWeight: "600", textTransform: "uppercase", marginTop: 4 },
-  emptyBox: { backgroundColor: colors.bg.card, marginHorizontal: 20, borderRadius: 8, padding: 30, alignItems: "center", borderWidth: 1, borderColor: colors.border.default },
-  emptyText: { fontSize: 14, color: colors.text.secondary, marginTop: 10 },
-  card: { backgroundColor: colors.bg.card, marginHorizontal: 20, marginBottom: 12, borderRadius: 10, padding: 16, borderWidth: 1, borderColor: colors.border.default },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
-  leadName: { fontSize: 16, fontWeight: "700", color: colors.text.primary },
-  leadPhone: { fontSize: 13, color: colors.text.secondary, marginTop: 2 },
-  vipBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#fef3c7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  vipText: { fontSize: 10, fontWeight: "700", color: "#b45309" },
-  insightBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#f0fdf4", padding: 10, borderRadius: 8, marginBottom: 16 },
-  insightText: { flex: 1, fontSize: 12, color: "#166534", lineHeight: 18 },
-  actionsRow: { flexDirection: "row", gap: 10 },
-  actionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: "#f1f5f9" },
-  waBtn: { backgroundColor: "#25D366" },
-  actionText: { fontSize: 13, fontWeight: "600", color: colors.text.primary },
+  statCard: { flex: 1, borderRadius: 24, padding: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  statIconBox: { width: 32, height: 32, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  statValue: { fontSize: 24, fontWeight: "900" },
+  statLabel: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1 },
+  listHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 20, marginTop: 25, marginBottom: 12 },
+  refreshBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  refreshText: { fontSize: 12, fontWeight: "700", color: "#22c55e" },
+  sectionTitle: { fontSize: 14, fontWeight: "800", color: "#1e293b", textTransform: "uppercase", letterSpacing: 1 },
+  emptyBox: { backgroundColor: "#fff", marginHorizontal: 20, borderRadius: 30, padding: 40, alignItems: "center", borderStyle: "dashed", borderWidth: 2, borderColor: "#cbd5e1" },
+  emptyIconCircle: { width: 70, height: 70, borderRadius: 35, backgroundColor: "#f8fafc", alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  emptyTitle: { fontSize: 18, fontWeight: "800", color: "#334155", marginBottom: 4 },
+  emptyText: { fontSize: 13, color: "#64748b", textAlign: "center", lineHeight: 20 },
+  
+  // Compact Card Styles
+  compactCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginVertical: 6,
+    padding: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  avatarWrapper: {
+    position: 'relative',
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#f1f5f9',
+  },
+  statusIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  leadInfo: {
+    flex: 1,
+    marginLeft: 14,
+    justifyContent: 'center',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  leadName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginRight: 6,
+  },
+  vipMiniTag: {
+    backgroundColor: '#FFE600',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  vipMiniTagText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#000',
+  },
+  activityLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  aiRecommendation: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  aiRecommendationText: {
+    flex: 1,
+    fontSize: 10,
+    color: '#166534',
+    fontWeight: '600',
+    lineHeight: 14,
+  },
+  quickActions: {
+    marginLeft: 10,
+    alignItems: 'center',
+  },
+  actionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
 });

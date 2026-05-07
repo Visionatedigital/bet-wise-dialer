@@ -1,16 +1,5 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  RefreshControl,
-  Linking,
-  Platform,
-} from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl, Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { colors } from "../../src/theme/colors";
@@ -41,71 +30,34 @@ export default function ContactsScreen() {
 
   const renderContactItem = ({ item }: { item: Lead }) => (
     <TouchableOpacity
-      style={styles.contactCard}
-      onPress={() => router.push(`/contacts/${item.id}`)}
+      style={styles.contactItem}
+      onPress={() => router.push(`/crm-lead/${item.id}`)}
     >
-      <View style={styles.cardHeader}>
-        <View style={styles.nameContainer}>
-          <Text style={styles.contactName}>{item.name}</Text>
-          <Text style={styles.contactPhone}>{item.phone}</Text>
-        </View>
-        <View style={styles.tagsRow}>
-          {item.vip_level && (
-            <View style={[styles.tag, { backgroundColor: colors.brand.yellow }]}>
-              <Text style={styles.tagText}>{item.vip_level}</Text>
-            </View>
-          )}
-          {item.risk_status && (
-            <View style={[styles.tag, { backgroundColor: item.risk_status === 'At Risk' ? colors.status.error : colors.status.warning }]}>
-              <Text style={[styles.tagText, { color: '#fff' }]}>{item.risk_status}</Text>
-            </View>
-          )}
-        </View>
+      <View style={styles.avatarWrapper}>
+        <Image 
+          source={{ uri: `https://picsum.photos/seed/${item.phone}/100` }} 
+          style={styles.avatar} 
+        />
+        <View style={[styles.statusDot, { backgroundColor: item.vip_level === 'VIP' || item.segment === 'vip' ? "#FFE600" : "#22c55e" }]} />
       </View>
 
-      <View style={styles.cardBody}>
-        <View style={styles.infoGrid}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Last Login</Text>
-            <Text style={styles.infoValue}>
-              {item.last_login_at ? new Date(item.last_login_at).toLocaleDateString() : 'Never'}
-            </Text>
-          </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Last Deposit</Text>
-            <Text style={styles.infoValue}>
-              {item.last_deposit_ugx ? `UGX ${item.last_deposit_ugx.toLocaleString()}` : '—'}
-            </Text>
-          </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Product</Text>
-            <Text style={styles.infoValue}>{item.favourite_game || item.preferred_product || 'General'}</Text>
-          </View>
+      <View style={styles.contactInfo}>
+        <View style={styles.nameRow}>
+          <Text style={styles.contactName} numberOfLines={1}>{item.name}</Text>
+          {(item.vip_level === 'VIP' || item.segment === 'vip') && (
+            <View style={styles.vipMiniBadge}>
+              <Text style={styles.vipMiniBadgeText}>VIP</Text>
+            </View>
+          )}
         </View>
-
-        {item.next_action && (
-          <View style={styles.nextActionContainer}>
-            <Feather name="arrow-right-circle" size={14} color={colors.brand.green} />
-            <Text style={styles.nextActionText}>Next: {item.next_action}</Text>
-          </View>
-        )}
+        <Text style={styles.contactPhone}>{item.phone}</Text>
       </View>
 
-      <View style={styles.cardActions}>
-        <TouchableOpacity 
-          style={[styles.actionBtn, { backgroundColor: colors.brand.green }]}
-          onPress={() => Linking.openURL(`tel:${item.phone}`)}
-        >
-          <Feather name="phone" size={16} color="#fff" />
-          <Text style={styles.actionBtnText}>Call</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.actionBtn, { backgroundColor: '#25D366' }]}
-          onPress={() => router.push(`/contacts/${item.id}?tab=whatsapp`)}
-        >
-          <Feather name="message-circle" size={16} color="#fff" />
-          <Text style={styles.actionBtnText}>WhatsApp</Text>
-        </TouchableOpacity>
+      <View style={styles.metaInfo}>
+        <Text style={styles.lastActiveText}>
+          {item.last_login_at ? new Date(item.last_login_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Never'}
+        </Text>
+        <Feather name="chevron-right" size={16} color="#cbd5e1" />
       </View>
     </TouchableOpacity>
   );
@@ -178,74 +130,111 @@ export default function ContactsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg.dashboard },
-  header: { padding: 16, backgroundColor: colors.bg.card },
+  container: { flex: 1, backgroundColor: "#fffef0" },
+  header: { padding: 20, backgroundColor: "#064e3b" },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.bg.dashboard,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    height: 48,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
   },
-  searchInput: { flex: 1, marginLeft: 10, fontSize: 16, color: colors.text.primary },
-  filterTabs: { backgroundColor: colors.bg.card, borderBottomWidth: 1, borderBottomColor: colors.border.default },
-  filterScroll: { paddingHorizontal: 12, paddingBottom: 12 },
+  searchInput: { flex: 1, marginLeft: 12, fontSize: 15, color: "#fff", fontWeight: "500" },
+  filterTabs: { backgroundColor: "#064e3b", paddingBottom: 16 },
+  filterScroll: { paddingHorizontal: 16 },
   filterTab: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: colors.bg.dashboard,
-    marginRight: 8,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
-  activeFilterTab: { backgroundColor: colors.brand.dark },
-  filterLabel: { fontSize: 13, fontWeight: "600", color: colors.text.secondary },
-  activeFilterLabel: { color: colors.brand.yellow },
+  activeFilterTab: { backgroundColor: "#FFE600", borderColor: "#FFE600" },
+  filterLabel: { fontSize: 13, fontWeight: "700", color: "rgba(255,255,255,0.6)" },
+  activeFilterLabel: { color: "#000" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  listContent: { padding: 16 },
-  contactCard: {
-    backgroundColor: colors.bg.card,
-    borderRadius: 16,
-    marginBottom: 16,
-    padding: 16,
-    ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
-      android: { elevation: 3 },
-    }),
+  listContent: { paddingVertical: 10 },
+  contactItem: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginVertical: 4,
+    padding: 14,
+    borderRadius: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
-  nameContainer: { flex: 1 },
-  contactName: { fontSize: 17, fontWeight: "700", color: colors.text.primary },
-  contactPhone: { fontSize: 14, color: colors.text.secondary, marginTop: 2 },
-  tagsRow: { flexDirection: "row", gap: 6, alignItems: "flex-start" },
-  tag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  tagText: { fontSize: 10, fontWeight: "800", color: colors.brand.dark },
-  cardBody: { borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12, paddingBottom: 12 },
-  infoGrid: { flexDirection: "row", justifyContent: "space-between" },
-  infoItem: { flex: 1 },
-  infoLabel: { fontSize: 11, color: colors.text.secondary, marginBottom: 4 },
-  infoValue: { fontSize: 13, fontWeight: "600", color: colors.text.primary },
-  nextActionContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 12,
-    backgroundColor: "rgba(0,166,81,0.05)",
-    padding: 8,
-    borderRadius: 8,
+  avatarWrapper: {
+    position: 'relative',
   },
-  nextActionText: { fontSize: 12, fontWeight: "600", color: colors.brand.green },
-  cardActions: { flexDirection: "row", gap: 12 },
-  actionBtn: {
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#f1f5f9',
+  },
+  statusDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  contactInfo: {
     flex: 1,
-    flexDirection: "row",
-    height: 40,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    marginLeft: 14,
   },
-  actionBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  contactName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  vipMiniBadge: {
+    backgroundColor: '#FFE600',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  vipMiniBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#000',
+  },
+  contactPhone: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  metaInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  lastActiveText: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '600',
+  },
   emptyState: { alignItems: "center", justifyContent: "center", paddingTop: 100 },
-  emptyText: { marginTop: 12, fontSize: 16, color: colors.text.secondary, fontWeight: "500" },
+  emptyText: { marginTop: 12, fontSize: 14, color: "#64748b", fontWeight: "600" },
 });

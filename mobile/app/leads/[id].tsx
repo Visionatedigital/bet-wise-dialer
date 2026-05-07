@@ -58,7 +58,8 @@ export default function LeadDetailScreen() {
   const handleCall = () => {
     if (!lead) return;
     callPending.current = true;
-    const phoneNumber = lead.phone.startsWith("+") ? lead.phone : `+${lead.phone}`;
+    const cleanPhone = lead.phone.replace(/\s+/g, '');
+    const phoneNumber = cleanPhone.startsWith("+") ? cleanPhone : `+${cleanPhone}`;
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
