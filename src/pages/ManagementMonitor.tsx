@@ -62,7 +62,8 @@ export default function ManagementMonitor() {
           .from('leads')
           .select('user_id, assigned_at')
           .not('user_id', 'is', null)
-          .not('assigned_at', 'is', null);
+          .not('assigned_at', 'is', null)
+          .range(0, 9999); // Bypass default 500-row PostgREST cap
         
         const { data: leadsData, error: leadsError } = await (timePeriod === 'all'
           ? leadsQuery
@@ -82,7 +83,8 @@ export default function ManagementMonitor() {
         const callsQuery = supabase
           .from('call_activities')
           .select('user_id, start_time')
-          .not('start_time', 'is', null);
+          .not('start_time', 'is', null)
+          .range(0, 9999); // Bypass default 500-row PostgREST cap
         
         const { data: callsData, error: callsError } = await (timePeriod === 'all'
           ? callsQuery

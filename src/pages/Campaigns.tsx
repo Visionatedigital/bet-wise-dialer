@@ -309,18 +309,19 @@ const Layout = (isAdmin || isManagement) ? ManagementLayout : DashboardLayout;
                                       </div>
                                     </CardContent>
                                   </Card>
-                                  <Card className="border-amber-500/10">
+                                  <Card className="border-dashed border-amber-500/50 bg-amber-500/5">
                                     <CardContent className="p-4">
                                       <div className="flex items-center gap-2 mb-3">
                                         <div className="p-1.5 rounded-md bg-amber-500/10">
                                           <DollarSign className="h-4 w-4 text-amber-600" />
                                         </div>
-                                        <span className="text-sm font-medium">Revenue</span>
+                                        <span className="text-sm font-medium text-amber-700">Reported Intent</span>
+                                        <Badge variant="outline" className="text-[10px] uppercase tracking-wider text-amber-600 border-amber-500/30">Unverified</Badge>
                                       </div>
-                                      <div className="text-2xl font-bold mb-1">
+                                      <div className="text-2xl font-bold mb-1 text-amber-700">
                                         {formatUGX(Number(selectedCampaign?.total_deposits) || 0)}
                                       </div>
-                                      <div className="text-xs text-muted-foreground">
+                                      <div className="text-xs text-amber-600/70">
                                         Total deposits
                                       </div>
                                     </CardContent>

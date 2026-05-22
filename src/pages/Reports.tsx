@@ -428,13 +428,16 @@ export default function Reports() {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="border-dashed border-amber-500/50 bg-amber-500/5">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <DollarSign className="h-4 w-4 text-amber-500" />
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-amber-600" />
+                        <Badge variant="outline" className="text-[10px] uppercase tracking-wider text-amber-600 border-amber-500/30">Unverified</Badge>
+                      </div>
                     </div>
-                    <div className="text-2xl font-bold">{formatUGX(metrics.totalRevenue)}</div>
-                    <div className="text-xs text-muted-foreground">Revenue Generated</div>
+                    <div className="text-2xl font-bold text-amber-700">{formatUGX(metrics.reportedRevenue)}</div>
+                    <div className="text-xs text-amber-600/70">Reported Intent</div>
                   </CardContent>
                 </Card>
               </div>
@@ -506,8 +509,8 @@ export default function Reports() {
                                 <div className="font-medium">{campaign.total_calls}</div>
                               </div>
                               <div>
-                                <div className="text-muted-foreground">Revenue</div>
-                                <div className="font-medium">{formatUGX(Number(campaign.total_deposits))}</div>
+                                <div className="text-amber-600/70 flex items-center gap-1">Reported <Badge variant="outline" className="text-[8px] h-3 px-1 border-amber-500/30">UNVERIFIED</Badge></div>
+                                <div className="font-medium text-amber-700">{formatUGX(Number(campaign.total_deposits))}</div>
                               </div>
                             </div>
                           </div>
@@ -916,8 +919,8 @@ export default function Reports() {
                               <div className="text-xs text-muted-foreground">Avg Handle</div>
                               <div className="font-bold">{formatHandleTime(agent.avgHandleTime)}</div>
                             </div>
-                            <div>
-                              <div className="text-xs text-muted-foreground">Revenue</div>
+                            <div className="text-amber-700">
+                              <div className="text-xs text-amber-600/70 flex items-center gap-1">Reported <Badge variant="outline" className="text-[8px] h-3 px-1 border-amber-500/30">UNVERIFIED</Badge></div>
                               <div className="font-bold">{formatUGX(agent.revenue)}</div>
                             </div>
                           </div>
@@ -985,8 +988,8 @@ export default function Reports() {
                                   <div className="text-muted-foreground text-xs mb-1">Avg Handle</div>
                                   <div className="font-semibold">{formatHandleTime(agent.avgHandleTime)}</div>
                                 </div>
-                                <div className="text-center">
-                                  <div className="text-muted-foreground text-xs mb-1">Revenue</div>
+                                <div className="text-center text-amber-700">
+                                  <div className="text-amber-600/70 text-xs mb-1 flex items-center gap-1">Reported <Badge variant="outline" className="text-[8px] h-3 px-1 border-amber-500/30">UNVERIFIED</Badge></div>
                                   <div className="font-semibold">{formatUGX(agent.revenue)}</div>
                                 </div>
                               </div>

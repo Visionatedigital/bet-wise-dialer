@@ -15,7 +15,8 @@ interface PerformanceMetrics {
   totalCalls: number;
   connects: number;
   conversions: number;
-  totalRevenue: number;
+  totalRevenue: number; // Official verified revenue (0 for now)
+  reportedRevenue: number; // Unverified agent-reported estimates
   connectRate: number;
   conversionRate: number;
 }
@@ -35,6 +36,7 @@ export function usePerformanceData(dateRange: string, campaignId?: string, force
     connects: 0,
     conversions: 0,
     totalRevenue: 0,
+    reportedRevenue: 0,
     connectRate: 0,
     conversionRate: 0,
   });
@@ -164,13 +166,15 @@ export function usePerformanceData(dateRange: string, campaignId?: string, force
         const totalCalls = deduplicatedAllCalls.length;
         const connects = deduplicatedAllCalls.filter(call => call.status === "converted" || (call.status === "connected" && Number(call.duration_seconds) > 0)).length;
         const conversions = callsData.filter(call => call.status === "converted").length;
-        const totalRevenue = callsData.reduce((sum, call) => sum + (Number(call.deposit_amount) || 0), 0);
+        const totalRevenue = 0; // Official verified revenue
+        const reportedRevenue = callsData.reduce((sum, call) => sum + (Number(call.deposit_amount) || 0), 0);
 
         setMetrics({
           totalCalls,
           connects,
           conversions,
           totalRevenue,
+          reportedRevenue,
           connectRate: totalCalls > 0 ? (connects / totalCalls) * 100 : 0,
           conversionRate: connects > 0 ? (conversions / connects) * 100 : 0,
         });

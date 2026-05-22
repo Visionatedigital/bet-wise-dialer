@@ -168,10 +168,10 @@ export default function ManagementCampaigns() {
     const active = campaigns.filter(c => c.status === 'active').length;
     const totalCalls = campaigns.reduce((sum, c) => sum + c.total_calls, 0);
     const totalConversions = campaigns.reduce((sum, c) => sum + c.total_conversions, 0);
-    const totalRevenue = campaigns.reduce((sum, c) => sum + Number(c.total_deposits), 0);
+    const reportedRevenue = campaigns.reduce((sum, c) => sum + Number(c.total_deposits), 0);
     const conversionRate = totalCalls > 0 ? Math.round((totalConversions / totalCalls) * 100) : 0;
 
-    return { active, totalCalls, totalConversions, totalRevenue, conversionRate };
+    return { active, totalCalls, totalConversions, reportedRevenue, conversionRate };
   };
 
   const stats = calculateStats();
@@ -248,14 +248,15 @@ export default function ManagementCampaigns() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-dashed border-amber-500/50 bg-amber-500/5">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="h-4 w-4 text-amber-600" />
-                <span className="text-sm text-muted-foreground">Revenue</span>
+                <span className="text-sm text-amber-700">Reported Intent</span>
+                <Badge variant="outline" className="text-[10px] uppercase tracking-wider text-amber-600 border-amber-500/30">Unverified</Badge>
               </div>
-              <div className="text-2xl font-bold">{formatUGX(stats.totalRevenue)}</div>
-              <div className="text-xs text-muted-foreground">total deposits</div>
+              <div className="text-2xl font-bold text-amber-700">{formatUGX(stats.reportedRevenue)}</div>
+              <div className="text-xs text-amber-600/70">total deposits</div>
             </CardContent>
           </Card>
 
@@ -292,7 +293,10 @@ export default function ManagementCampaigns() {
                     <TableHead className="text-right">Leads</TableHead>
                     <TableHead className="text-right">Calls</TableHead>
                     <TableHead className="text-right">Conversions</TableHead>
-                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="text-right text-amber-600">
+                      Reported Intent
+                      <div className="text-[9px] uppercase tracking-wider text-amber-500/80">Unverified</div>
+                    </TableHead>
                     <TableHead className="text-right">Conv Rate</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -330,7 +334,7 @@ export default function ManagementCampaigns() {
                         <TableCell className="text-right">
                           {campaign.total_conversions.toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right font-medium text-amber-600">
                           {formatUGX(Number(campaign.total_deposits))}
                         </TableCell>
                         <TableCell className="text-right">

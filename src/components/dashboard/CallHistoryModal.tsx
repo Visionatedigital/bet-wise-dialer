@@ -145,8 +145,11 @@ export function CallHistoryModal({ open, onOpenChange }: CallHistoryModalProps) 
 
                     {/* Deposit Info */}
                     {call.deposit_amount > 0 && (
-                      <div className="text-sm text-success">
-                        Deposit: UGX {call.deposit_amount.toLocaleString()}
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="text-sm font-medium text-amber-700">
+                          Reported Deposit: UGX {call.deposit_amount.toLocaleString()}
+                        </div>
+                        <Badge variant="outline" className="text-[10px] uppercase tracking-wider text-amber-600 border-amber-500/30">Unverified</Badge>
                       </div>
                     )}
                   </div>

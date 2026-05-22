@@ -211,7 +211,7 @@ const ManagementDashboard = () => {
               (c.status === 'connected' && (Number(c.duration_seconds) || 0) > 0);
             return isConnected && (Number(c.duration_seconds) || 0) > 120;
           }).length || 0;
-          const totalDeposits = calls?.reduce((sum, c) => sum + (Number(c.deposit_amount) || 0), 0) || 0;
+          const reportedDeposits = calls?.reduce((sum, c) => sum + (Number(c.deposit_amount) || 0), 0) || 0;
 
           return {
             agentId: profile.id,
@@ -221,7 +221,7 @@ const ManagementDashboard = () => {
             connects,
             qualified,
             conversions,
-            deposits: totalDeposits
+            deposits: reportedDeposits
           };
         })
       );
@@ -339,16 +339,19 @@ const ManagementDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-dashed border-amber-500/50 bg-amber-500/5">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Deposits</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm font-medium">Reported Intent</CardTitle>
+                <Badge variant="outline" className="text-[10px] uppercase tracking-wider text-amber-600 border-amber-500/30">Unverified</Badge>
+              </div>
+              <DollarSign className="h-4 w-4 text-amber-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold text-amber-700">
                 {formatUGX(totals.deposits)}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-amber-600/70">
                 Avg: {formatUGX(totals.conversions > 0 ? totals.deposits / totals.conversions : 0)}
               </p>
             </CardContent>

@@ -106,7 +106,8 @@ serve(async (req) => {
       .from('call_activities')
       .select('*')
       .gte('start_time', startDate.toISOString())
-      .lte('start_time', endDate.toISOString());
+      .lte('start_time', endDate.toISOString())
+      .range(0, 9999); // Bypass default 500-row PostgREST cap
 
     if (callsError) {
       console.error('Error fetching call activities:', callsError);

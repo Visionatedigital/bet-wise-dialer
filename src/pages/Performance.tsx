@@ -1139,17 +1139,20 @@ export default function Performance() {
               <div className="text-xs text-muted-foreground">Conversion Rate</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-dashed border-amber-500/50 bg-amber-500/5">
             <CardContent className="p-4">
-              <DollarSign className="h-4 w-4 text-amber-500 mb-2" />
-              <div className="text-2xl font-bold">
+              <div className="flex items-center gap-2 mb-2">
+                <DollarSign className="h-4 w-4 text-amber-600" />
+                <Badge variant="outline" className="text-[10px] uppercase tracking-wider text-amber-600 border-amber-500/30">Unverified</Badge>
+              </div>
+              <div className="text-2xl font-bold text-amber-700">
                 {formatUGX(
                   selectedAgent !== 'all' && agentPerformance 
                     ? agentPerformance.revenue 
                     : teamMetrics.totalRevenue
                 )}
               </div>
-              <div className="text-xs text-muted-foreground">Revenue</div>
+              <div className="text-xs text-amber-600/70">Reported Intent</div>
             </CardContent>
           </Card>
         </div>
