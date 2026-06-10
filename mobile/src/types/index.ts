@@ -53,6 +53,7 @@ export interface Lead {
   preferred_contact_time?: string | null;
   created_at?: string;
   updated_at?: string;
+  country?: string | null;
 }
 
 export interface CallActivity {

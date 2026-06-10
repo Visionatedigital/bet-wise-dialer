@@ -46,7 +46,7 @@ export function ImportLeadsModal({ open, onOpenChange, onImportComplete }: Impor
   };
 
   const formatPhoneNumber = (phone: string): string => {
-    const country = detectCountryFromPhone(phone);
+    const country = detectCountryFromPhone(phone, user?.country || 'UG');
     return formatPhoneForCountry(phone, country);
   };
 

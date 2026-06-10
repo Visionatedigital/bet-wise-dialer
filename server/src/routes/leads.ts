@@ -372,11 +372,12 @@ router.post('/import-csv', requireAdminOrCrm as any, async (req: AuthRequest, re
       const insertParams: any[] = [];
       let p = 1;
       for (const lead of batch) {
-        let country = detectCountry(lead.phone);
+        let country = detectCountry(lead.phone, userCountry || 'UG');
         const isCrm = req.user!.role === 'crm';
+        const isCrmOrManager = isCrm || req.user!.role === 'management';
         
-        // CRM agents are strictly bound to their country
-        if (isCrm && userCountry) {
+        // CRM agents and managers are strictly bound to their country
+        if (isCrmOrManager && userCountry) {
           country = userCountry;
         }
 

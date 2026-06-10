@@ -18,6 +18,7 @@ import monitorRoutes from './routes/monitor';
 import aiRoutes from './routes/ai';
 import reportsRoutes from './routes/reports';
 import crmRoutes from './routes/crm';
+import crmActivitiesRoutes from './routes/crmActivities';
 import whatsappRoutes from './routes/whatsapp';
 import { startNotificationWorker } from './services/notificationWorker';
 
@@ -49,6 +50,7 @@ app.use('/api/monitor', monitorRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/crm', crmRoutes);
+app.use('/api/crm/activities', crmActivitiesRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 
 // Socket.io for Realtime data

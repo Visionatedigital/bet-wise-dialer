@@ -2,15 +2,23 @@
 
 import { COUNTRY_MAP } from '@/config/countries';
 
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  UGX: 'UGX',
+  GHS: 'GH¢',
+  NGN: '₦',
+  TZS: 'TZS',
+  KES: 'KSh',
+};
+
 // Format an amount in the currency for the given country code (e.g. 'UG', 'NG')
 export const formatCurrency = (amount: number, countryCode: string): string => {
   const currency = COUNTRY_MAP[countryCode]?.currency ?? 'UGX';
-  return new Intl.NumberFormat('en', {
-    style: 'currency',
-    currency,
+  const symbol = CURRENCY_SYMBOLS[currency] || currency;
+  const formatted = new Intl.NumberFormat('en', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
+  return `${symbol} ${formatted}`;
 };
 
 // Format Ugandan Shillings (kept for backwards compat)

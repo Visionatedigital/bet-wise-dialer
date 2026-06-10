@@ -39,8 +39,9 @@ export function CrmDashboard() {
     fetchLeads();
   }, [user]);
 
-  const openWhatsApp = (id: string) => {
-    router.push(`/contacts/${id}/chat`);
+  const openWhatsApp = (phone: string) => {
+    const cleanPhone = phone.replace(/\D/g, "");
+    Linking.openURL(`https://wa.me/${cleanPhone}`);
   };
 
   const openPhone = (phone: string) => {
@@ -49,9 +50,29 @@ export function CrmDashboard() {
     Linking.openURL(`tel:${ph}`);
   };
 
+  const getLeadStatusInfo = (lead: any) => {
+    if (!lead.last_crm_contact_at) {
+      return { color: '#ffffff', emoji: '✨', status: 'New', borderColor: '#f1f5f9' };
+    }
+    
+    if (lead.has_pending_action || lead.segment === 'vip' || lead.lead_score > 80) {
+      return { color: '#fff1f2', emoji: '🔥', status: 'Hot', borderColor: '#fecdd3' }; 
+    }
+    
+    if (lead.status === 'Interested' || lead.status === 'Promised' || (lead.lead_score > 50 && lead.lead_score <= 80)) {
+      return { color: '#fffbeb', emoji: '🌶️', status: 'Warm', borderColor: '#fef3c7' }; 
+    }
+    
+    if (lead.risk_status === 'At Risk' || lead.status === 'Not Interested' || lead.status === 'Wrong Number') {
+      return { color: '#f0f9ff', emoji: '❄️', status: 'Cold', borderColor: '#e0f2fe' }; 
+    }
+    
+    return { color: '#ffffff', emoji: '💬', status: 'Contacted', borderColor: '#f1f5f9' };
+  };
+
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: "#fffef0" }]} // Ultra light company yellow
+      style={[styles.container, { backgroundColor: "#ffffff" }]} 
       refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLeads} tintColor="#22c55e" />}
     >
       <View style={{ marginTop: 20 }} />
@@ -73,6 +94,41 @@ export function CrmDashboard() {
         </View>
       </View>
 
+      {/* Needs Attention Section */}
+      {leads.filter(l => l.has_pending_action).length > 0 && (
+        <View style={styles.attentionSection}>
+          <View style={styles.listHeader}>
+            <Text style={styles.sectionTitle}>Needs Attention</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{leads.filter(l => l.has_pending_action).length}</Text>
+            </View>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+            {leads.filter(l => l.has_pending_action).map((lead) => (
+              <TouchableOpacity 
+                key={lead.id} 
+                style={styles.attentionCard}
+                onPress={() => router.push(`/crm-lead/${lead.id}`)}
+              >
+                <View style={styles.attentionHeader}>
+                  <View style={[styles.avatar, { width: 40, height: 40, borderRadius: 20 }]}>
+                    <Feather name="user" size={18} color="#94a3b8" />
+                  </View>
+                  <View style={styles.priorityBadge}>
+                    <Text style={styles.priorityText}>High</Text>
+                  </View>
+                </View>
+                <Text style={styles.attentionName} numberOfLines={1}>{lead.name}</Text>
+                <Text style={styles.attentionAction}>{lead.pending_action_type === 'whatsapp_reply' ? 'Awaiting Reply' : 'Follow-up Due'}</Text>
+                <TouchableOpacity style={styles.attentionLogBtn} onPress={() => router.push(`/crm-lead/${lead.id}`)}>
+                  <Text style={styles.attentionLogBtnText}>Log Now</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       <View style={styles.listHeader}>
         <Text style={styles.sectionTitle}>Prioritized Portfolio</Text>
         <TouchableOpacity onPress={fetchLeads} style={styles.refreshBtn}>
@@ -90,55 +146,56 @@ export function CrmDashboard() {
           <Text style={styles.emptyText}>Import high-value leads to start managing relationships.</Text>
         </View>
       ) : (
-        leads.map((lead) => (
-          <TouchableOpacity 
-            key={lead.id} 
-            style={styles.compactCard}
-            onPress={() => router.push(`/crm-lead/${lead.id}`)}
-          >
-            {/* Round Avatar with Status Indicator */}
-            <View style={styles.avatarWrapper}>
-              <Image 
-                source={{ uri: `https://picsum.photos/seed/${lead.phone}/100` }} 
-                style={styles.avatar} 
-              />
-              <View style={[styles.statusIndicator, { backgroundColor: lead.segment === 'vip' ? "#FFE600" : "#22c55e" }]} />
-            </View>
-
-            {/* Lead Content */}
-            <View style={styles.leadInfo}>
-              <View style={styles.nameRow}>
-                <Text style={styles.leadName} numberOfLines={1}>{lead.name}</Text>
-                {lead.segment === 'vip' && (
-                  <View style={styles.vipMiniTag}>
-                    <Text style={styles.vipMiniTagText}>VIP</Text>
-                  </View>
-                )}
-              </View>
+        leads.map((lead) => {
+          const statusInfo = getLeadStatusInfo(lead);
+          return (
+            <TouchableOpacity 
+              key={lead.id} 
+              style={[styles.compactCard, { backgroundColor: statusInfo.color, borderColor: statusInfo.borderColor }]}
+              onPress={() => router.push(`/crm-lead/${lead.id}`)}
+            >
+              <Text style={styles.temperatureEmoji}>{statusInfo.emoji}</Text>
               
-              <Text style={styles.activityLabel}>
-                Last seen: <Text style={{ fontWeight: '700' }}>{lead.lastActivity || 'Yesterday'}</Text>
-              </Text>
-
-              <View style={styles.aiRecommendation}>
-                <Feather name="zap" size={10} color="#166534" style={{ marginTop: 2 }} />
-                <Text style={styles.aiRecommendationText}>
-                  {lead.segment === 'vip' ? "Exclusive VIP courtesy call recommended" : "Re-engage via personalized WhatsApp bonus"}
-                </Text>
+              <View style={styles.avatarWrapper}>
+                <View style={[styles.avatar, { backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }]}>
+                  <Feather name="user" size={24} color="#94a3b8" />
+                </View>
+                <View style={[styles.statusIndicator, { backgroundColor: lead.segment === 'vip' ? "#FFE600" : "#22c55e" }]} />
               </View>
-            </View>
 
-            {/* Quick Actions */}
-            <View style={styles.quickActions}>
-              <TouchableOpacity onPress={() => openWhatsApp(lead.id)} style={styles.actionIcon}>
-                <Feather name="message-circle" size={18} color="#22c55e" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => openPhone(lead.phone)} style={[styles.actionIcon, { marginTop: 10 }]}>
-                <Feather name="phone" size={18} color="#475569" />
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        ))
+              <View style={styles.leadInfo}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.leadName} numberOfLines={1}>{lead.name}</Text>
+                  {lead.segment === 'vip' && (
+                    <View style={styles.vipMiniTag}>
+                      <Text style={styles.vipMiniTagText}>VIP</Text>
+                    </View>
+                  )}
+                </View>
+                
+                <Text style={styles.activityLabel}>
+                  Last seen: <Text style={{ fontWeight: '700' }}>{lead.lastActivity || 'Yesterday'}</Text>
+                </Text>
+
+                <View style={styles.aiRecommendation}>
+                  <Feather name="zap" size={10} color="#166534" style={{ marginTop: 2 }} />
+                  <Text style={styles.aiRecommendationText}>
+                    {lead.segment === 'vip' ? "Exclusive VIP courtesy call recommended" : "Re-engage via personalized WhatsApp bonus"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.quickActions}>
+                <TouchableOpacity onPress={() => openWhatsApp(lead.phone)} style={styles.actionIcon}>
+                  <Feather name="message-circle" size={18} color="#22c55e" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => openPhone(lead.phone)} style={[styles.actionIcon, { marginTop: 10 }]}>
+                  <Feather name="phone" size={18} color="#475569" />
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          );
+        })
       )}
       <View style={{ height: 40 }} />
     </ScrollView>
@@ -177,6 +234,16 @@ const styles = StyleSheet.create({
     elevation: 1,
     borderWidth: 1,
     borderColor: '#f1f5f9',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  temperatureEmoji: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    fontSize: 16,
+    opacity: 0.8,
+    zIndex: 10,
   },
   avatarWrapper: {
     position: 'relative',
@@ -260,4 +327,80 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f1f5f9',
   },
+  attentionSection: {
+    marginTop: 20,
+  },
+  horizontalScroll: {
+    paddingLeft: 20,
+    marginBottom: 10,
+  },
+  attentionCard: {
+    backgroundColor: '#fff',
+    width: 140,
+    padding: 12,
+    borderRadius: 20,
+    marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+  },
+  attentionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  priorityBadge: {
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  priorityText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#ef4444',
+    textTransform: 'uppercase',
+  },
+  attentionName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  attentionAction: {
+    fontSize: 10,
+    color: '#ef4444',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  attentionLogBtn: {
+    marginTop: 10,
+    backgroundColor: '#f8fafc',
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  attentionLogBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  countBadge: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+  countBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  }
 });

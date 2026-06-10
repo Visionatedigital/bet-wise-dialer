@@ -21,14 +21,14 @@ export const COUNTRY_MAP: Record<string, CountryConfig> = Object.fromEntries(
 );
 
 /** Detect country code from a raw phone number string */
-export function detectCountryFromPhone(phone: string): string {
+export function detectCountryFromPhone(phone: string, defaultCountry = 'UG'): string {
   const d = phone.replace(/\D/g, '');
   if (d.startsWith('256')) return 'UG';
   if (d.startsWith('233')) return 'GH';
   if (d.startsWith('234')) return 'NG';
   if (d.startsWith('255')) return 'TZ';
   if (d.startsWith('254')) return 'KE';
-  return 'UG'; // default
+  return defaultCountry; // default
 }
 
 /** Normalise a raw phone string to E.164 format for the given country */

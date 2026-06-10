@@ -127,10 +127,8 @@ export function CustomerProfile({ leadId, onClose, onNextLead }: CustomerProfile
 
     const handleWhatsApp = () => {
         if (!lead) return;
-        // Format phone number: remove any non-digit characters if necessary
-        // Most WhatsApp APIs expect international format without + or leading zeros for some providers
-        // But the NewConversationDialog uses the input as is.
-        navigate(`/whatsapp?phone=${encodeURIComponent(lead.phone)}`);
+        const cleanPhone = lead.phone.replace(/\D/g, "");
+        window.open(`https://wa.me/${cleanPhone}`, "_blank");
     };
 
     if (loading) {

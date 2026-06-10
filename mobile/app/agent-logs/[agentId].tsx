@@ -17,7 +17,10 @@ import { api } from "../../src/api/client";
 import { CallActivity, Callback } from "../../src/types";
 import { colors } from "../../src/theme/colors";
 import { useAuth } from "../../src/contexts/AuthContext";
-import { getCurrencyFromCountry, getCurrencyFromPhone } from "../../src/utils/formatCurrency";
+import { getCurrencyFromCountry, getCurrencyFromPhone, formatCurrency } from "../../src/utils/formatCurrency";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+import * as XLSX from "xlsx";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -129,14 +132,14 @@ export default function AgentLogsScreen() {
   const { data: calls, isLoading: callsLoading } = useQuery<CallActivity[]>({
     queryKey: ["agent-calls", agentId, range.start.toISOString(), range.end.toISOString()],
     queryFn: () =>
-      api.get(`/call-activities?user_id=${agentId}&start_date=${range.start.toISOString()}&end_date=${range.end.toISOString()}&limit=500`),
+      api.get(`/call-activities?user_id=${agentId}&start_date=${range.start.toISOString()}&end_date=${range.end.toISOString()}&limit=10000`),
     enabled: !!agentId,
     refetchInterval: 30000,
   });
 
   const { data: callbacks } = useQuery<Callback[]>({
     queryKey: ["agent-callbacks", agentId],
-    queryFn: () => api.get(`/callbacks?user_id=${agentId}&limit=500`),
+    queryFn: () => api.get(`/callbacks?user_id=${agentId}&limit=5000`),
     enabled: !!agentId,
     refetchInterval: 60000,
   });
@@ -176,38 +179,39 @@ export default function AgentLogsScreen() {
       const rangeLabel = formatRangeLabel(range);
       const headers = ["Phone Number", "Lead Name", "Status", "Notes", "Follow Up", "Follow Up Date", "Follow Up Notes", "Deposit Amount", "Call Time", "Call Date"];
 
-      const escape = (v: any) => {
-        const s = String(v ?? "");
-        return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
-      };
-
-      const csvLines = [
-        `Agent: ${agentName || ""}  |  Period: ${rangeLabel}  |  Total Calls: ${calls.length}`,
-        "",
-        headers.join(","),
-        ...calls.map((call) => {
-          const cb = callbacksByPhone[call.phone_number];
-          return [
-            call.phone_number,
-            call.lead_name || "",
-            STATUS_STYLE[call.status]?.label ?? call.status,
-            call.notes || "",
-            cb ? "Yes" : "No",
-            cb ? formatDate(cb.scheduled_for) : "",
-            cb?.notes || "",
-            call.deposit_amount ?? "",
-            formatTime(call.created_at),
-            new Date(call.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-          ].map(escape).join(",");
-        }),
-      ];
-
-      const csvContent = csvLines.join("\n");
-      await Share.share({
-        message: csvContent,
-        title: `${agentName || "Agent"} Report — ${rangeLabel}`,
+      const rows = calls.map((call) => {
+        const cb = callbacksByPhone[call.phone_number];
+        return [
+          call.phone_number,
+          call.lead_name || "",
+          STATUS_STYLE[call.status]?.label ?? call.status,
+          call.notes || "",
+          cb ? "Yes" : "No",
+          cb ? formatDate(cb.scheduled_for) : "",
+          cb?.notes || "",
+          call.deposit_amount ?? "",
+          formatTime(call.created_at),
+          new Date(call.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        ];
       });
-    } catch {
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Calls");
+      const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+
+      const cleanAgentName = (agentName || "Agent").replace(/[^a-zA-Z0-9]/g, "_");
+      const cleanRangeLabel = rangeLabel.replace(/[^a-zA-Z0-9]/g, "_");
+      const filename = `${cleanAgentName}_Report_${cleanRangeLabel}.xlsx`;
+      const uri = FileSystem.documentDirectory + filename;
+
+      await FileSystem.writeAsStringAsync(uri, wbout, { encoding: FileSystem.EncodingType.Base64 });
+      await Sharing.shareAsync(uri, {
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        dialogTitle: `${agentName || "Agent"} Report — ${rangeLabel}`,
+      });
+    } catch (error) {
+      console.error("Export report error:", error);
       Alert.alert("Export Failed", "Could not generate the report. Please try again.");
     } finally {
       setExporting(false);
@@ -339,7 +343,7 @@ export default function AgentLogsScreen() {
                   {call.deposit_amount && call.deposit_amount > 0 ? (
                     <View style={styles.depositRow}>
                       <Feather name="trending-up" size={11} color="#10b981" />
-                      <Text style={styles.depositText}>Deposit: {getCurrencyFromPhone(call.phone_number) || getCurrencyFromCountry(user?.country || 'UG')} {call.deposit_amount.toLocaleString()}</Text>
+                      <Text style={styles.depositText}>Deposit: {formatCurrency(call.deposit_amount, getCurrencyFromPhone(call.phone_number, user?.country || 'UG'))}</Text>
                     </View>
                   ) : null}
                   {cb ? (

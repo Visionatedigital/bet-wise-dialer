@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { detectCountryFromPhone, formatPhoneForCountry } from "@/config/countries";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 // ─── Column mapping: betting-platform (Chinese) → internal ────────────────────
 const COL_MAP: Record<string, string> = {
@@ -152,7 +153,7 @@ function classifyTier(deposit_usd: number, deposit_local: number, total_bets: nu
   return { tier: "dormant", segment: "dormant", priority: "low", trait: null, score: 20 };
 }
 
-function parseRows(json: any[]): ParsedLead[] {
+function parseRows(json: any[], defaultCountry = 'UG'): ParsedLead[] {
   const seen = new Set<string>();
   return json
     .map((raw, i) => {
@@ -164,7 +165,7 @@ function parseRows(json: any[]): ParsedLead[] {
 
       const rawPhone = String(r.phone ?? r.number ?? r.phonenumber ?? r.username ?? "").trim();
       if (!rawPhone) return null;
-      const country = detectCountryFromPhone(rawPhone);
+      const country = detectCountryFromPhone(rawPhone, defaultCountry);
       const phone = formatPhoneForCountry(rawPhone, country);
       const digits = phone.replace(/\D/g, "");
       if (digits.length < 10) return null;
@@ -341,6 +342,7 @@ function TierPanel({
 
 // ─── Main page ──────────────────────────────────────────────────────────────────
 export default function ManagerImportLeads() {
+  const { user } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -391,7 +393,7 @@ export default function ManagerImportLeads() {
           });
         }
 
-        const parsed = parseRows(json);
+        const parsed = parseRows(json, user?.country || 'UG');
         if (parsed.length === 0) { toast.error("No valid phone numbers found in the file"); return; }
         setLeads(parsed);
         setSelectedIds(new Set());

@@ -13,7 +13,8 @@ import { parseCallbackIntent } from "../../src/utils/parseCallbackIntent";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
 import { computeCooldown } from "../../src/utils/cooldown";
-import { getCurrencyFromPhone } from "../../src/utils/formatCurrency";
+import { getCurrencyFromPhone, getCurrencyFromCountry, formatCurrency, CURRENCY_SYMBOLS } from "../../src/utils/formatCurrency";
+import { useAuth } from "../../src/contexts/AuthContext";
 
 const DISPOSITIONS = [
   { value: "interested", label: "Interested", icon: "thumbs-up" as const, color: "#10b981", bg: "#dcfce7" },
@@ -32,6 +33,7 @@ export default function LeadDetailScreen() {
   const { data: lead, isLoading } = useLead(id!);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   // Call outcome modal state
   const [showOutcome, setShowOutcome] = useState(false);
@@ -127,7 +129,10 @@ export default function LeadDetailScreen() {
     setScheduleCallback(false);
   };
 
-  const currency = lead ? getCurrencyFromPhone(lead.phone) : 'UGX';
+  const currency = lead 
+    ? (lead.country ? getCurrencyFromCountry(lead.country) : getCurrencyFromPhone(lead.phone, user?.country || 'UG'))
+    : 'UGX';
+  const symbol = CURRENCY_SYMBOLS[currency] || currency;
 
   if (isLoading || !lead) {
     return (
@@ -142,7 +147,7 @@ export default function LeadDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: leadDisplayName(lead.phone), headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default }, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
+      <Stack.Screen options={{ headerShown: true, title: leadDisplayName(lead.phone), headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default } as any, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
       <ScrollView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -284,13 +289,13 @@ export default function LeadDetailScreen() {
             {/* Financial Details */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Financial Summary</Text>
-              <InfoRow label={`Deposits (${currency})`} value={lead.lifetime_value ? `${currency} ${Number(lead.lifetime_value).toLocaleString()}` : '—'} />
+              <InfoRow label={`Deposits (${symbol})`} value={lead.lifetime_value ? formatCurrency(Number(lead.lifetime_value), currency) : '—'} />
               <InfoRow label="Deposits (USD)" value={lead.betting_patterns?.deposit_usd ? `$${Number(lead.betting_patterns.deposit_usd).toLocaleString()}` : '—'} />
               {(lead.betting_patterns?.total_bet_amount ?? 0) > 0 && (
-                <InfoRow label="Total Wagered" value={`${currency} ${Number(lead.betting_patterns!.total_bet_amount).toLocaleString()}`} />
+                <InfoRow label="Total Wagered" value={formatCurrency(Number(lead.betting_patterns!.total_bet_amount), currency)} />
               )}
               {(lead.betting_patterns?.total_ggr ?? 0) > 0 && (
-                <InfoRow label="GGR" value={`${currency} ${Number(lead.betting_patterns!.total_ggr).toLocaleString()}`} />
+                <InfoRow label="GGR" value={formatCurrency(Number(lead.betting_patterns!.total_ggr), currency)} />
               )}
               <InfoRow label="Last Login" value={lead.last_bet_date ? new Date(lead.last_bet_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : '—'} last />
             </View>
@@ -302,7 +307,7 @@ export default function LeadDetailScreen() {
             <InfoRow label="Segment" value={lead.segment || "—"} />
             <InfoRow label="Priority" value={lead.priority} />
             <InfoRow label="Score" value={lead.score?.toString() || "—"} />
-            <InfoRow label="Last Deposit" value={lead.last_deposit_ugx ? `${currency} ${lead.last_deposit_ugx.toLocaleString()}` : "—"} last />
+            <InfoRow label="Last Deposit" value={lead.last_deposit_ugx ? formatCurrency(Number(lead.last_deposit_ugx), currency) : "—"} last />
           </View>
         )}
 
@@ -374,7 +379,7 @@ export default function LeadDetailScreen() {
             {disposition === "interested" && (
               <>
                 <Text style={m.label}>
-                  <Feather name="trending-up" size={12} color={colors.status.success} /> Promised Deposit ({currency})
+                  <Feather name="trending-up" size={12} color={colors.status.success} /> Promised Deposit ({symbol})
                 </Text>
                 <TextInput style={m.input} placeholder="e.g. 50000" placeholderTextColor={colors.text.muted} value={depositAmount} onChangeText={setDepositAmount} keyboardType="numeric" />
 

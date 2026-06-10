@@ -31,5 +31,6 @@ export interface Lead {
   postCallBetCount?: number | null;
   postCallLastActivity?: string | null;
   performanceUpdatedAt?: string | null;
+  country?: string | null;
 }
 

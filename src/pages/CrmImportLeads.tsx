@@ -76,7 +76,7 @@ function classifyTier(deposit_usd: number, deposit_local: number, total_bets: nu
   return { tier: "dormant" as Tier, segment: "dormant", score: 20 };
 }
 
-function parseRows(json: any[]): any[] {
+function parseRows(json: any[], defaultCountry = 'UG'): any[] {
   const seen = new Set<string>();
   return json
     .map((raw, i) => {
@@ -85,7 +85,7 @@ function parseRows(json: any[]): any[] {
       
       const rawPhone = String(r.phone ?? r.number ?? r.phonenumber ?? r.username ?? "").trim();
       if (!rawPhone) return null;
-      const country = detectCountryFromPhone(rawPhone);
+      const country = detectCountryFromPhone(rawPhone, defaultCountry);
       const phone = formatPhoneForCountry(rawPhone, country);
       const digits = phone.replace(/\D/g, "");
       if (digits.length < 10) return null;
@@ -162,8 +162,7 @@ export default function CrmImportLeads() {
             headers.forEach((h, i) => { obj[h] = vals[i]; });
             return obj;
           });
-        }
-        const parsed = parseRows(json);
+        const parsed = parseRows(json, user?.country || 'UG');
         if (parsed.length === 0) { toast.error("No valid phone numbers found"); return; }
         setLeads(parsed);
         setStep(2);

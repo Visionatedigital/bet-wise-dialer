@@ -6,7 +6,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { parseCallbackIntent } from "../../src/utils/parseCallbackIntent";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
-import { getCurrencyFromPhone } from "../../src/utils/formatCurrency";
+import { getCurrencyFromPhone, CURRENCY_SYMBOLS } from "../../src/utils/formatCurrency";
+import { useAuth } from "../../src/contexts/AuthContext";
 
 const DISPOSITIONS = [
   { value: "interested", label: "Interested", color: colors.status.success, bg: "#dcfce7" },
@@ -20,7 +21,9 @@ export default function DispositionScreen() {
   const params = useLocalSearchParams<{ callId: string; leadId: string; leadName: string; phone: string; campaignId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const currency = getCurrencyFromPhone(params.phone || '');
+  const { user } = useAuth();
+  const currency = getCurrencyFromPhone(params.phone || '', user?.country || 'UG');
+  const symbol = CURRENCY_SYMBOLS[currency] || currency;
   const [disposition, setDisposition] = useState("");
   const [notes, setNotes] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
@@ -47,7 +50,7 @@ export default function DispositionScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: "Log Outcome", headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default }, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
+      <Stack.Screen options={{ headerShown: true, title: "Log Outcome", headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default } as any, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.leadInfo}>
           <View style={styles.leadAvatar}><Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>{leadDisplayName(params.phone)[0].toUpperCase()}</Text></View>
@@ -70,7 +73,7 @@ export default function DispositionScreen() {
 
         {disposition === "interested" && (
           <>
-            <Text style={styles.sectionTitle}>Promised Deposit ({currency})</Text>
+            <Text style={styles.sectionTitle}>Promised Deposit ({symbol})</Text>
             <TextInput style={styles.input} placeholder="e.g. 50000" placeholderTextColor={colors.text.muted} value={depositAmount} onChangeText={setDepositAmount} keyboardType="numeric" />
           </>
         )}

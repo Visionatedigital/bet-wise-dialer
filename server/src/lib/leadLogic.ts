@@ -233,12 +233,12 @@ export function digitsOnly(phone: string): string {
   return String(phone || '').replace(/\D/g, '');
 }
 
-export function detectCountry(phone: string): string {
+export function detectCountry(phone: string, defaultCountry = 'UG'): string {
   const d = digitsOnly(phone);
   if (d.startsWith('256')) return 'UG';
   if (d.startsWith('233')) return 'GH';
   if (d.startsWith('234')) return 'NG';
   if (d.startsWith('255')) return 'TZ';
   if (d.startsWith('254')) return 'KE';
-  return 'UG';
+  return defaultCountry;
 }

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Upload, FileText, AlertCircle } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { detectCountryFromPhone, formatPhoneForCountry } from "@/config/countries";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ImportLeadsForAgentModalProps {
   open: boolean;
@@ -25,6 +26,7 @@ export function ImportLeadsForAgentModal({
   agentId,
   agentName 
 }: ImportLeadsForAgentModalProps) {
+  const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [preview, setPreview] = useState<string[]>([]);
@@ -43,7 +45,7 @@ export function ImportLeadsForAgentModal({
   };
 
   const formatPhoneNumber = (phone: string): string => {
-    const country = detectCountryFromPhone(phone);
+    const country = detectCountryFromPhone(phone, user?.country || 'UG');
     return formatPhoneForCountry(phone, country);
   };
 

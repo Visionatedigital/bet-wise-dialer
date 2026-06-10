@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Phone, Mail, MessageSquare, Search, Filter, Download, UserMinus, Calendar, Clock, DollarSign, Target, Tag, User, Zap, Trash2 } from "lucide-react";
 import { type Lead } from "@/types/lead";
-import { formatUGX, formatKampalaTime } from "@/lib/formatters";
+import { formatCurrency, formatKampalaTime } from "@/lib/formatters";
 import { api } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
@@ -80,6 +80,7 @@ export default function Leads() {
         campaignId: lead.campaign_id || undefined,
         priority: lead.priority as "high" | "medium" | "low",
         slaMinutes: lead.sla_minutes || 0,
+        country: lead.country || null,
       }));
 
       setLeads(formattedLeads);
@@ -364,7 +365,7 @@ export default function Leads() {
                     </TableCell>
                     <TableCell className="text-sm">{lead.lastActivity}</TableCell>
                     <TableCell className="text-sm font-medium">
-                      {formatUGX(lead.lastDepositUgx)}
+                      {formatCurrency(lead.lastDepositUgx, lead.country || user?.country || 'UG')}
                     </TableCell>
                     <TableCell className="text-sm">
                       {lead.nextAction ? (
@@ -419,7 +420,7 @@ export default function Leads() {
                                       <span className="text-sm font-medium">Last Deposit</span>
                                     </div>
                                     <div className="text-2xl font-bold">
-                                      {formatUGX(selectedLead?.lastDepositUgx || 0)}
+                                      {formatCurrency(selectedLead?.lastDepositUgx || 0, selectedLead?.country || user?.country || 'UG')}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
                                       Last bet: {selectedLead?.lastBetDate || "Never"}

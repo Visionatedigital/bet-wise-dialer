@@ -3,7 +3,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Phone, MessageSquare, Target, Bot, History, Star, Edit3 } from "lucide-react";
+import { Phone, MessageSquare, Target, Bot, History, Star, Edit3, User } from "lucide-react";
 import { api } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
@@ -251,11 +251,9 @@ export default function CrmDashboard() {
                         <div className="flex items-center justify-between mb-6">
                           <div className="flex items-center gap-4">
                             <div className="relative">
-                              <img 
-                                src={`https://picsum.photos/seed/${lead.phone}/100`} 
-                                className="h-12 w-12 rounded-full object-cover border-2 border-white dark:border-emerald-900 shadow-sm"
-                                alt={lead.name}
-                              />
+                              <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center border-2 border-white dark:border-emerald-900 shadow-sm">
+                                <User className="h-6 w-6 text-slate-400" />
+                              </div>
                               <div className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white dark:border-emerald-900 ${lead.segment === 'vip' ? 'bg-[#FFE600]' : 'bg-[#22c55e]'}`} />
                             </div>
                             <div>
