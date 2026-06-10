@@ -36,7 +36,8 @@
           }
         }
       ],
-      "expo-updates"
+      "expo-updates",
+      "@react-native-community/datetimepicker"
     ],
     "updates": {
       "url": "https://u.expo.dev/e4c54cdb-c72a-4c0b-a615-0e62f9ecda21"

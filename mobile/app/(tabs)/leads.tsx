@@ -8,20 +8,25 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Alert,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useLeads } from "../../src/hooks/useLeads";
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "../../src/api/client";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
 
 // Matches desktop KANBAN_COLUMNS exactly
 const CATEGORIES = [
-  { id: "unassigned", title: "Unassigned", bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe", dot: "#3b82f6" },
+  { id: "unassigned", title: "New", bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe", dot: "#3b82f6" },
   { id: "no_answer", title: "No Answer", bg: "#fffbeb", text: "#b45309", border: "#fde68a", dot: "#f59e0b" },
   { id: "unreachable", title: "Unreachable", bg: "#fef2f2", text: "#b91c1c", border: "#fecaca", dot: "#ef4444" },
   { id: "interested", title: "Interested", bg: "#ecfdf5", text: "#047857", border: "#a7f3d0", dot: "#10b981" },
   { id: "not_interested", title: "Not Interested", bg: "#f8fafc", text: "#475569", border: "#e2e8f0", dot: "#94a3b8" },
+  { id: "answered_no_response", title: "No Response", bg: "#faf5ff", text: "#7c3aed", border: "#e9d5ff", dot: "#a855f7" },
 ];
 
 function maskPhone(phone: string): string {
@@ -32,8 +37,67 @@ function maskPhone(phone: string): string {
 export default function LeadsScreen() {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [clearingLeads, setClearingLeads] = useState(false);
+  const [clearingStatus, setClearingStatus] = useState<string | null>(null);
   const { data: leads, isLoading, refetch } = useLeads();
+  const queryClient = useQueryClient();
   const router = useRouter();
+
+  const confirmClearAllLeads = () => {
+    Alert.alert(
+      "Clear All Leads",
+      "This will permanently delete ALL leads and their history from the database. This cannot be undone.\n\nAre you sure?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Yes, delete all",
+          style: "destructive",
+          onPress: async () => {
+            setClearingLeads(true);
+            try {
+              const res = await api.delete<{ message: string; deleted: number }>("/leads/clear-all");
+              Alert.alert("Done", res.message || "All leads cleared from the database.");
+              queryClient.invalidateQueries({ queryKey: ["leads"] });
+              queryClient.invalidateQueries({ queryKey: ["distribution-stats"] });
+              refetch();
+            } catch (err: any) {
+              Alert.alert("Error", err?.message || "Failed to clear leads.");
+            } finally {
+              setClearingLeads(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const confirmClearByStatus = (categoryId: string, categoryTitle: string) => {
+    Alert.alert(
+      `Clear "${categoryTitle}" Leads`,
+      `This will permanently delete all leads in the "${categoryTitle}" category. This cannot be undone.\n\nAre you sure?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Yes, delete",
+          style: "destructive",
+          onPress: async () => {
+            setClearingStatus(categoryId);
+            try {
+              const res = await api.delete<{ message: string; deleted: number }>("/leads/clear-by-status", { status: categoryId });
+              Alert.alert("Done", res.message);
+              queryClient.invalidateQueries({ queryKey: ["leads"] });
+              queryClient.invalidateQueries({ queryKey: ["distribution-stats"] });
+              refetch();
+            } catch (err: any) {
+              Alert.alert("Error", err?.message || "Failed to clear leads.");
+            } finally {
+              setClearingStatus(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
@@ -71,24 +135,24 @@ export default function LeadsScreen() {
   // Category tiles view
   if (!activeCategory) {
     return (
-      <View style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={refetch} tintColor={colors.brand.green} />}
+        contentContainerStyle={{ paddingBottom: 32 }}
+      >
         <View style={styles.summaryHeader}>
           <Text style={styles.totalText}>
             {leads?.length || 0} Total Leads
           </Text>
         </View>
 
-        <FlatList
-          data={CATEGORIES}
-          keyExtractor={(c) => c.id}
-          refreshControl={
-            <RefreshControl refreshing={false} onRefresh={refetch} tintColor={colors.brand.green} />
-          }
-          contentContainerStyle={{ padding: 16, gap: 10 }}
-          renderItem={({ item }) => {
+        <View style={{ padding: 16, gap: 10 }}>
+          {CATEGORIES.map((item) => {
             const count = grouped[item.id]?.length || 0;
+            const isClearing = clearingStatus === item.id;
             return (
               <TouchableOpacity
+                key={item.id}
                 style={[styles.categoryCard, { backgroundColor: item.bg, borderColor: item.border }]}
                 onPress={() => setActiveCategory(item.id)}
                 activeOpacity={0.7}
@@ -105,13 +169,56 @@ export default function LeadsScreen() {
                       {count}
                     </Text>
                   </View>
+                  {/* Per-category trash */}
+                  <TouchableOpacity
+                    style={styles.trashBtn}
+                    onPress={() => confirmClearByStatus(item.id, item.title)}
+                    disabled={isClearing || count === 0}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {isClearing ? (
+                      <ActivityIndicator size={12} color={colors.status.error} />
+                    ) : (
+                      <Feather
+                        name="trash-2"
+                        size={14}
+                        color={count === 0 ? colors.border.default : colors.status.error}
+                      />
+                    )}
+                  </TouchableOpacity>
                   <Feather name="chevron-right" size={16} color={item.text} />
                 </View>
               </TouchableOpacity>
             );
-          }}
-        />
-      </View>
+          })}
+        </View>
+
+        {/* Danger zone */}
+        <View style={styles.dangerSection}>
+          <View style={styles.dangerHeader}>
+            <Feather name="alert-triangle" size={13} color={colors.status.error} />
+            <Text style={styles.dangerTitle}>Danger Zone</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.dangerBtn, clearingLeads && { opacity: 0.5 }]}
+            onPress={confirmClearAllLeads}
+            disabled={clearingLeads}
+            activeOpacity={0.8}
+          >
+            {clearingLeads ? (
+              <ActivityIndicator color={colors.status.error} size="small" />
+            ) : (
+              <Feather name="trash-2" size={15} color={colors.status.error} />
+            )}
+            <Text style={styles.dangerBtnText}>
+              {clearingLeads ? "Clearing…" : "Clear All Leads"}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.dangerHint}>
+            Permanently deletes all leads and call history from the database.
+          </Text>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -194,11 +301,55 @@ export default function LeadsScreen() {
                 </View>
               )}
               {lead.trait && (
-                <View style={[styles.tag, { backgroundColor: "#dcfce7", borderColor: "#bbf7d0" }]}>
-                  <Text style={[styles.tagText, { color: "#166534" }]}>{lead.trait}</Text>
+                <View style={[styles.tag, {
+                  backgroundColor: lead.trait === 'High Staker' ? '#fee2e2' : lead.trait === 'Medium Staker' ? '#fef3c7' : lead.trait === 'Frequent Bettor' ? '#dbeafe' : lead.trait === 'Dormant' ? '#f3f4f6' : '#dcfce7',
+                  borderColor: lead.trait === 'High Staker' ? '#fecaca' : lead.trait === 'Medium Staker' ? '#fde68a' : lead.trait === 'Frequent Bettor' ? '#bfdbfe' : lead.trait === 'Dormant' ? '#e5e7eb' : '#bbf7d0',
+                }]}>
+                  <Text style={[styles.tagText, {
+                    color: lead.trait === 'High Staker' ? '#991b1b' : lead.trait === 'Medium Staker' ? '#92400e' : lead.trait === 'Frequent Bettor' ? '#1e40af' : lead.trait === 'Dormant' ? '#6b7280' : '#166534',
+                  }]}>{lead.trait}</Text>
+                </View>
+              )}
+              {lead.preferred_product && (
+                <View style={[styles.tag, { backgroundColor: "#eff6ff", borderColor: "#bfdbfe" }]}>
+                  <Text style={[styles.tagText, { color: "#1d4ed8" }]}>
+                    {lead.preferred_product === 'Sports' ? '⚽ ' : lead.preferred_product === 'Gaming' ? '🎮 ' : ''}{lead.preferred_product}
+                  </Text>
                 </View>
               )}
             </View>
+
+            {/* Quick stats row */}
+            {(lead.betting_patterns?.deposit_usd > 0 || lead.deposit_count > 0 || lead.last_bet_date) && (
+              <View style={styles.depositRow}>
+                {lead.betting_patterns?.deposit_usd > 0 && (
+                  <>
+                    <Feather name="dollar-sign" size={10} color={colors.text.muted} />
+                    <Text style={styles.depositText}>
+                      ${Number(lead.betting_patterns.deposit_usd).toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    </Text>
+                  </>
+                )}
+                {lead.deposit_count != null && lead.deposit_count > 0 && (
+                  <>
+                    <Text style={styles.depositDot}>·</Text>
+                    <Text style={styles.depositText}>{lead.deposit_count.toLocaleString()} bets</Text>
+                  </>
+                )}
+                {lead.last_bet_date && (
+                  <>
+                    <Text style={styles.depositDot}>·</Text>
+                    <Feather name="clock" size={10} color={colors.text.muted} />
+                    <Text style={styles.depositText}>
+                      {(() => {
+                        const d = Math.floor((Date.now() - new Date(lead.last_bet_date).getTime()) / 86400000);
+                        return d === 0 ? 'Today' : d < 30 ? `${d}d ago` : `${Math.floor(d/30)}mo ago`;
+                      })()}
+                    </Text>
+                  </>
+                )}
+              </View>
+            )}
 
             {/* AI Strategy / Last Note */}
             {(lead.next_action || lead.last_activity) && (
@@ -316,6 +467,11 @@ const styles = StyleSheet.create({
   },
   tagText: { fontSize: 9, fontWeight: "700", color: colors.text.secondary, textTransform: "uppercase", letterSpacing: 0.3 },
 
+  // Deposit info
+  depositRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, paddingLeft: 2 },
+  depositText: { fontSize: 11, color: colors.text.secondary, fontWeight: "500" },
+  depositDot: { fontSize: 11, color: colors.text.muted },
+
   // Note box
   noteBox: {
     marginTop: 10,
@@ -340,4 +496,17 @@ const styles = StyleSheet.create({
   // Due date
   dueRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.04)" },
   dueText: { fontSize: 11, color: colors.text.muted },
+
+  trashBtn: {
+    padding: 4,
+    marginRight: 2,
+  },
+
+  // Danger zone
+  dangerSection: { marginHorizontal: 16, marginTop: 8, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: "#fecaca", backgroundColor: "#fff5f5" },
+  dangerHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  dangerTitle: { fontSize: 11, fontWeight: "700", color: colors.status.error, textTransform: "uppercase", letterSpacing: 0.5 },
+  dangerBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1.5, borderColor: colors.status.error, borderRadius: 8, paddingVertical: 11 },
+  dangerBtnText: { fontSize: 13, fontWeight: "700", color: colors.status.error },
+  dangerHint: { fontSize: 11, color: colors.text.muted, marginTop: 8, textAlign: "center", lineHeight: 15 },
 });

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Phone, Search, Users, RefreshCw } from "lucide-react";
@@ -40,15 +40,8 @@ export default function Kanban() {
     const loadLeads = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('leads')
-                .select('id, name, phone, segment, trait, status, priority')
-                .order('created_at', { ascending: false })
-                .limit(500);
-
-            if (error) throw error;
-
-            setLeads((data as any[]) || []);
+            const data = await api.get<any[]>('/leads?limit=500');
+            setLeads(data || []);
         } catch (error) {
             console.error("Error loading leads:", error);
             toast({
@@ -63,43 +56,6 @@ export default function Kanban() {
 
     useEffect(() => {
         loadLeads();
-
-        // Real-time subscription for leads
-        const channel = supabase
-            .channel('kanban_leads_realtime')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'leads'
-                },
-                (payload) => {
-                    console.log('[Kanban] Lead change detected:', payload);
-                    if (payload.eventType === 'UPDATE') {
-                        setLeads(prev => prev.map(l =>
-                            l.id === payload.new.id ? {
-                                ...l,
-                                status: payload.new.status,
-                                priority: payload.new.priority,
-                                name: payload.new.name,
-                                phone: payload.new.phone,
-                                segment: payload.new.segment,
-                                trait: payload.new.trait
-                            } : l
-                        ));
-                    } else if (payload.eventType === 'INSERT') {
-                        setLeads(prev => [payload.new as Lead, ...prev]);
-                    } else if (payload.eventType === 'DELETE') {
-                        setLeads(prev => prev.filter(l => l.id !== payload.old.id));
-                    }
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
     }, []);
 
     // Filter leads based on search

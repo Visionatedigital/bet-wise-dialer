@@ -17,6 +17,10 @@ import notificationsRoutes from './routes/notifications';
 import monitorRoutes from './routes/monitor';
 import aiRoutes from './routes/ai';
 import reportsRoutes from './routes/reports';
+import crmRoutes from './routes/crm';
+import crmActivitiesRoutes from './routes/crmActivities';
+import whatsappRoutes from './routes/whatsapp';
+import { startNotificationWorker } from './services/notificationWorker';
 
 const app = express();
 const httpServer = createServer(app);
@@ -30,7 +34,7 @@ export const io = new Server(httpServer, {
 });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Load API routes
 app.use('/api/auth', authRoutes);
@@ -45,15 +49,29 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/monitor', monitorRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/crm', crmRoutes);
+app.use('/api/crm/activities', crmActivitiesRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // Socket.io for Realtime data
 io.on('connection', (socket) => {
   console.log(`[Socket.io] Client connected: ${socket.id}`);
   
+  // Join user room for targeted notifications
+  socket.on('authenticate', (userId) => {
+    if (userId) {
+      socket.join(`user_${userId}`);
+      console.log(`[Socket.io] User ${userId} joined their notification room`);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`[Socket.io] Client disconnected: ${socket.id}`);
   });
 });
+
+// Start background workers
+startNotificationWorker(io);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: '1.0.0' });

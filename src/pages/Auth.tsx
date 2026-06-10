@@ -13,11 +13,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
+const COUNTRIES = [
+  { code: 'UG', name: 'Uganda',   flag: '🇺🇬' },
+  { code: 'GH', name: 'Ghana',    flag: '🇬🇭' },
+  { code: 'NG', name: 'Nigeria',  flag: '🇳🇬' },
+  { code: 'TZ', name: 'Tanzania', flag: '🇹🇿' },
+  { code: 'KE', name: 'Kenya',    flag: '🇰🇪' },
+];
+
 const authSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   fullName: z.string().min(2, "Full name must be at least 2 characters").optional(),
-  role: z.enum(["agent", "management", "admin"]).optional(),
+  role: z.enum(["agent", "management"]).optional(),
+  country: z.string().optional(),
 });
 
 const Auth = () => {
@@ -39,7 +48,8 @@ const Auth = () => {
     email: "",
     password: "",
     fullName: "",
-    role: "agent" as "agent" | "management" | "admin"
+    role: "agent" as "agent" | "management",
+    country: "UG",
   });
 
   useEffect(() => {
@@ -84,7 +94,7 @@ const Auth = () => {
 
     try {
       const validation = authSchema.parse(signUpData);
-      const result = await signUp(validation.email, validation.password, validation.fullName, validation.role);
+      const result = await signUp(validation.email, validation.password, validation.fullName, validation.role, signUpData.country);
 
       if (result.error) {
         setError(result.error);
@@ -200,7 +210,7 @@ const Auth = () => {
                       <Label htmlFor="signup-role" className="text-white">Role</Label>
                       <Select
                         value={signUpData.role}
-                        onValueChange={(value: "agent" | "management" | "admin") =>
+                        onValueChange={(value: "agent" | "management") =>
                           setSignUpData(prev => ({ ...prev, role: value }))
                         }
                       >
@@ -210,7 +220,26 @@ const Auth = () => {
                         <SelectContent>
                           <SelectItem value="agent">Agent</SelectItem>
                           <SelectItem value="management">Manager</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-country" className="text-white">Country</Label>
+                      <Select
+                        value={signUpData.country}
+                        onValueChange={(value) =>
+                          setSignUpData(prev => ({ ...prev, country: value }))
+                        }
+                      >
+                        <SelectTrigger className="bg-transparent border-gray-500 text-white focus:border-green-500 focus:ring-green-500">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {COUNTRIES.map(c => (
+                            <SelectItem key={c.code} value={c.code}>
+                              {c.flag} {c.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

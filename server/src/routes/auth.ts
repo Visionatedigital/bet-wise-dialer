@@ -18,7 +18,7 @@ router.post('/login', async (req, res) => {
 
     // Get user
     const userResult = await query(
-      'SELECT u.id, u.email, u.password_hash, p.full_name, p.approved, p.avatar_url FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.email = $1',
+      'SELECT u.id, u.email, u.password_hash, p.full_name, p.approved, p.rejected, p.avatar_url, p.country FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.email = $1',
       [email.toLowerCase().trim()]
     );
 
@@ -32,6 +32,11 @@ router.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check if rejected
+    if (user.rejected) {
+      return res.status(403).json({ error: 'Your sign-up request was rejected. Please sign up again and select the correct country.' });
     }
 
     // Check if approved
@@ -61,6 +66,7 @@ router.post('/login', async (req, res) => {
         full_name: user.full_name,
         avatar_url: user.avatar_url,
         role,
+        country: user.country || 'UG',
       },
     });
   } catch (err: any) {
@@ -72,15 +78,52 @@ router.post('/login', async (req, res) => {
 // POST /auth/signup
 router.post('/signup', async (req, res) => {
   try {
-    const { email, password, full_name, role = 'agent' } = req.body;
+    const { email, password, full_name, role = 'agent', country = 'UG' } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
     }
 
+    // Validate country code
+    const validCountries = ['UG', 'GH', 'NG', 'TZ', 'KE'];
+    const safeCountry = validCountries.includes(country) ? country : 'UG';
+
+    // Prevent self-signup as admin
+    const safeRole = role === 'admin' ? 'agent' : role;
+
     // Check existing
-    const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+    const existing = await query(
+      `SELECT u.id, p.rejected FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.email = $1`,
+      [email.toLowerCase().trim()]
+    );
+
     if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'An account with this email already exists' });
+      const existingUser = existing.rows[0];
+      // Allow re-registration only if previously rejected
+      if (!existingUser.rejected) {
+        return res.status(409).json({ error: 'An account with this email already exists' });
+      }
+
+      // Re-registration: update password, country, manager, and clear rejection
+      const passwordHash = await bcrypt.hash(password, 10);
+      await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [passwordHash, existingUser.id]);
+
+      const managerResult = await query(
+        `SELECT p.id FROM profiles p
+         JOIN user_roles r ON r.user_id = p.id
+         WHERE r.role = 'management' AND p.country = $1
+         ORDER BY p.created_at ASC LIMIT 1`,
+        [safeCountry]
+      );
+      const managerId = managerResult.rows[0]?.id || null;
+
+      await query(
+        `UPDATE profiles SET full_name = $1, country = $2, manager_id = $3, approved = FALSE, rejected = FALSE, updated_at = NOW() WHERE id = $4`,
+        [full_name || null, safeCountry, managerId, existingUser.id]
+      );
+
+      return res.status(201).json({
+        message: 'Your sign-up request has been resubmitted! Your country manager will review and approve your access.',
+      });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -92,20 +135,30 @@ router.post('/signup', async (req, res) => {
     );
     const newUser = userResult.rows[0];
 
-    // Create profile (not approved yet)
+    // Look up the manager for this country
+    const managerResult = await query(
+      `SELECT p.id FROM profiles p
+       JOIN user_roles r ON r.user_id = p.id
+       WHERE r.role = 'management' AND p.country = $1
+       ORDER BY p.created_at ASC LIMIT 1`,
+      [safeCountry]
+    );
+    const managerId = managerResult.rows[0]?.id || null;
+
+    // Create profile (not approved yet) with country + manager assignment
     await query(
-      'INSERT INTO profiles (id, email, full_name, approved) VALUES ($1, $2, $3, FALSE)',
-      [newUser.id, newUser.email, full_name || null]
+      'INSERT INTO profiles (id, email, full_name, approved, rejected, country, manager_id) VALUES ($1, $2, $3, FALSE, FALSE, $4, $5)',
+      [newUser.id, newUser.email, full_name || null, safeCountry, managerId]
     );
 
     // Assign role
     await query(
       'INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [newUser.id, role]
+      [newUser.id, safeRole]
     );
 
     res.status(201).json({
-      message: 'Account created successfully! Your account is pending approval. An administrator will review and approve your access.',
+      message: 'Account created successfully! Your account is pending approval. Your country manager will review and approve your access.',
     });
   } catch (err: any) {
     console.error('[Auth] Signup error:', err);
@@ -128,7 +181,7 @@ router.post('/logout', authenticate, async (req: AuthRequest, res: Response) => 
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const result = await query(
-      `SELECT u.id, u.email, p.full_name, p.avatar_url, p.approved, p.status, p.manager_id,
+      `SELECT u.id, u.email, p.full_name, p.avatar_url, p.approved, p.status, p.manager_id, p.country,
               r.role
        FROM users u
        LEFT JOIN profiles p ON p.id = u.id

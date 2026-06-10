@@ -1,160 +1,250 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl, ScrollView } from "react-native";
+import React, { useState, useCallback, useEffect } from "react";
+import {
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
+  Alert, RefreshControl, FlatList, Modal, ScrollView, BackHandler,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
-import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
-import { useDistributionStats, useAgentsAvailable } from "../../src/hooks/useDistribution";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAgentsAvailable } from "../../src/hooks/useDistribution";
 import { api } from "../../src/api/client";
-import { useQueryClient } from "@tanstack/react-query";
 import { colors } from "../../src/theme/colors";
 
-function parseCSVNumbers(text: string): string[] {
-  // Handle CSV with headers or plain number lists
-  const lines = text.split(/[\r\n]+/).filter((l) => l.trim());
-  const numbers: string[] = [];
-
-  for (const line of lines) {
-    // Split by comma, semicolon, or tab
-    const parts = line.split(/[,;\t]/);
-    for (const part of parts) {
-      const cleaned = part.replace(/[^0-9+]/g, "").trim();
-      if (cleaned.length >= 7) {
-        numbers.push(cleaned);
-      }
-    }
-  }
-
-  return [...new Set(numbers)];
+interface ManageLead {
+  id: string;
+  phone?: string;
+  status?: string;
+  lifecycle_stage?: string;
+  last_contact_at?: string;
+  created_at?: string;
+  assigned_agent_name?: string;
+  user_id?: string | null;
+  cooldown_until?: string | null;
 }
 
-export default function DistributeScreen() {
-  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useDistributionStats();
-  const { data: agents, isLoading: agentsLoading, refetch: refetchAgents } = useAgentsAvailable();
+interface CategoryCounts {
+  high_staker: number;
+  medium_staker: number;
+  frequent_bettor: number;
+  active: number;
+  dormant: number;
+  pipeline: number;
+  unassigned: number;
+  total: number;
+}
+
+const CATEGORIES = [
+  {
+    id: "high_staker",
+    title: "High Stakers",
+    description: "Top depositors",
+    bg: "#fee2e2", text: "#991b1b", border: "#fecaca", dot: "#ef4444",
+    icon: "trending-up" as const,
+    queryParam: "trait=High%20Staker",
+    countKey: "high_staker" as keyof CategoryCounts,
+  },
+  {
+    id: "medium_staker",
+    title: "Medium Stakers",
+    description: "Moderate depositors",
+    bg: "#fef3c7", text: "#92400e", border: "#fde68a", dot: "#f59e0b",
+    icon: "bar-chart-2" as const,
+    queryParam: "trait=Medium%20Staker",
+    countKey: "medium_staker" as keyof CategoryCounts,
+  },
+  {
+    id: "frequent_bettor",
+    title: "Frequent Bettors",
+    description: "High bet volume",
+    bg: "#dbeafe", text: "#1e40af", border: "#bfdbfe", dot: "#3b82f6",
+    icon: "repeat" as const,
+    queryParam: "trait=Frequent%20Bettor",
+    countKey: "frequent_bettor" as keyof CategoryCounts,
+  },
+  {
+    id: "dormant",
+    title: "Dormant",
+    description: "Inactive players",
+    bg: "#f3f4f6", text: "#374151", border: "#e5e7eb", dot: "#9ca3af",
+    icon: "moon" as const,
+    queryParam: "trait=Dormant",
+    countKey: "dormant" as keyof CategoryCounts,
+  },
+  {
+    id: "pipeline",
+    title: "Hot Pipeline",
+    description: "Interested or promised",
+    bg: "#ecfdf5", text: "#047857", border: "#a7f3d0", dot: "#10b981",
+    icon: "zap" as const,
+    queryParam: "lifecycle_stage=pipeline",
+    countKey: "pipeline" as keyof CategoryCounts,
+  },
+  {
+    id: "unassigned",
+    title: "New / Unassigned",
+    description: "Not yet assigned",
+    bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe", dot: "#3b82f6",
+    icon: "user-plus" as const,
+    queryParam: "user_id=unassigned",
+    countKey: "unassigned" as keyof CategoryCounts,
+  },
+];
+
+const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
+  interested: { label: "Interested", bg: "#dcfce7", text: "#166534" },
+  promised: { label: "Promised", bg: "#d1fae5", text: "#065f46" },
+  converted: { label: "Converted", bg: "#bbf7d0", text: "#14532d" },
+  no_answer: { label: "No Answer", bg: "#fef3c7", text: "#92400e" },
+  answered_no_response: { label: "No Response", bg: "#fef9c3", text: "#713f12" },
+  unreachable: { label: "Unreachable", bg: "#fee2e2", text: "#991b1b" },
+  not_interested: { label: "Not Interested", bg: "#f3f4f6", text: "#374151" },
+  new: { label: "New", bg: "#e0f2fe", text: "#0369a1" },
+  dead: { label: "Dead", bg: "#f1f5f9", text: "#64748b" },
+};
+
+function maskPhone(phone: string): string {
+  if (!phone) return "—";
+  const digits = phone.replace(/[^0-9]/g, "");
+  if (digits.length < 6) return phone;
+  return phone.slice(0, Math.max(0, phone.length - 4)).replace(/\d/g, "*") + digits.slice(-4);
+}
+
+function timeAgo(dateStr?: string | null): string {
+  if (!dateStr) return "—";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
+
+export default function ManageLeadsScreen() {
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [allLeads, setAllLeads] = useState<ManageLead[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showAgentPicker, setShowAgentPicker] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [clearingCategory, setClearingCategory] = useState<string | null>(null);
+
   const queryClient = useQueryClient();
-  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
-  const [distributing, setDistributing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [parsedNumbers, setParsedNumbers] = useState<string[]>([]);
+  const { data: agents } = useAgentsAvailable();
+  const insets = useSafeAreaInsets();
+  const PAGE_SIZE = 50;
 
-  const isLoading = statsLoading || agentsLoading;
+  const { data: counts, refetch: refetchCounts } = useQuery({
+    queryKey: ["category-counts"],
+    queryFn: () => api.get<CategoryCounts>("/leads/category-counts"),
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
 
-  const toggleAgent = (id: string) => {
-    setSelectedAgents((prev) =>
-      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
-    );
-  };
+  const activeCat = CATEGORIES.find((c) => c.id === activeCategory);
 
-  const selectAll = () => {
-    if (!agents) return;
-    if (selectedAgents.length === agents.length) {
-      setSelectedAgents([]);
+  const { data: pageLeads, isLoading, isFetching, refetch: refetchLeads } = useQuery({
+    queryKey: ["manage-leads", activeCategory, offset],
+    queryFn: () => {
+      if (!activeCat) return Promise.resolve([] as ManageLead[]);
+      return api.get<ManageLead[]>(`/leads?limit=50&offset=${offset}&${activeCat.queryParam}`);
+    },
+    enabled: !!activeCategory,
+    staleTime: 10000,
+  });
+
+  useEffect(() => {
+    setAllLeads([]);
+    setOffset(0);
+    setHasMore(true);
+    setSelected(new Set());
+  }, [activeCategory]);
+
+  // Intercept Android hardware back when inside a category — go back to grid, don't navigate away
+  useEffect(() => {
+    if (!activeCategory) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setActiveCategory(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [activeCategory]);
+
+  useEffect(() => {
+    if (!pageLeads) return;
+    if (offset === 0) {
+      setAllLeads(pageLeads);
     } else {
-      setSelectedAgents(agents.map((a) => a.id));
+      setAllLeads((prev) => [...prev, ...pageLeads]);
+    }
+    setHasMore(pageLeads.length === PAGE_SIZE);
+  }, [pageLeads, offset]);
+
+  const loadMore = () => {
+    if (!hasMore || isFetching) return;
+    setOffset((prev) => prev + PAGE_SIZE);
+  };
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = () => {
+    if (selected.size === allLeads.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(allLeads.map((l) => l.id)));
     }
   };
 
-  const handlePickCSV = async () => {
+  const handleAssign = async (targetAgentId: string | null) => {
+    const leadIds = Array.from(selected);
+    if (leadIds.length === 0) return;
+    setAssigning(true);
+    setShowAgentPicker(false);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["text/csv", "text/plain", "text/comma-separated-values", "application/csv", "*/*"],
-        copyToCacheDirectory: true,
+      const res = await api.post<{ message: string; updated: number }>("/leads/bulk-assign", {
+        lead_ids: leadIds,
+        agent_id: targetAgentId,
       });
-
-      if (result.canceled) return;
-
-      const file = result.assets[0];
-      if (!file.uri) return;
-
-      const content = await FileSystem.readAsStringAsync(file.uri);
-      const numbers = parseCSVNumbers(content);
-
-      if (numbers.length === 0) {
-        Alert.alert("No Numbers Found", "Could not find valid phone numbers in the file. Make sure numbers are at least 7 digits.");
-        return;
-      }
-
-      setParsedNumbers(numbers);
-      Alert.alert(
-        "Numbers Found",
-        `Found ${numbers.length} unique phone numbers in "${file.name}". Select agents below and tap "Upload & Distribute" to import them.`
-      );
+      setSelected(new Set());
+      setOffset(0);
+      queryClient.invalidateQueries({ queryKey: ["manage-leads"] });
+      queryClient.invalidateQueries({ queryKey: ["category-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["agents-available"] });
+      Alert.alert("Done", res.message);
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to read file");
+      Alert.alert("Error", err.message || "Failed to assign leads");
+    } finally {
+      setAssigning(false);
     }
   };
 
-  const handleUploadAndDistribute = async () => {
-    if (parsedNumbers.length === 0) {
-      Alert.alert("No File", "Please pick a CSV file first.");
-      return;
-    }
-    if (selectedAgents.length === 0) {
-      Alert.alert("Select Agents", "Please select at least one agent to distribute the numbers to.");
-      return;
-    }
-
+  const confirmClearCategory = (categoryId: string, categoryTitle: string) => {
     Alert.alert(
-      "Upload & Distribute",
-      `Import ${parsedNumbers.length} numbers and distribute evenly to ${selectedAgents.length} agent${selectedAgents.length > 1 ? "s" : ""}?`,
+      `Clear "${categoryTitle}"?`,
+      `Permanently delete all leads in the "${categoryTitle}" category. This cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Upload",
+          text: "Yes, delete",
+          style: "destructive",
           onPress: async () => {
-            setUploading(true);
+            setClearingCategory(categoryId);
             try {
-              const res = await api.post<{ message: string; imported: number; duplicates: number; distributed: number }>(
-                "/leads/import-csv",
-                { numbers: parsedNumbers, distribute_to: selectedAgents }
-              );
-              queryClient.invalidateQueries({ queryKey: ["distribution-stats"] });
-              queryClient.invalidateQueries({ queryKey: ["agents-available"] });
-              queryClient.invalidateQueries({ queryKey: ["leads"] });
-              setParsedNumbers([]);
-              Alert.alert("Done", `${res.message}\n\n${res.duplicates > 0 ? `${res.duplicates} duplicates skipped.` : ""}`);
-            } catch (err: any) {
-              Alert.alert("Error", err.message || "Import failed");
-            } finally {
-              setUploading(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleDistributeExisting = () => {
-    if (!stats || stats.unassigned_leads === 0) {
-      Alert.alert("No Leads", "There are no unassigned leads to distribute.");
-      return;
-    }
-    if (selectedAgents.length === 0) {
-      Alert.alert("Select Agents", "Please select at least one agent.");
-      return;
-    }
-
-    Alert.alert(
-      "Distribute Existing",
-      `Distribute ${stats.unassigned_leads} unassigned leads evenly across ${selectedAgents.length} agent${selectedAgents.length > 1 ? "s" : ""}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Distribute",
-          onPress: async () => {
-            setDistributing(true);
-            try {
-              const res = await api.post<{ message: string }>("/leads/distribute", {
-                agent_ids: selectedAgents,
-              });
-              queryClient.invalidateQueries({ queryKey: ["distribution-stats"] });
-              queryClient.invalidateQueries({ queryKey: ["agents-available"] });
-              queryClient.invalidateQueries({ queryKey: ["leads"] });
+              const res = await api.delete<{ message: string; deleted: number }>("/leads/clear-by-trait", { categoryId });
               Alert.alert("Done", res.message);
-              setSelectedAgents([]);
+              refetchCounts();
+              queryClient.invalidateQueries({ queryKey: ["manage-leads"] });
             } catch (err: any) {
-              Alert.alert("Error", err.message || "Distribution failed");
+              Alert.alert("Error", err?.message || "Failed to clear category.");
             } finally {
-              setDistributing(false);
+              setClearingCategory(null);
             }
           },
         },
@@ -162,249 +252,477 @@ export default function DistributeScreen() {
     );
   };
 
-  const handleUnassignAll = () => {
-    Alert.alert("Unassign All", "This will remove all lead assignments. Are you sure?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Unassign All",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await api.post("/leads/unassign-all");
-            queryClient.invalidateQueries({ queryKey: ["distribution-stats"] });
-            queryClient.invalidateQueries({ queryKey: ["agents-available"] });
-            queryClient.invalidateQueries({ queryKey: ["leads"] });
-            Alert.alert("Done", "All leads have been unassigned.");
-          } catch (err: any) {
-            Alert.alert("Error", err.message || "Failed to unassign");
-          }
+  const confirmClearAll = () => {
+    Alert.alert(
+      "Clear ALL Leads",
+      "This will permanently delete ALL leads and their entire history from the database. This cannot be undone.\n\nAre you absolutely sure?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Yes, delete everything",
+          style: "destructive",
+          onPress: async () => {
+            setClearingCategory("all");
+            try {
+              const res = await api.delete<{ message: string; deleted: number }>("/leads/clear-all");
+              Alert.alert("Done", res.message || "All leads cleared.");
+              refetchCounts();
+              queryClient.invalidateQueries({ queryKey: ["manage-leads"] });
+              queryClient.invalidateQueries({ queryKey: ["category-counts"] });
+            } catch (err: any) {
+              Alert.alert("Error", err?.message || "Failed to clear all leads.");
+            } finally {
+              setClearingCategory(null);
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
-  const refetchAll = () => {
-    refetchStats();
-    refetchAgents();
-  };
+  const renderLead = useCallback(
+    ({ item }: { item: ManageLead }) => {
+      const isSelected = selected.has(item.id);
+      const sc = STATUS_CONFIG[item.status || item.lifecycle_stage || "new"] || STATUS_CONFIG.new;
+      const hasActiveCooldown = item.cooldown_until && new Date(item.cooldown_until) > new Date();
+      const lastContact = item.last_contact_at || item.created_at;
 
-  if (isLoading) {
+      return (
+        <TouchableOpacity
+          style={[styles.leadCard, isSelected && styles.leadCardSelected]}
+          activeOpacity={0.7}
+          onPress={() => toggleSelect(item.id)}
+        >
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Feather name="check" size={11} color="#fff" />}
+          </View>
+          <View style={styles.leadInfo}>
+            <View style={styles.leadTopRow}>
+              <Text style={styles.leadPhone}>{maskPhone(item.phone || "")}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+                <Text style={[styles.statusBadgeText, { color: sc.text }]}>{sc.label}</Text>
+              </View>
+              {hasActiveCooldown && (
+                <View style={styles.cooldownBadge}>
+                  <Feather name="clock" size={9} color="#92400e" />
+                  <Text style={styles.cooldownText}>cooldown</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.leadBottomRow}>
+              {item.assigned_agent_name ? (
+                <Text style={styles.leadAgent} numberOfLines={1}>{item.assigned_agent_name}</Text>
+              ) : (
+                <Text style={styles.leadUnassigned}>Unassigned</Text>
+              )}
+              <Text style={styles.leadTime}>{timeAgo(lastContact)}</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [selected, toggleSelect]
+  );
+
+  // ── Category overview ──────────────────────────────────────────────────────
+  if (!activeCategory) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color={colors.brand.green} style={{ marginTop: 40 }} />
-      </View>
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetchCounts()} tintColor={colors.brand.green} />}
+        contentContainerStyle={{ paddingBottom: 32 }}
+      >
+        <View style={styles.overviewHeader}>
+          <Text style={styles.overviewTotal}>
+            {counts?.total != null ? Number(counts.total).toLocaleString() : "—"} leads total
+          </Text>
+          <Text style={styles.overviewSub}>Tap a category to view and assign leads</Text>
+        </View>
+
+        {/* 2-column grid */}
+        <View style={styles.categoryGrid}>
+          {CATEGORIES.map((item) => {
+            const count = counts != null ? Number(counts[item.countKey] ?? 0) : null;
+            const isClearing = clearingCategory === item.id;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.categoryCard, { backgroundColor: item.bg, borderColor: item.border }]}
+                onPress={() => setActiveCategory(item.id)}
+                activeOpacity={0.75}
+              >
+                {/* Trash icon top-right */}
+                <TouchableOpacity
+                  style={styles.cardTrashBtn}
+                  onPress={() => confirmClearCategory(item.id, item.title)}
+                  disabled={isClearing || count === 0}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  {isClearing ? (
+                    <ActivityIndicator size={12} color={colors.status.error} />
+                  ) : (
+                    <Feather
+                      name="trash-2"
+                      size={13}
+                      color={count === 0 ? item.border : colors.status.error}
+                    />
+                  )}
+                </TouchableOpacity>
+
+                <View style={[styles.categoryIconWrap, { backgroundColor: item.dot + "22" }]}>
+                  <Feather name={item.icon} size={18} color={item.dot} />
+                </View>
+                <Text style={[styles.categoryCount, { color: item.text }]}>
+                  {count != null ? count.toLocaleString() : "—"}
+                </Text>
+                <Text style={[styles.categoryTitle, { color: item.text }]}>{item.title}</Text>
+                <Text style={[styles.categoryDesc, { color: item.text + "99" }]}>{item.description}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Danger Zone */}
+        <View style={styles.dangerSection}>
+          <View style={styles.dangerHeader}>
+            <Feather name="alert-triangle" size={13} color={colors.status.error} />
+            <Text style={styles.dangerTitle}>Danger Zone</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.dangerBtn, clearingCategory === "all" && { opacity: 0.5 }]}
+            onPress={confirmClearAll}
+            disabled={clearingCategory === "all"}
+            activeOpacity={0.8}
+          >
+            {clearingCategory === "all" ? (
+              <ActivityIndicator color={colors.status.error} size="small" />
+            ) : (
+              <Feather name="trash-2" size={15} color={colors.status.error} />
+            )}
+            <Text style={styles.dangerBtnText}>
+              {clearingCategory === "all" ? "Clearing…" : "Clear ALL Leads"}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.dangerHint}>
+            Permanently deletes every lead and all call history from the database.
+          </Text>
+        </View>
+      </ScrollView>
     );
   }
 
-  return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={false} onRefresh={refetchAll} tintColor={colors.brand.green} />}
-    >
-      {/* Stats overview */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{stats?.total_leads ?? 0}</Text>
-          <Text style={styles.statLabel}>Total Leads</Text>
-        </View>
-        <View style={[styles.statCard, styles.statCardHighlight]}>
-          <Text style={[styles.statValue, { color: colors.brand.green }]}>{stats?.unassigned_leads ?? 0}</Text>
-          <Text style={styles.statLabel}>Unassigned</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{agents?.length ?? 0}</Text>
-          <Text style={styles.statLabel}>Agents</Text>
-        </View>
-      </View>
+  // ── Lead list within a category ────────────────────────────────────────────
+  const cat = activeCat!;
 
-      {/* CSV Upload Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Import Numbers from CSV</Text>
-        <TouchableOpacity style={styles.uploadBtn} onPress={handlePickCSV} activeOpacity={0.7}>
-          <Feather name="upload" size={20} color={colors.brand.green} />
-          <View>
-            <Text style={styles.uploadBtnTitle}>Pick CSV File</Text>
-            <Text style={styles.uploadBtnSub}>CSV, TXT with phone numbers</Text>
-          </View>
-        </TouchableOpacity>
-        {parsedNumbers.length > 0 && (
-          <View style={styles.parsedBanner}>
-            <Feather name="check-circle" size={16} color={colors.status.success} />
-            <Text style={styles.parsedText}>
-              {parsedNumbers.length} numbers ready to import
+  const ListHeader = (
+    <View>
+      {allLeads.length > 0 && (
+        <View style={styles.selectBar}>
+          <TouchableOpacity onPress={toggleSelectAll} style={styles.selectAllBtn} activeOpacity={0.7}>
+            <View style={[styles.checkbox, selected.size === allLeads.length && allLeads.length > 0 && styles.checkboxSelected]}>
+              {selected.size === allLeads.length && allLeads.length > 0 && <Feather name="check" size={11} color="#fff" />}
+            </View>
+            <Text style={styles.selectAllText}>
+              {selected.size === allLeads.length && allLeads.length > 0 ? "Deselect All" : "Select All"}
             </Text>
-            <TouchableOpacity onPress={() => setParsedNumbers([])}>
-              <Feather name="x" size={16} color={colors.text.muted} />
-            </TouchableOpacity>
+          </TouchableOpacity>
+          <Text style={selected.size > 0 ? styles.selectedCount : styles.leadCountText}>
+            {selected.size > 0 ? `${selected.size} selected` : `${allLeads.length} leads`}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const ListFooter = (
+    <View>
+      {isFetching && offset > 0 && (
+        <ActivityIndicator color={colors.brand.green} style={{ marginVertical: 16 }} />
+      )}
+      {hasMore && !isFetching && allLeads.length > 0 && (
+        <TouchableOpacity style={styles.loadMoreBtn} onPress={loadMore} activeOpacity={0.7}>
+          <Text style={styles.loadMoreText}>Load more</Text>
+        </TouchableOpacity>
+      )}
+      <View style={{ height: selected.size > 0 ? 100 : 30 }} />
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <TouchableOpacity
+        style={[styles.backHeader, { backgroundColor: cat.bg, borderBottomColor: cat.border }]}
+        onPress={() => setActiveCategory(null)}
+        activeOpacity={0.7}
+      >
+        <Feather name="arrow-left" size={18} color={cat.text} />
+        <View style={[styles.catDot, { backgroundColor: cat.dot }]} />
+        <Text style={[styles.backTitle, { color: cat.text }]}>{cat.title}</Text>
+        {counts != null && (
+          <View style={[styles.countBadge, { backgroundColor: "rgba(255,255,255,0.6)" }]}>
+            <Text style={[styles.countBadgeText, { color: cat.text }]}>
+              {Number(counts[cat.countKey] ?? 0).toLocaleString()}
+            </Text>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
 
-      {/* Current distribution */}
-      {stats && stats.agents.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Current Distribution</Text>
-          {stats.agents.map((a) => (
-            <View key={a.id} style={styles.distRow}>
-              <View style={styles.distAvatar}>
-                <Text style={styles.distAvatarText}>{(a.full_name || "?")[0].toUpperCase()}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.distName}>{a.full_name || "Agent"}</Text>
-                <Text style={styles.distMeta}>{a.lead_count} leads</Text>
-              </View>
-              <View style={styles.distBar}>
-                <View
-                  style={[
-                    styles.distBarFill,
-                    {
-                      width: `${Math.min(100, (parseInt(a.lead_count) / Math.max(1, stats.total_leads)) * 100 * stats.agents.length)}%`,
-                    },
-                  ]}
-                />
-              </View>
+      {isLoading && offset === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.brand.green} />
+        </View>
+      ) : (
+        <FlatList
+          key="lead-list"
+          data={allLeads}
+          keyExtractor={(item) => item.id}
+          renderItem={renderLead}
+          ListHeaderComponent={ListHeader}
+          ListFooterComponent={ListFooter}
+          ListEmptyComponent={
+            <View style={styles.emptyBox}>
+              <Feather name="inbox" size={28} color={colors.text.muted} />
+              <Text style={styles.emptyText}>No leads in this category</Text>
             </View>
-          ))}
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isFetching && offset === 0}
+              onRefresh={() => { setOffset(0); refetchLeads(); }}
+              tintColor={colors.brand.green}
+            />
+          }
+          contentContainerStyle={{ paddingBottom: 20 }}
+        />
+      )}
+
+      {/* Floating action bar */}
+      {selected.size > 0 && (
+        <View style={[styles.actionBar, { paddingBottom: insets.bottom + 12 }]}>
+          <View style={styles.actionBarLeft}>
+            <Text style={styles.actionBarCount}>{selected.size} selected</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.unassignBtn}
+            onPress={() =>
+              Alert.alert("Unassign Leads", `Unassign ${selected.size} leads?`, [
+                { text: "Cancel", style: "cancel" },
+                { text: "Unassign", style: "destructive", onPress: () => handleAssign(null) },
+              ])
+            }
+            disabled={assigning}
+            activeOpacity={0.8}
+          >
+            <Feather name="user-minus" size={14} color="#991b1b" />
+            <Text style={styles.unassignBtnText}>Unassign</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.assignBtn}
+            onPress={() => setShowAgentPicker(true)}
+            disabled={assigning}
+            activeOpacity={0.8}
+          >
+            {assigning ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Feather name="user-plus" size={14} color="#fff" />
+                <Text style={styles.assignBtnText}>Assign to →</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* Select agents */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Select Agents</Text>
-          <TouchableOpacity onPress={selectAll}>
-            <Text style={styles.selectAllText}>
-              {selectedAgents.length === (agents?.length ?? 0) ? "Deselect All" : "Select All"}
+      {/* Agent picker modal */}
+      <Modal visible={showAgentPicker} transparent animationType="slide" onRequestClose={() => setShowAgentPicker(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowAgentPicker(false)} />
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>
+              Assign {selected.size} Lead{selected.size === 1 ? "" : "s"} to
             </Text>
-          </TouchableOpacity>
-        </View>
-
-        {!agents || agents.length === 0 ? (
-          <View style={styles.emptyAgents}>
-            <Feather name="users" size={24} color={colors.text.muted} />
-            <Text style={styles.emptyText}>No approved agents available</Text>
+            <TouchableOpacity onPress={() => setShowAgentPicker(false)}>
+              <Feather name="x" size={20} color={colors.text.primary} />
+            </TouchableOpacity>
           </View>
-        ) : (
-          agents.map((agent) => {
-            const selected = selectedAgents.includes(agent.id);
-            return (
-              <TouchableOpacity
-                key={agent.id}
-                style={[styles.agentRow, selected && styles.agentRowSelected]}
-                onPress={() => toggleAgent(agent.id)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
-                  {selected && <Feather name="check" size={12} color="#fff" />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.agentName}>{agent.full_name || agent.email}</Text>
-                  <Text style={styles.agentMeta}>{agent.assigned_leads} leads assigned</Text>
-                </View>
-                <View style={[styles.onlineIndicator, agent.status === "online" && styles.onlineActive]} />
-              </TouchableOpacity>
-            );
-          })
-        )}
-      </View>
-
-      {/* Action buttons */}
-      <View style={styles.actions}>
-        {/* Upload & Distribute (CSV) */}
-        {parsedNumbers.length > 0 && (
-          <TouchableOpacity
-            style={[styles.primaryBtn, (uploading || selectedAgents.length === 0) && { opacity: 0.5 }]}
-            onPress={handleUploadAndDistribute}
-            disabled={uploading || selectedAgents.length === 0}
-            activeOpacity={0.8}
-          >
-            {uploading ? (
-              <ActivityIndicator color="#fff" />
+          <ScrollView>
+            {!agents || agents.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyText}>No agents in your country</Text>
+              </View>
             ) : (
-              <>
-                <Feather name="upload-cloud" size={16} color="#fff" />
-                <Text style={styles.primaryBtnText}>
-                  Upload & Distribute {parsedNumbers.length} Numbers
-                </Text>
-              </>
+              agents.map((agent) => {
+                const initials = (agent.full_name || agent.email || "?")
+                  .split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+                return (
+                  <TouchableOpacity
+                    key={agent.id}
+                    style={styles.agentOption}
+                    onPress={() => {
+                      setShowAgentPicker(false);
+                      Alert.alert(
+                        "Assign Leads",
+                        `Assign ${selected.size} lead${selected.size === 1 ? "" : "s"} to ${agent.full_name}?`,
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Assign", onPress: () => handleAssign(agent.id) },
+                        ]
+                      );
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.agentOptionAvatar, agent.status === "online" && { backgroundColor: "#16a34a" }]}>
+                      <Text style={styles.agentOptionAvatarText}>{initials}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.agentOptionName}>{agent.full_name || agent.email}</Text>
+                      <Text style={styles.agentOptionMeta}>{agent.assigned_leads} leads assigned</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
             )}
-          </TouchableOpacity>
-        )}
-
-        {/* Distribute existing unassigned */}
-        {(stats?.unassigned_leads ?? 0) > 0 && (
-          <TouchableOpacity
-            style={[styles.distributeBtn, (distributing || selectedAgents.length === 0) && { opacity: 0.5 }]}
-            onPress={handleDistributeExisting}
-            disabled={distributing || selectedAgents.length === 0}
-            activeOpacity={0.8}
-          >
-            {distributing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Feather name="shuffle" size={16} color="#fff" />
-                <Text style={styles.distributeBtnText}>
-                  Distribute {stats?.unassigned_leads ?? 0} Unassigned Leads
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity style={styles.unassignBtn} onPress={handleUnassignAll} activeOpacity={0.8}>
-          <Feather name="rotate-ccw" size={14} color={colors.status.error} />
-          <Text style={styles.unassignBtnText}>Unassign All Leads</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+          </ScrollView>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg.dashboard },
-  statsRow: { flexDirection: "row", paddingHorizontal: 16, paddingTop: 16, gap: 10 },
-  statCard: { flex: 1, backgroundColor: colors.bg.card, borderRadius: 10, padding: 14, alignItems: "center", borderWidth: 1, borderColor: colors.border.default },
-  statCardHighlight: { borderColor: colors.brand.green, borderWidth: 1.5 },
-  statValue: { fontSize: 22, fontWeight: "800", color: colors.text.primary },
-  statLabel: { fontSize: 11, color: colors.text.muted, fontWeight: "600", marginTop: 2, textTransform: "uppercase" },
-  section: { marginHorizontal: 16, marginTop: 20 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  sectionTitle: { fontSize: 11, fontWeight: "700", color: colors.text.secondary, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 },
-  selectAllText: { fontSize: 13, color: colors.brand.green, fontWeight: "600" },
+  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  // Upload
-  uploadBtn: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: colors.bg.card, padding: 18, borderRadius: 10, borderWidth: 1.5, borderColor: colors.brand.green, borderStyle: "dashed" },
-  uploadBtnTitle: { fontSize: 15, fontWeight: "700", color: colors.text.primary },
-  uploadBtnSub: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
-  parsedBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#dcfce7", padding: 12, borderRadius: 8, marginTop: 10 },
-  parsedText: { flex: 1, fontSize: 13, fontWeight: "600", color: "#166534" },
+  overviewHeader: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
+  overviewTotal: { fontSize: 18, fontWeight: "800", color: colors.text.primary },
+  overviewSub: { fontSize: 12, color: colors.text.muted, marginTop: 2 },
 
-  // Distribution
-  distRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border.default },
-  distAvatar: { width: 32, height: 32, borderRadius: 8, backgroundColor: colors.brand.green, alignItems: "center", justifyContent: "center" },
-  distAvatarText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  distName: { fontSize: 14, fontWeight: "600", color: colors.text.primary },
-  distMeta: { fontSize: 11, color: colors.text.muted },
-  distBar: { width: 60, height: 6, backgroundColor: colors.border.default, borderRadius: 3, overflow: "hidden" },
-  distBarFill: { height: "100%", backgroundColor: colors.brand.green, borderRadius: 3 },
-  emptyAgents: { alignItems: "center", padding: 24, backgroundColor: colors.bg.card, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
-  emptyText: { fontSize: 13, color: colors.text.muted, marginTop: 8 },
-  agentRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.bg.card, padding: 14, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: colors.border.default },
-  agentRowSelected: { borderColor: colors.brand.green, backgroundColor: "#f0fdf4" },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.border.default, alignItems: "center", justifyContent: "center" },
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    padding: 12,
+    gap: 10,
+  },
+
+  categoryCard: {
+    width: "47%",
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+    position: "relative",
+  },
+  cardTrashBtn: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    padding: 4,
+    zIndex: 10,
+  },
+  categoryIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  categoryCount: { fontSize: 28, fontWeight: "800", lineHeight: 32 },
+  categoryTitle: { fontSize: 13, fontWeight: "700", marginTop: 3 },
+  categoryDesc: { fontSize: 11, fontWeight: "500", marginTop: 2 },
+
+  backHeader: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
+  catDot: { width: 10, height: 10, borderRadius: 5 },
+  backTitle: { fontSize: 16, fontWeight: "700", flex: 1 },
+  countBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
+  countBadgeText: { fontSize: 13, fontWeight: "800" },
+
+  selectBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, justifyContent: "space-between" },
+  selectAllBtn: { flexDirection: "row", alignItems: "center", gap: 8 },
+  selectAllText: { fontSize: 13, color: colors.text.secondary, fontWeight: "600" },
+  selectedCount: { fontSize: 13, fontWeight: "700", color: colors.brand.green },
+  leadCountText: { fontSize: 12, color: colors.text.muted, fontWeight: "500" },
+
+  leadCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.bg.card,
+    marginHorizontal: 16,
+    marginBottom: 6,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    gap: 10,
+  },
+  leadCardSelected: { borderColor: colors.brand.green, backgroundColor: "#f0fdf4" },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.border.default,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
   checkboxSelected: { backgroundColor: colors.brand.green, borderColor: colors.brand.green },
-  agentName: { fontSize: 14, fontWeight: "600", color: colors.text.primary },
-  agentMeta: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
-  onlineIndicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.border.default },
-  onlineActive: { backgroundColor: colors.status.success },
-  actions: { paddingHorizontal: 16, marginTop: 24, gap: 10 },
-  primaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.brand.dark, paddingVertical: 15, borderRadius: 8 },
-  primaryBtnText: { color: colors.brand.yellow, fontSize: 15, fontWeight: "700" },
-  distributeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.brand.green, paddingVertical: 15, borderRadius: 8 },
-  distributeBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  unassignBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#fee2e2", paddingVertical: 12, borderRadius: 8 },
-  unassignBtnText: { color: colors.status.error, fontWeight: "600", fontSize: 13 },
+  leadInfo: { flex: 1, minWidth: 0 },
+  leadTopRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  leadPhone: { fontSize: 14, fontWeight: "600", color: colors.text.primary, flex: 1 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, flexShrink: 0 },
+  statusBadgeText: { fontSize: 10, fontWeight: "700" },
+  cooldownBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#fef3c7", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  cooldownText: { fontSize: 9, fontWeight: "700", color: "#92400e" },
+  leadBottomRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  leadAgent: { fontSize: 12, color: colors.text.muted, flex: 1 },
+  leadUnassigned: { fontSize: 12, color: colors.text.muted, fontStyle: "italic", flex: 1 },
+  leadTime: { fontSize: 11, color: colors.text.muted },
+
+  loadMoreBtn: { marginHorizontal: 16, marginTop: 6, padding: 12, borderRadius: 8, backgroundColor: colors.bg.card, borderWidth: 1, borderColor: colors.border.default, alignItems: "center" },
+  loadMoreText: { fontSize: 13, fontWeight: "600", color: colors.brand.green },
+
+  emptyBox: { alignItems: "center", padding: 40 },
+  emptyText: { fontSize: 15, color: colors.text.secondary, fontWeight: "600", marginTop: 12 },
+
+  actionBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.bg.card,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.default,
+    gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  actionBarLeft: { flex: 1 },
+  actionBarCount: { fontSize: 13, fontWeight: "700", color: colors.text.primary },
+  unassignBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#fee2e2", paddingHorizontal: 12, paddingVertical: 9, borderRadius: 8 },
+  unassignBtnText: { fontSize: 13, fontWeight: "600", color: "#991b1b" },
+  assignBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: colors.brand.dark, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8 },
+  assignBtnText: { fontSize: 13, fontWeight: "700", color: colors.brand.yellow },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  modalSheet: { backgroundColor: colors.bg.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "70%", paddingTop: 8 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border.default },
+  modalTitle: { fontSize: 16, fontWeight: "700", color: colors.text.primary },
+  agentOption: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 14 },
+  agentOptionAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brand.green, alignItems: "center", justifyContent: "center" },
+  agentOptionAvatarText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  agentOptionName: { fontSize: 15, fontWeight: "600", color: colors.text.primary },
+  agentOptionMeta: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
+
+  // Danger zone
+  dangerSection: { marginHorizontal: 12, marginTop: 8, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: "#fecaca", backgroundColor: "#fff5f5" },
+  dangerHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  dangerTitle: { fontSize: 11, fontWeight: "700", color: colors.status.error, textTransform: "uppercase", letterSpacing: 0.5 },
+  dangerBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1.5, borderColor: colors.status.error, borderRadius: 8, paddingVertical: 11 },
+  dangerBtnText: { fontSize: 13, fontWeight: "700", color: colors.status.error },
+  dangerHint: { fontSize: 11, color: colors.text.muted, marginTop: 8, textAlign: "center", lineHeight: 15 },
 });

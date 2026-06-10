@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
-import { Search, User, Settings, Moon, Sun, Coffee, Shield, LayoutDashboard } from "lucide-react";
+import { Search, User, Settings, Moon, Sun, Coffee, Shield, LayoutDashboard, HeartHandshake } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,6 +14,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { AdminSidebar } from "./AdminSidebar";
 import { ManagementSidebar } from "./ManagementSidebar";
+import { CrmSidebar } from "./CrmSidebar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,14 +34,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const { status, updateStatus } = useAgentStatus();
-  const { isAdmin, isManagement, role } = useUserRole();
+  const { isAdmin, isManagement, isCrm, role } = useUserRole();
+  const isAdminUser = user?.role === 'admin';
 
   const { currentVersion } = useAutoUpdate();
   const [queueCount, setQueueCount] = useState(0);
   const [todayCallsCount, setTodayCallsCount] = useState(0);
   const { showSoftphone, setShowSoftphone, activeLead } = useSoftphone();
 
-  const switchDashboard = (mode: 'agent' | 'management' | 'admin') => {
+  const switchDashboard = (mode: 'agent' | 'management' | 'admin' | 'crm') => {
     localStorage.setItem('adminViewMode', mode);
     window.location.reload();
   };
@@ -194,12 +196,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen w-full bg-dashboard-bg overflow-x-hidden">
+      <div className={`flex min-h-screen w-full overflow-x-hidden ${isCrm ? 'bg-[#fffdf5] dark:bg-slate-950' : 'bg-dashboard-bg'}`}>
 
-        {isAdmin && (localStorage.getItem('adminViewMode') === 'admin' || !localStorage.getItem('adminViewMode')) ? (
+        {isAdminUser && (!localStorage.getItem('adminViewMode') || localStorage.getItem('adminViewMode') === 'admin') ? (
           <AdminSidebar />
-        ) : isManagement && (localStorage.getItem('adminViewMode') === 'management' || (!localStorage.getItem('adminViewMode') && role === 'management')) ? (
+        ) : isManagement ? (
           <ManagementSidebar />
+        ) : isCrm ? (
+          <CrmSidebar />
         ) : (
           <AppSidebar />
         )}
@@ -288,8 +292,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    {isAdmin && (
+                    {isAdminUser && (
                       <>
+                        <DropdownMenuItem onClick={() => switchDashboard('crm')}>
+                          <HeartHandshake className="mr-2 h-4 w-4" />
+                          Switch to CRM View
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => switchDashboard('management')}>
                           <LayoutDashboard className="mr-2 h-4 w-4" />
                           Switch to Management View

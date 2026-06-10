@@ -8,18 +8,31 @@ router.use(authenticate as any);
 // GET /callbacks
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = ['admin', 'management', 'moderator'].includes(req.user!.role);
-    const { status, limit = 100 } = req.query;
+    const role = req.user!.role;
+    const isAdmin = role === 'admin' || role === 'moderator';
+    const isManagement = role === 'management';
+    const { status, limit = 100, user_id } = req.query;
 
     let sql = 'SELECT * FROM callbacks WHERE 1=1';
     const params: any[] = [];
     let paramCount = 1;
 
-    if (!isAdmin) {
+    if (!isAdmin && !isManagement) {
       sql += ` AND user_id = $${paramCount++}`;
       params.push(req.user!.id);
+    } else if (isManagement) {
+      // Scope to agents in manager's country only
+      sql += ` AND user_id IN (SELECT id FROM profiles WHERE country = (SELECT country FROM profiles WHERE id = $${paramCount++}))`;
+      params.push(req.user!.id);
+      if (user_id) {
+        sql += ` AND user_id = $${paramCount++}`;
+        params.push(user_id);
+      }
+    } else if (user_id) {
+      sql += ` AND user_id = $${paramCount++}`;
+      params.push(user_id);
     }
-    
+
     if (status) {
       sql += ` AND status = $${paramCount++}`;
       params.push(status);

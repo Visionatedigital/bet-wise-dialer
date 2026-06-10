@@ -9,7 +9,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -65,20 +65,15 @@ export function EditCampaignModal({ open, onOpenChange, onEditComplete, campaign
 
     setUpdating(true);
     try {
-      const { error } = await supabase
-        .from('campaigns')
-        .update({
-          name: formData.name.trim(),
-          description: formData.description.trim() || null,
-          status: formData.status,
-          start_date: startDate ? format(startDate, 'yyyy-MM-dd') : null,
-          end_date: endDate ? format(endDate, 'yyyy-MM-dd') : null,
-          target_calls: formData.target_calls,
-          target_conversions: formData.target_conversions,
-        })
-        .eq('id', campaign.id);
-
-      if (error) throw error;
+      await api.patch(`/campaigns/${campaign.id}`, {
+        name: formData.name.trim(),
+        description: formData.description.trim() || null,
+        status: formData.status,
+        start_date: startDate ? format(startDate, 'yyyy-MM-dd') : null,
+        end_date: endDate ? format(endDate, 'yyyy-MM-dd') : null,
+        target_calls: formData.target_calls,
+        target_conversions: formData.target_conversions,
+      });
 
       toast.success('Campaign updated successfully');
       onEditComplete();

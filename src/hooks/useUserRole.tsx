@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
-export type UserRole = 'admin' | 'management' | 'agent' | null;
+export type UserRole = 'admin' | 'management' | 'agent' | 'crm' | null;
 
 export function useUserRole() {
   const { user, loading: authLoading } = useAuth();
@@ -31,6 +31,7 @@ export function useUserRole() {
     loading: loading || authLoading,
     isAdmin: effectiveRole === 'admin',
     isManagement: effectiveRole === 'management',
+    isCrm: effectiveRole === 'crm',
     isAgent: effectiveRole === 'agent' || !effectiveRole
   };
 }

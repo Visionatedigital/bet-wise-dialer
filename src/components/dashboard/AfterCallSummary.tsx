@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-type Disposition = "no_answer" | "not_interested" | "interested" | "unreachable" | "escalate";
+type Disposition = "no_answer" | "not_interested" | "interested" | "unreachable" | "escalate" | "answered_no_response";
 
 export interface AfterCallSummaryData {
   disposition: string;
@@ -38,7 +38,7 @@ const dispositionOptions = [
   { value: "not_interested", label: "Not Interested", color: "bg-orange-500" },
   { value: "interested", label: "Interested", color: "bg-warning" },
   { value: "unreachable", label: "Unreachable", color: "bg-destructive" },
-
+  { value: "answered_no_response", label: "Answered-No Response", color: "bg-purple-500" },
 ];
 
 const availableTags = [

@@ -11,13 +11,14 @@ interface BangbetUser {
   role: string;
   avatar_url?: string;
   approved?: boolean;
+  country?: string;
 }
 
 interface AuthContextType {
   user: BangbetUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName?: string, role?: string) => Promise<{ error: any; message?: string }>;
+  signUp: (email: string, password: string, fullName?: string, role?: string, country?: string) => Promise<{ error: any; message?: string }>;
   signOut: () => Promise<void>;
 }
 
@@ -70,9 +71,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, fullName?: string, role?: string) => {
+  const signUp = async (email: string, password: string, fullName?: string, role?: string, country = 'UG') => {
     try {
-      const resp = await api.post<{ message: string }>('/auth/signup', { email, password, full_name: fullName, role });
+      const resp = await api.post<{ message: string }>('/auth/signup', { email, password, full_name: fullName, role, country });
       return { 
         error: null,
         message: resp.message || 'Account created successfully! Your account is pending approval.'

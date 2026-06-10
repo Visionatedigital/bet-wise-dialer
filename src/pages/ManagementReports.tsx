@@ -8,8 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Download, FileText, Eye, Trash2, Calendar, Loader2 } from 'lucide-react';
+import { Download, FileText, Eye, Trash2, Calendar, Loader2, CalendarDays, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
@@ -33,11 +34,75 @@ const ManagementReports = () => {
   const [isSavingReport, setIsSavingReport] = useState(false);
   const [activeExcelTab, setActiveExcelTab] = useState<string>(''); // Track active Excel tab
 
+  // Daily call-notes export state
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [exportingDaily, setExportingDaily] = useState(false);
+
   useEffect(() => {
     if (user) {
       fetchSavedReports();
     }
   }, [user]);
+
+  // ── Daily Call Notes Export ─────────────────────────────────────────────────
+  const exportDailyCallNotes = async () => {
+    setExportingDaily(true);
+    try {
+      const data = await api.get<{
+        date: string;
+        total: number;
+        rows: { date: string; agent_name: string; phone: string; remarks: string }[];
+      }>(`/reports/daily-call-notes?date=${selectedDate}`);
+
+      if (!data.rows || data.rows.length === 0) {
+        toast.info(`No calls recorded for ${selectedDate}`);
+        return;
+      }
+
+      // Build xlsx using the same XLSX library already imported
+      const header = ['Date', 'Name', 'Numbers', 'Remarks'];
+
+      // Format date as DD/MM/YYYY to match the supervisor report style
+      const [y, m, d] = selectedDate.split('-');
+      const displayDate = `${d}/${m}/${y}`;
+
+      const dataRows = data.rows.map(r => [
+        displayDate,
+        r.agent_name,
+        r.phone,
+        r.remarks,
+      ]);
+
+      const wsData = [header, ...dataRows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // Style header row (bold + fill) — XLSX doesn't support styles natively,
+      // but we can set column widths which Excel & Google Sheets respect.
+      ws['!cols'] = [
+        { wch: 14 },  // Date
+        { wch: 20 },  // Name
+        { wch: 20 },  // Numbers
+        { wch: 40 },  // Remarks
+      ];
+
+      // Auto-filter on header row
+      ws['!autofilter'] = { ref: `A1:D1` };
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+
+      const fileName = `call-notes-${selectedDate}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast.success(`Downloaded ${fileName} — ${data.total} rows`);
+    } catch (err: any) {
+      console.error('[Export] daily call notes error:', err);
+      toast.error(err?.message ?? 'Failed to export report');
+    } finally {
+      setExportingDaily(false);
+    }
+  };
 
 
   const fetchSavedReports = async () => {
@@ -500,6 +565,48 @@ const ManagementReports = () => {
             <p className="text-muted-foreground">View, edit, and download previously generated performance reports</p>
           </div>
         </div>
+
+        {/* ── Daily Call Notes Export Card ───────────────────────────────── */}
+        <Card className="border-2 border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-primary">
+              <FileSpreadsheet className="h-5 w-5" />
+              Export Daily Call Notes
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Download all agent call notes for a chosen date as an Excel spreadsheet (.xlsx) —
+              ready to submit to your supervisor.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => setSelectedDate(e.target.value)}
+                  className="border rounded-md px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <Button
+                onClick={exportDailyCallNotes}
+                disabled={exportingDaily || !selectedDate}
+                className="gap-2"
+              >
+                {exportingDaily ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Exporting…</>
+                ) : (
+                  <><Download className="h-4 w-4" /> Export to Excel</>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Format: <strong>Date · Name · Numbers · Remarks</strong> — one row per call
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>

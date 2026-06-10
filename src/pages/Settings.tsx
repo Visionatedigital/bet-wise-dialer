@@ -10,11 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { 
-  Users, 
-  Settings as SettingsIcon, 
-  FileText, 
-  Clock, 
+import {
+  Users,
+  Settings as SettingsIcon,
+  FileText,
+  Clock,
   Shield,
   Plus,
   Edit2,
@@ -26,22 +26,92 @@ import {
   Mail,
   Globe,
   Download,
-  RefreshCw
+  RefreshCw,
+  Camera,
+  User,
+  KeyRound,
 } from "lucide-react";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { toast } from "sonner";
-import React from "react";
+import React, { useRef } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/integrations/supabase/client";
 
 const Settings = () => {
-  const { 
-    currentVersion, 
-    updateAvailable, 
+  const {
+    currentVersion,
+    updateAvailable,
     updateInfo,
     checkForUpdates,
     downloadAndInstall,
-    setShowUpdateDialog
   } = useAutoUpdate();
   const [checking, setChecking] = React.useState(false);
+
+  // Profile state
+  const { user } = useAuth();
+  const [profileName, setProfileName] = React.useState(user?.full_name || "");
+  const [profileEmail, setProfileEmail] = React.useState(user?.email || "");
+  const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = React.useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Password state
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [savingPassword, setSavingPassword] = React.useState(false);
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be under 2MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setAvatarPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!profileName.trim()) { toast.error("Name cannot be empty"); return; }
+    setSavingProfile(true);
+    try {
+      await api.patch(`/profiles/${user!.id}`, {
+        full_name: profileName.trim(),
+        email: profileEmail.trim().toLowerCase(),
+        ...(avatarPreview ? { avatar_url: avatarPreview } : {}),
+      });
+      toast.success("Profile updated successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error("Please fill in all password fields"); return;
+    }
+    if (newPassword.length < 6) { toast.error("New password must be at least 6 characters"); return; }
+    if (newPassword !== confirmPassword) { toast.error("Passwords do not match"); return; }
+    setSavingPassword(true);
+    try {
+      await api.post("/auth/change-password", {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      toast.success("Password changed successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to change password");
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const initials = (user?.full_name || user?.email || "?")[0].toUpperCase();
 
   const handleCheckForUpdates = async () => {
     setChecking(true);
@@ -69,8 +139,9 @@ const Settings = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="general" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-6">
+        <Tabs defaultValue="profile" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-7">
+            <TabsTrigger value="profile">My Profile</TabsTrigger>
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="users">Users & Roles</TabsTrigger>
             <TabsTrigger value="dispositions">Dispositions</TabsTrigger>
@@ -78,6 +149,139 @@ const Settings = () => {
             <TabsTrigger value="hours">Business Hours</TabsTrigger>
             <TabsTrigger value="compliance">Compliance</TabsTrigger>
           </TabsList>
+
+          {/* ── My Profile ── */}
+          <TabsContent value="profile" className="space-y-4">
+            <div className="grid gap-6 md:grid-cols-2">
+
+              {/* Profile info card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Profile Information
+                  </CardTitle>
+                  <CardDescription>Update your name, email and photo</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Avatar */}
+                  <div className="flex flex-col items-center gap-3 pb-2">
+                    <div className="relative">
+                      {avatarPreview || user?.avatar_url ? (
+                        <img
+                          src={avatarPreview || user?.avatar_url!}
+                          alt="Avatar"
+                          className="w-20 h-20 rounded-full object-cover border-2 border-green-500"
+                        />
+                      ) : (
+                        <div className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center text-white text-3xl font-bold">
+                          {initials}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => avatarInputRef.current?.click()}
+                        className="absolute bottom-0 right-0 w-7 h-7 bg-white rounded-full shadow flex items-center justify-center border border-gray-200 hover:bg-gray-50"
+                      >
+                        <Camera className="h-3.5 w-3.5 text-gray-600" />
+                      </button>
+                    </div>
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                    />
+                    <p className="text-xs text-muted-foreground">Click camera icon to change photo (max 2MB)</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="profile-name">Full Name</Label>
+                    <Input
+                      id="profile-name"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      placeholder="Your full name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="profile-email">Email</Label>
+                    <Input
+                      id="profile-email"
+                      type="email"
+                      value={profileEmail}
+                      onChange={(e) => setProfileEmail(e.target.value)}
+                      placeholder="your@email.com"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label>Role</Label>
+                    <Badge variant="secondary" className="capitalize">{user?.role}</Badge>
+                  </div>
+                  <Button
+                    onClick={handleSaveProfile}
+                    disabled={savingProfile}
+                    className="w-full bg-green-500 hover:bg-green-600"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {savingProfile ? "Saving..." : "Save Profile"}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Change password card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <KeyRound className="h-5 w-5" />
+                    Change Password
+                  </CardTitle>
+                  <CardDescription>Update your account password</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="current-pw">Current Password</Label>
+                    <Input
+                      id="current-pw"
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter current password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-pw">New Password</Label>
+                    <Input
+                      id="new-pw"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Min 6 characters"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-pw">Confirm New Password</Label>
+                    <Input
+                      id="confirm-pw"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat new password"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleChangePassword}
+                    disabled={savingPassword}
+                    className="w-full bg-green-500 hover:bg-green-600"
+                  >
+                    <KeyRound className="h-4 w-4 mr-2" />
+                    {savingPassword ? "Updating..." : "Change Password"}
+                  </Button>
+                </CardContent>
+              </Card>
+
+            </div>
+          </TabsContent>
 
           <TabsContent value="general" className="space-y-4">
             <div className="grid gap-6">

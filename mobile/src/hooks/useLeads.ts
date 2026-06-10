@@ -4,7 +4,7 @@ import { Lead } from "../types";
 
 // The DB doesn't have a 'status' column — status is stored in last_activity.
 // Normalize leads to have a consistent .status field.
-const VALID_STATUSES = ["unassigned", "no_answer", "interested", "unreachable", "not_interested"];
+const VALID_STATUSES = ["unassigned", "no_answer", "interested", "unreachable", "not_interested", "answered_no_response"];
 
 function normalizeStatus(lead: Lead): Lead {
   let status = lead.status || lead.last_activity || "unassigned";
@@ -35,5 +35,21 @@ export function useLead(id: string) {
     queryKey: ["lead", id],
     queryFn: () => api.get<Lead>(`/leads/${id}`),
     enabled: !!id,
+  });
+}
+
+export function useNewLeads(limit = 5) {
+  return useQuery({
+    queryKey: ["leads-new", limit],
+    queryFn: () => api.get<Lead[]>(`/leads?lifecycle_stage=new&limit=${limit}`),
+    refetchInterval: 30000,
+  });
+}
+
+export function useCooldownDueLeads(limit = 5) {
+  return useQuery({
+    queryKey: ["leads-cooldown-due", limit],
+    queryFn: () => api.get<Lead[]>(`/leads?cooldown_expired=true&limit=${limit}`),
+    refetchInterval: 30000,
   });
 }

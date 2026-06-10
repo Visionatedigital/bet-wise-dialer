@@ -25,5 +25,12 @@ export interface Lead {
   status?: string | null;
   preferredProduct?: string | null;
   trait?: string | null;
+  lifecycleStage?: 'new' | 'called' | 'interested' | 'follow_up' | 'converted' | 'dead' | null;
+  followUpCategory?: string | null;
+  postCallDepositUgx?: number | null;
+  postCallBetCount?: number | null;
+  postCallLastActivity?: string | null;
+  performanceUpdatedAt?: string | null;
+  country?: string | null;
 }
 

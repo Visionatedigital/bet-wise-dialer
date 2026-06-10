@@ -14,8 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Phone, Mail, MessageSquare, Search, Filter, Download, UserMinus, Calendar, Clock, DollarSign, Target, Tag, User, Zap, Trash2 } from "lucide-react";
 import { type Lead } from "@/types/lead";
-import { formatUGX, formatKampalaTime } from "@/lib/formatters";
-import { supabase } from "@/integrations/supabase/client";
+import { formatCurrency, formatKampalaTime } from "@/lib/formatters";
+import { api } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
 import { toast } from "sonner";
@@ -58,16 +58,7 @@ export default function Leads() {
   const fetchLeads = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('leads')
-        .select(`
-          *,
-          campaigns(name)
-        `)
-        .order('created_at', { ascending: false })
-        .range(0, 99999);
-
-      if (error) throw error;
+      const data = await api.get<any[]>('/leads');
 
       const formattedLeads: Lead[] = (data || []).map(lead => ({
         id: lead.id,
@@ -85,10 +76,11 @@ export default function Leads() {
         ownerUserId: lead.user_id,
         nextAction: lead.next_action || undefined,
         nextActionDue: lead.next_action_due || undefined,
-        campaign: lead.campaigns?.name || "No Campaign",
+        campaign: lead.campaign_name || "No Campaign",
         campaignId: lead.campaign_id || undefined,
         priority: lead.priority as "high" | "medium" | "low",
         slaMinutes: lead.sla_minutes || 0,
+        country: lead.country || null,
       }));
 
       setLeads(formattedLeads);
@@ -156,15 +148,9 @@ export default function Leads() {
   const fetchLeadCalls = async (leadId: string) => {
     try {
       setLoadingCalls(true);
-      const { data, error } = await supabase
-        .from('call_activities')
-        .select('*')
-        .eq('lead_name', leads.find(l => l.id === leadId)?.name)
-        .order('start_time', { ascending: false })
-        .limit(10);
-
-      if (error) throw error;
-      setLeadCalls(data || []);
+      const data = await api.get<any[]>('/call-activities?limit=10');
+      const leadName = leads.find(l => l.id === leadId)?.name;
+      setLeadCalls((data || []).filter(c => c.lead_name === leadName));
     } catch (error) {
       console.error('Error fetching lead calls:', error);
     } finally {
@@ -176,13 +162,7 @@ export default function Leads() {
     if (!leadToDelete) return;
 
     try {
-      const { error } = await supabase
-        .from('leads')
-        .delete()
-        .eq('id', leadToDelete.id);
-
-      if (error) throw error;
-
+      await api.delete('/leads/' + leadToDelete.id);
       toast.success('Lead deleted successfully');
       await fetchLeads();
       setDeleteDialogOpen(false);
@@ -197,13 +177,7 @@ export default function Leads() {
     if (selectedLeads.length === 0) return;
 
     try {
-      const { error } = await supabase
-        .from('leads')
-        .delete()
-        .in('id', selectedLeads);
-
-      if (error) throw error;
-
+      await Promise.all(selectedLeads.map(id => api.delete('/leads/' + id)));
       toast.success(`${selectedLeads.length} lead${selectedLeads.length > 1 ? 's' : ''} deleted successfully`);
       setSelectedLeads([]);
       await fetchLeads();
@@ -391,7 +365,7 @@ export default function Leads() {
                     </TableCell>
                     <TableCell className="text-sm">{lead.lastActivity}</TableCell>
                     <TableCell className="text-sm font-medium">
-                      {formatUGX(lead.lastDepositUgx)}
+                      {formatCurrency(lead.lastDepositUgx, lead.country || user?.country || 'UG')}
                     </TableCell>
                     <TableCell className="text-sm">
                       {lead.nextAction ? (
@@ -446,7 +420,7 @@ export default function Leads() {
                                       <span className="text-sm font-medium">Last Deposit</span>
                                     </div>
                                     <div className="text-2xl font-bold">
-                                      {formatUGX(selectedLead?.lastDepositUgx || 0)}
+                                      {formatCurrency(selectedLead?.lastDepositUgx || 0, selectedLead?.country || user?.country || 'UG')}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
                                       Last bet: {selectedLead?.lastBetDate || "Never"}

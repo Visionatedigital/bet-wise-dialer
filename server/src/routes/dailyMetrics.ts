@@ -8,16 +8,30 @@ router.use(authenticate as any);
 // GET /daily-metrics
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = ['admin', 'management', 'moderator'].includes(req.user!.role);
+    const role = req.user!.role;
+    const isAdmin = role === 'admin' || role === 'moderator';
+    const isManagement = role === 'management';
     const { user_id, date, start_date, end_date } = req.query;
 
     let sql = 'SELECT * FROM daily_metrics WHERE 1=1';
     const params: any[] = [];
     let paramCount = 1;
 
-    if (!isAdmin) {
+    if (!isAdmin && !isManagement) {
       sql += ` AND user_id = $${paramCount++}`;
       params.push(req.user!.id);
+    } else if (isManagement) {
+      sql += ` AND user_id IN (
+        SELECT p.id FROM profiles p 
+        JOIN user_roles ur ON ur.user_id = p.id 
+        WHERE p.country = (SELECT country FROM profiles WHERE id = $${paramCount++})
+        AND ur.role != 'crm'
+      )`;
+      params.push(req.user!.id);
+      if (user_id) {
+        sql += ` AND user_id = $${paramCount++}`;
+        params.push(user_id);
+      }
     } else if (user_id) {
       sql += ` AND user_id = $${paramCount++}`;
       params.push(user_id);

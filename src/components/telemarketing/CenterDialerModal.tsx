@@ -31,7 +31,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSoftphone } from "@/contexts/SoftphoneContext";
 
@@ -50,7 +50,8 @@ const DISPOSITION_OPTIONS = [
     { value: "unreachable", label: "Unreachable", color: "text-red-600" },
     { value: "not_interested", label: "Not Interested", color: "text-slate-600" },
     { value: "interested", label: "Interested", color: "text-emerald-600" },
-    { value: "no_answer", label: "No Answer", color: "text-amber-600" }
+    { value: "no_answer", label: "No Answer", color: "text-amber-600" },
+    { value: "answered_no_response", label: "Answered-No Response", color: "text-purple-600" }
 ];
 
 export function CenterDialerModal({
@@ -161,44 +162,10 @@ export function CenterDialerModal({
         setIsSubmitting(true);
         try {
             // 1. Update Lead Status and Last Activity
-            const { error: updateError } = await supabase
-                .from('leads')
-                .update({
-                    status: disposition,
-                    last_activity: callNotes || disposition
-                } as any)
-                .eq('id' as any, leadDbId as any);
-
-            if (updateError) throw updateError;
-
-            // 2. Generate AI Actionable Summary if notes are provided
-            if (callNotes) {
-                try {
-                    toast({
-                        title: "AI Analyzing...",
-                        description: "Generating your actionable plan.",
-                    });
-
-                    const { data: aiData, error: aiError } = await supabase.functions.invoke('generate-lead-summary', {
-                        body: {
-                            leadId: leadDbId,
-                            notes: callNotes,
-                            disposition: disposition
-                        },
-                    });
-
-                    if (aiError) console.error("AI Summary Error:", aiError);
-                    else {
-                        toast({
-                            title: "AI Ready",
-                            description: "Actionable plan added to Kanban card.",
-                            className: "bg-blue-600 text-white border-none"
-                        });
-                    }
-                } catch (aiErr) {
-                    console.error("AI Invocation failed:", aiErr);
-                }
-            }
+            await api.patch(`/leads/${leadDbId}`, {
+                status: disposition,
+                last_activity: callNotes || disposition,
+            });
 
             toast({
                 title: "Feedback Saved",

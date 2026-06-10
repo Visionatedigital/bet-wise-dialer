@@ -6,18 +6,24 @@ import { useQueryClient } from "@tanstack/react-query";
 import { parseCallbackIntent } from "../../src/utils/parseCallbackIntent";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
+import { getCurrencyFromPhone, CURRENCY_SYMBOLS } from "../../src/utils/formatCurrency";
+import { useAuth } from "../../src/contexts/AuthContext";
 
 const DISPOSITIONS = [
   { value: "interested", label: "Interested", color: colors.status.success, bg: "#dcfce7" },
   { value: "not_interested", label: "Not Interested", color: colors.status.error, bg: "#fee2e2" },
   { value: "no_answer", label: "No Answer", color: "#d97706", bg: "#fef3c7" },
   { value: "unreachable", label: "Unreachable", color: colors.text.secondary, bg: "#f3f4f6" },
+  { value: "answered_no_response", label: "Answered-No Response", color: "#7c3aed", bg: "#ede9fe" },
 ];
 
 export default function DispositionScreen() {
   const params = useLocalSearchParams<{ callId: string; leadId: string; leadName: string; phone: string; campaignId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const currency = getCurrencyFromPhone(params.phone || '', user?.country || 'UG');
+  const symbol = CURRENCY_SYMBOLS[currency] || currency;
   const [disposition, setDisposition] = useState("");
   const [notes, setNotes] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
@@ -28,8 +34,8 @@ export default function DispositionScreen() {
     if (!disposition) { Alert.alert("Required", "Please select a call outcome"); return; }
     setSubmitting(true);
     try {
-      await api.post("/call-activities", { phone_number: params.phone, lead_name: params.leadName, call_type: "native_dialer", status: disposition === "interested" || disposition === "not_interested" ? "connected" : disposition, duration_seconds: 0, deposit_amount: depositAmount ? Number(depositAmount) : null, notes: notes || null, campaign_id: params.campaignId || null });
-      if (params.leadId) await api.patch(`/leads/${params.leadId}`, { last_activity: disposition, last_contact_at: new Date().toISOString() });
+      await api.post("/call-activities", { phone_number: params.phone, lead_name: params.leadName, call_type: "native_dialer", status: disposition, duration_seconds: 0, deposit_amount: depositAmount ? Number(depositAmount) : null, notes: notes || null, campaign_id: params.campaignId || null });
+      if (params.leadId) await api.patch(`/leads/${params.leadId}`, { status: disposition, last_activity: disposition, last_contact_at: new Date().toISOString(), ...(disposition === "interested" ? { lifecycle_stage: "interested" } : {}) });
       const cbIntent = parseCallbackIntent(notes);
       if (scheduleCallback || cbIntent.shouldCreateCallback) {
         const cbDate = cbIntent.callbackDate || new Date(Date.now() + 86400000);
@@ -44,7 +50,7 @@ export default function DispositionScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: "Log Outcome", headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default }, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
+      <Stack.Screen options={{ headerShown: true, title: "Log Outcome", headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default } as any, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.leadInfo}>
           <View style={styles.leadAvatar}><Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>{leadDisplayName(params.phone)[0].toUpperCase()}</Text></View>
@@ -67,7 +73,7 @@ export default function DispositionScreen() {
 
         {disposition === "interested" && (
           <>
-            <Text style={styles.sectionTitle}>Promised Deposit (UGX)</Text>
+            <Text style={styles.sectionTitle}>Promised Deposit ({symbol})</Text>
             <TextInput style={styles.input} placeholder="e.g. 50000" placeholderTextColor={colors.text.muted} value={depositAmount} onChangeText={setDepositAmount} keyboardType="numeric" />
           </>
         )}

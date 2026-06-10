@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Download, Loader2, Sparkles, FileText, FileSpreadsheet, File } from "lucide-react";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
@@ -58,8 +58,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
   const [selectedAgent, setSelectedAgent] = useState(initialSelectedAgent);
   const [availableAgents, setAvailableAgents] = useState<AgentOption[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
-  const [reportType, setReportType] = useState<"summary" | "excel">("summary");
-  const [fileType, setFileType] = useState<"docx" | "xlsx" | "pdf" | "csv">("csv");
+  const [reportType, setReportType] = useState<"summary" | "excel">("excel");
+  const [fileType, setFileType] = useState<"docx" | "xlsx" | "pdf" | "csv">("xlsx");
 
   // Update selectedAgent when initialSelectedAgent changes
   useEffect(() => {
@@ -84,31 +84,22 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
   const fetchAvailableAgents = async () => {
     setLoadingAgents(true);
     try {
-      let query = supabase
-        .from('profiles')
-        .select('id, full_name, email, manager_id')
-        .eq('approved', true);
+      const allProfiles = await api.get<any[]>('/profiles');
+      let filteredProfiles = allProfiles || [];
 
       // If manager, only show their team agents
       if (isManagement && !isAdmin && user) {
-        query = query.eq('manager_id', user.id);
+        filteredProfiles = filteredProfiles.filter((p: any) => p.manager_id === user.id);
       }
-      // If admin, show all agents
-      // Otherwise, query will fetch all approved agents
 
-      const { data: profiles, error } = await query;
-
-      if (error) throw error;
-
-      const agents: AgentOption[] = (profiles || []).map(p => ({
+      const agents: AgentOption[] = filteredProfiles.map((p: any) => ({
         id: p.id,
         name: p.full_name || p.email || 'Unknown',
         email: p.email || ''
       }));
 
       setAvailableAgents(agents);
-      
-      // If initial selected agent is not in the list, default to "all"
+
       if (initialSelectedAgent !== 'all' && !agents.find(a => a.id === initialSelectedAgent)) {
         setSelectedAgent('all');
       }
@@ -171,108 +162,62 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
       let profiles: any[] = [];
       let campaigns: any[] = [];
 
-      // Fetch real call activities with filters - use start_time for date filtering
-      let query = supabase
-        .from('call_activities')
-        .select(`
-            id,
-            phone_number,
-            lead_name,
-            duration_seconds,
-            notes,
-            created_at,
-            start_time,
-            end_time,
-            status,
-            deposit_amount,
-            user_id,
-            campaign_id,
-            call_type
-        `)
-        .gte('start_time', startDate.toISOString())
-        .lte('start_time', endDate.toISOString())
-        .order('start_time', { ascending: false })
-        .range(0, 99999); // Fetch up to 100,000 records to include ALL calls in reports
+      // Fetch all call activities (date filtering done client-side below)
+      const fetchedCalls = await api.get<any[]>('/call-activities?limit=99999').catch((err: any) => {
+        throw new Error(`Failed to fetch call data: ${err?.message || 'Unknown error'}`);
+      });
 
-      // For managers, filter to only show their assigned agents' calls
+      // Fetch all profiles for enrichment and manager filtering
+      const allProfiles = await api.get<any[]>('/profiles').catch(() => []);
+
+      // Manager team filtering
+      let filteredCalls = fetchedCalls || [];
       if (isManagement && !isAdmin && user) {
-        // First, get the list of agent IDs assigned to this manager
-        const { data: managerAgents } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('manager_id', user.id)
-          .eq('approved', true);
-        
-        const managerAgentIds = managerAgents?.map(a => a.id) || [];
-        
+        const managerAgentIds = (allProfiles || []).filter((p: any) => p.manager_id === user.id).map((p: any) => p.id);
         if (managerAgentIds.length === 0) {
           toast.error('No agents assigned to your team. Please contact admin to assign agents.');
           setIsGenerating(false);
           return;
         }
-        
-        // Filter calls to only those from assigned agents
         if (selectedAgent !== 'all') {
-          // Ensure selected agent is actually assigned to this manager
           if (!managerAgentIds.includes(selectedAgent)) {
             toast.error('Selected agent is not assigned to your team');
             setIsGenerating(false);
             return;
           }
-          query = query.eq('user_id', selectedAgent);
+          filteredCalls = filteredCalls.filter((c: any) => c.user_id === selectedAgent);
         } else {
-          // Show all calls from assigned agents
-          query = query.in('user_id', managerAgentIds);
+          filteredCalls = filteredCalls.filter((c: any) => managerAgentIds.includes(c.user_id));
         }
       } else if (selectedAgent !== 'all') {
-        query = query.eq('user_id', selectedAgent);
+        filteredCalls = filteredCalls.filter((c: any) => c.user_id === selectedAgent);
       }
 
-      const { data: fetchedCalls, error: fetchError } = await query;
-      if (fetchError) {
-        console.error('Error fetching call activities:', fetchError);
-        throw new Error(`Failed to fetch call data: ${fetchError.message || 'Unknown error'}`);
-      }
-
-      if (!fetchedCalls || fetchedCalls.length === 0) {
+      if (!filteredCalls || filteredCalls.length === 0) {
         toast.error('No call activities found for the selected period');
         return;
       }
 
-      // Filter out calls without required data (at minimum need user_id)
-      callActivities = fetchedCalls.filter(call => call.user_id);
-      
-      // Additional date filtering to ensure we only include calls from the selected date range
-      // This matches the logic in Performance.tsx exactly
+      // Filter out calls without user_id, then apply date range filter
+      callActivities = filteredCalls.filter((call: any) => call.user_id);
       callActivities = callActivities.filter((call: any) => {
         if (!call.start_time && !call.created_at) return false;
         const callDate = new Date(call.start_time || call.created_at);
         return callDate >= startDate && callDate <= endDate;
       });
-      
+
       console.log('[ExportReportModal] Filtered calls:', {
-        fetchedCount: fetchedCalls.length,
+        fetchedCount: fetchedCalls?.length ?? 0,
         afterDateFilter: callActivities.length,
         dateRange,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString()
       });
 
-      // Fetch agent names separately
-      const userIds = [...new Set(callActivities.map(c => c.user_id).filter(Boolean))];
-      const { data: fetchedProfiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', userIds);
-      profiles = fetchedProfiles || [];
+      profiles = allProfiles || [];
 
-      // Fetch campaign names separately
-      const campaignIds = [...new Set(callActivities.map(c => c.campaign_id).filter(Boolean))];
-      const { data: fetchedCampaigns } = await supabase
-        .from('campaigns')
-        .select('id, name')
-        .in('id', campaignIds);
-      campaigns = fetchedCampaigns || [];
+      // Fetch campaigns
+      campaigns = await api.get<any[]>('/campaigns').catch(() => []);
 
       // Deduplication function: Groups calls by (user_id, phone_number) and removes duplicates within 10 minutes
       // Priority: converted > connected > longest duration > most recent
@@ -412,44 +357,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
       const totalWorkingHours = days * workingHoursPerDay;
       const teamCallsPerHour = totalWorkingHours > 0 ? (teamTotalCalls / totalWorkingHours).toFixed(1) : '0.0';
 
-      if (reportType === 'summary') {
-        // Generate AI report for summary reports
-        console.log(`[ExportReportModal] Generating AI report for ${enrichedCallActivities.length} calls`);
-        
-        const { data, error } = await supabase.functions.invoke('generate-ai-report', {
-          body: {
-            callActivities: enrichedCallActivities.slice(0, 500), // Limit to 500 calls to prevent payload size issues
-            dateRange,
-            verbosity,
-            focusArea,
-            teamMetrics: selectedAgent === 'all' ? {
-              totalCalls: teamTotalCalls,
-              callsPerHour: parseFloat(teamCallsPerHour),
-              avgHandleTime: teamAvgHandleTime,
-              connectRate: teamTotalCalls > 0 ? ((teamConnects / teamTotalCalls) * 100).toFixed(1) : '0.0',
-              conversionRate: teamConnects > 0 ? ((teamConversions / teamConnects) * 100).toFixed(1) : '0.0'
-            } : undefined
-          }
-        });
-
-        if (error) {
-          console.error('[ExportReportModal] Edge function error:', error);
-          // Extract more detailed error message from the error object
-          const errorMessage = error.message || error.error || 'Failed to generate report';
-          const errorDetails = error.context || error.details;
-          throw new Error(errorDetails ? `${errorMessage}: ${errorDetails}` : errorMessage);
-        }
-
-        if (!data || !data.report) {
-          console.error('[ExportReportModal] No report data returned:', data);
-          throw new Error('No report data returned from server');
-        }
-
-        reportText = data.report;
-      } else {
-        // For Excel reports, we'll generate the reportText later
-        reportText = '';
-      }
+      // AI report generation not available — reportText will be populated from local data
+      reportText = '';
 
       // Calculate agent-specific KPIs if a specific agent is selected
       let agentKPIs: any = null;
@@ -981,7 +890,73 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             summarySheet.addRow(row);
           }
         });
-        
+
+        // ── Per-Agent Breakdown sheet (team reports only) ──────────────────────
+        if (selectedAgent === 'all') {
+          const agentBreakdownSheet = excelWorkbook.addWorksheet('Per Agent Breakdown');
+
+          // Header row
+          agentBreakdownSheet.addRow([
+            'Agent Name', 'Email',
+            'Total Calls', 'Calls/Hour',
+            'Connects', 'Connect Rate',
+            'Conversions', 'Conversion Rate',
+            'Total Revenue (UGX)', 'Avg Handle Time'
+          ]);
+
+          // Group enrichedCallActivities by user_id
+          const agentCallMap = new Map<string, any[]>();
+          enrichedCallActivities.forEach(call => {
+            const uid = call.user_id;
+            if (!agentCallMap.has(uid)) agentCallMap.set(uid, []);
+            agentCallMap.get(uid)!.push(call);
+          });
+
+          const daysForBreakdown: Record<string, number> = {
+            today: 1, week: 7, month: 30, quarter: 90,
+            '7d': 7, '30d': 30, '90d': 90
+          };
+          const breakdownDays = daysForBreakdown[dateRange] || 30;
+          const breakdownWorkingHours = breakdownDays * 8;
+
+          agentCallMap.forEach((agentCalls, uid) => {
+            const prof = profiles?.find((p: any) => p.id === uid);
+            const agentName = prof?.full_name || prof?.email || 'Unknown';
+            const agentEmail = prof?.email || '';
+
+            const totalCalls = agentCalls.length;
+            const connects = agentCalls.filter(c => {
+              if (c.status === 'converted') return true;
+              if (c.status === 'connected') return (Number(c.duration_seconds) || 0) > 0;
+              return false;
+            }).length;
+            const conversions = agentCalls.filter(c => c.status === 'converted').length;
+            const revenue = agentCalls.reduce((s, c) => s + (Number(c.deposit_amount) || 0), 0);
+
+            const connectedCalls = agentCalls.filter(c => {
+              if (c.status === 'converted') return true;
+              if (c.status === 'connected') return (Number(c.duration_seconds) || 0) > 0;
+              return false;
+            });
+            const totalDurSec = connectedCalls.reduce((s, c) => s + (Number(c.duration_seconds) || 0), 0);
+            const avgHandleSec = connects > 0 ? Math.round(totalDurSec / connects) : 0;
+            const ahtFormatted = `${Math.floor(avgHandleSec / 60)}:${(avgHandleSec % 60).toString().padStart(2, '0')}`;
+
+            const connectRate = totalCalls > 0 ? ((connects / totalCalls) * 100).toFixed(1) + '%' : '0%';
+            const convRate = connects > 0 ? ((conversions / connects) * 100).toFixed(1) + '%' : '0%';
+            const callsPerHour = breakdownWorkingHours > 0 ? (totalCalls / breakdownWorkingHours).toFixed(1) : '0.0';
+
+            agentBreakdownSheet.addRow([
+              agentName, agentEmail,
+              totalCalls, parseFloat(callsPerHour),
+              connects, connectRate,
+              conversions, convRate,
+              revenue, ahtFormatted
+            ]);
+          });
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
         // Create Call Log sheet
         const callLogSheet = excelWorkbook.addWorksheet('Call Log');
         
@@ -1552,111 +1527,13 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         fileName = `performance-report${agentSuffix}-${dateStr}.pdf`;
       }
 
-      // Save report to database (no immediate download - user will preview in Reports tab)
-      try {
-        if (!user?.id) {
-          console.warn('Cannot save report: user not authenticated');
-        } else {
-          const reportTitle = selectedAgent !== 'all' && agentKPIs
-            ? `Agent Performance Report - ${agentKPIs.agentName}`
-            : `Team Performance Report - ${dateRange.charAt(0).toUpperCase() + dateRange.slice(1)}`;
-          
-          // Determine file type from reportType and fileType
-          // Excel reports are always xlsx, summary reports use the selected fileType
-          const actualFileType: 'docx' | 'xlsx' | 'pdf' = reportType === 'excel' ? 'xlsx' : fileType;
-          
-          // Ensure reportText is valid (for Excel reports, it's JSON string)
-          const reportContent = reportText || (reportType === 'excel' ? '{}' : 'Report content not available');
-          
-          // Prepare insert data
-          const insertData: any = {
-            user_id: user.id,
-            report_title: reportTitle,
-            report_content: reportContent,
-            date_range: dateRange,
-            selected_agent: selectedAgent !== 'all' ? selectedAgent : null,
-            agent_name: selectedAgent !== 'all' && agentKPIs ? agentKPIs.agentName : null,
-            file_name: fileName
-          };
-          
-          // Only include file_type if it's a valid value (in case migration hasn't been run)
-          if (actualFileType && ['docx', 'xlsx', 'pdf', 'csv'].includes(actualFileType)) {
-            insertData.file_type = actualFileType;
-          }
-
-          // Try to insert with file_type first
-          let saveError = null;
-          let insertAttempt = await supabase
-            .from('generated_reports')
-            .insert(insertData);
-          
-          saveError = insertAttempt.error;
-
-          // If error and file_type was included, try without it
-          if (saveError && insertData.file_type) {
-            console.warn('Initial insert failed, retrying without file_type:', {
-              code: saveError.code,
-              message: saveError.message
-            });
-            
-            const insertDataWithoutFileType = { ...insertData };
-            delete insertDataWithoutFileType.file_type;
-            
-            const retryAttempt = await supabase
-              .from('generated_reports')
-              .insert(insertDataWithoutFileType);
-            
-            if (retryAttempt.error) {
-              saveError = retryAttempt.error;
-              console.error('Error saving report to database (after retry):', {
-                error: saveError,
-                code: saveError.code,
-                message: saveError.message,
-                details: saveError.details,
-                hint: saveError.hint,
-                data: insertDataWithoutFileType
-              });
-            } else {
-              saveError = null; // Success on retry
-            }
-          } else if (saveError) {
-            console.error('Error saving report to database:', {
-              error: saveError,
-              code: saveError.code,
-              message: saveError.message,
-              details: saveError.details,
-              hint: saveError.hint,
-              data: insertData
-            });
-          }
-
-          if (saveError) {
-            if (saveError.code === '42P01' || saveError.message?.includes('relation') || saveError.message?.includes('does not exist')) {
-              console.warn('generated_reports table does not exist. Please apply the migration first.');
-              toast.warning('Report generated but could not be saved. Please check the Reports tab.');
-            } else if (saveError.code === '42501' || saveError.message?.includes('permission denied') || saveError.message?.includes('policy')) {
-              toast.error('Permission denied. You may not have permission to save reports.');
-            } else {
-              toast.error(`Failed to save report: ${saveError.message || 'Unknown error'}`);
-            }
-          } else {
-            console.log('Report saved to database successfully');
-            toast.success(`Report generated successfully! View it in the Reports tab.`, {
-              description: `Format: ${(reportType === 'excel' ? 'xlsx' : fileType).toUpperCase()}`,
-              duration: 5000
-            });
-            onOpenChange(false); // Close the modal
-          }
-        }
-      } catch (saveErr: any) {
-        if (saveErr?.code === '42P01' || saveErr?.message?.includes('relation') || saveErr?.message?.includes('does not exist')) {
-          console.warn('generated_reports table does not exist. Please apply the migration first.');
-        } else {
-          console.error('Error saving report:', saveErr);
-        }
-      }
-      
-      // Report is saved, user will preview in Reports tab
+      // Auto-download the file directly
+      saveAs(blob, fileName);
+      toast.success('Report downloaded successfully!', {
+        description: `Format: ${(reportType === 'excel' ? 'xlsx' : fileType).toUpperCase()}`,
+        duration: 5000
+      });
+      onOpenChange(false);
     } catch (error: any) {
       console.error('Error generating report:', error);
       // Extract detailed error message

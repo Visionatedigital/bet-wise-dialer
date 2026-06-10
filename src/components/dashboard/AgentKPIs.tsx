@@ -1,8 +1,9 @@
 import { TrendingUp, Phone, Target, Clock, DollarSign } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { formatUGX } from "@/lib/formatters";
+import { formatCurrency } from "@/lib/formatters";
 import { useCallMetrics } from "@/hooks/useCallMetrics";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface KPICardProps {
   title: string;
@@ -11,11 +12,12 @@ interface KPICardProps {
   change?: string;
   icon: React.ElementType;
   color?: string;
+  countryCode?: string;
 }
 
-function KPICard({ title, value, target, change, icon: Icon, color = "text-primary" }: KPICardProps) {
+function KPICard({ title, value, target, change, icon: Icon, color = "text-primary", countryCode = 'UG' }: KPICardProps) {
   const progress = target ? (typeof value === 'number' ? (value / target) * 100 : 0) : undefined;
-  
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -26,7 +28,7 @@ function KPICard({ title, value, target, change, icon: Icon, color = "text-prima
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold mb-1">
-          {typeof value === 'number' && title.includes('Value') ? formatUGX(value) : value}
+          {typeof value === 'number' && title.includes('Value') ? formatCurrency(value, countryCode) : value}
         </div>
         
         {change && (
@@ -53,13 +55,15 @@ function KPICard({ title, value, target, change, icon: Icon, color = "text-prima
 }
 
 export function AgentKPIs() {
-  const { 
-    todayMetrics, 
-    yesterdayMetrics, 
-    loading, 
-    getPercentageChange, 
-    formatDuration, 
-    getAverageHandleTime 
+  const { user } = useAuth();
+  const countryCode = user?.country || 'UG';
+  const {
+    todayMetrics,
+    yesterdayMetrics,
+    loading,
+    getPercentageChange,
+    formatDuration,
+    getAverageHandleTime
   } = useCallMetrics();
 
   if (loading) {
@@ -167,6 +171,7 @@ export function AgentKPIs() {
         change={kpis.depositValue.change}
         icon={DollarSign}
         color="text-success"
+        countryCode={countryCode}
       />
     </div>
   );

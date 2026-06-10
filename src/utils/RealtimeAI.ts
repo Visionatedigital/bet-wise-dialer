@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/supabase/client";
 
 export interface AISuggestion {
   type: 'sentiment' | 'action' | 'compliance' | 'info';
@@ -25,32 +25,27 @@ export class RealtimeAI {
     try {
       console.log('[RealtimeAI] Initializing connection to OpenAI...');
       
-      // Get ephemeral token from edge function
-      const { data, error } = await supabase.functions.invoke('get-realtime-token');
-      
-      if (error) {
-        console.error('[RealtimeAI] Error from get-realtime-token:', error);
-        throw error;
-      }
-      
+      // Get ephemeral token from server
+      const data = await api.get<any>('/ai/realtime-token').catch((err) => {
+        throw new Error('Realtime AI token endpoint not available: ' + err.message);
+      });
+
       console.log('[RealtimeAI] Token response structure:', JSON.stringify(data, null, 2));
-      
+
       // Handle different possible response structures
       let token: string | null = null;
       if (data?.client_secret?.value) {
         token = data.client_secret.value;
       } else if (data?.client_secret) {
-        // If client_secret is a string directly
         token = typeof data.client_secret === 'string' ? data.client_secret : null;
       } else if (data?.session?.client_secret?.value) {
         token = data.session.client_secret.value;
       } else if (data?.value) {
         token = data.value;
       }
-      
+
       if (!token) {
-        console.error('[RealtimeAI] Token not found in response. Response structure:', data);
-        throw new Error(`Failed to get ephemeral token. Response structure: ${JSON.stringify(data)}`);
+        throw new Error('Failed to get ephemeral token from server');
       }
 
       console.log('[RealtimeAI] Got ephemeral token, connecting to OpenAI...');

@@ -10,6 +10,7 @@ import {
   Home,
   LogOut,
   CheckSquare,
+  HelpCircle,
   LucideProps
 } from "lucide-react";
 import WhatsAppLogo from "@/assets/whatsapp-logo.svg";
@@ -59,6 +60,12 @@ const navigationItems = [
     description: "Campaign performance"
   },
   {
+    title: "Promising Leads",
+    url: "/promising-leads",
+    icon: BarChart3,
+    description: "Lead lifecycle & Conversion"
+  },
+  {
     title: "Monitor",
     url: "/monitor",
     icon: Monitor,
@@ -82,6 +89,12 @@ const navigationItems = [
     icon: Settings,
     description: "System configuration"
   },
+  {
+    title: "Help",
+    url: "/help/agent",
+    icon: HelpCircle,
+    description: "How-to guides & support"
+  },
 ];
 
 export function AppSidebar() {
@@ -96,8 +109,8 @@ export function AppSidebar() {
 
   // Filter navigation items based on role
   const filteredNavItems = navigationItems.filter(item => {
-    // Hide Monitor and Integrations from agents
-    if (item.url === '/monitor' || item.url === '/integrations') {
+    // Hide Monitor, Integrations and Promising Leads from agents
+    if (item.url === '/monitor' || item.url === '/integrations' || item.url === '/promising-leads') {
       return isAdmin || isManagement;
     }
     return true;

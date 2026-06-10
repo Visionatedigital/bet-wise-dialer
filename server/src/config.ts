@@ -22,6 +22,7 @@ export const config = {
   whatsapp: {
     token: process.env.WHATSAPP_TOKEN || '',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || 'bangbet-whatsapp-verify',
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
   },
   cors: {
     origin: process.env.CORS_ORIGIN || '*',

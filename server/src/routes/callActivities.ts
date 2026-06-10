@@ -9,15 +9,24 @@ router.use(authenticate as any);
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const { user_id, campaign_id, start_date, end_date, limit = 100, offset = 0 } = req.query;
-    const isAdmin = ['admin', 'management', 'moderator'].includes(req.user!.role);
+    const role = req.user!.role;
+    const isAdmin = role === 'admin' || role === 'moderator';
+    const isManagement = role === 'management';
 
     let sql = 'SELECT ca.*, p.full_name as agent_name FROM call_activities ca LEFT JOIN profiles p ON p.id = ca.user_id WHERE 1=1';
     const params: any[] = [];
     let paramCount = 1;
 
-    if (!isAdmin) {
+    if (!isAdmin && !isManagement) {
       sql += ` AND ca.user_id = $${paramCount++}`;
       params.push(req.user!.id);
+    } else if (isManagement) {
+      sql += ` AND ca.user_id IN (SELECT id FROM profiles WHERE country = (SELECT country FROM profiles WHERE id = $${paramCount++}))`;
+      params.push(req.user!.id);
+      if (user_id) {
+        sql += ` AND ca.user_id = $${paramCount++}`;
+        params.push(user_id);
+      }
     } else if (user_id) {
       sql += ` AND ca.user_id = $${paramCount++}`;
       params.push(user_id);
@@ -60,7 +69,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
     // Update daily metrics
     const dateStr = new Date().toISOString().split('T')[0];
-    const isConnect = duration_seconds > 0;
+    const ANSWERED_STATUSES = ['interested', 'not_interested', 'answered_no_response', 'connected'];
+    const isConnect = duration_seconds > 0 || ANSWERED_STATUSES.includes(status);
     const isConversion = deposit_amount !== null && deposit_amount > 0;
 
     await query(

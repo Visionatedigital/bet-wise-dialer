@@ -47,7 +47,7 @@ export default function CallbacksScreen() {
                     {new Date(item.scheduled_for).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                   </Text>
                 </View>
-                <TouchableOpacity style={styles.callBtn} onPress={() => Linking.openURL(`tel:${item.phone_number}`)}>
+                <TouchableOpacity style={styles.callBtn} onPress={() => { const cleanPhone = item.phone_number.replace(/\s+/g, ''); const ph = cleanPhone.startsWith("+") ? cleanPhone : `+${cleanPhone}`; Linking.openURL(`tel:${ph}`); }}>
                   <Text style={styles.callBtnText}><Feather name="phone" size={13} color="#fff" /> Call</Text>
                 </TouchableOpacity>
               </View>

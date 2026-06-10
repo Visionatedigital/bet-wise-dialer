@@ -50,7 +50,7 @@ export function ManagementLayout({ children }: ManagementLayoutProps) {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
+      <div className="flex min-h-screen w-full bg-slate-50/50 dark:bg-slate-950">
         <ManagementSidebar />
         
         <div className="flex-1 flex flex-col">
@@ -112,7 +112,7 @@ export function ManagementLayout({ children }: ManagementLayoutProps) {
             </div>
           </header>
 
-          <main className="flex-1 p-6">{children}</main>
+          <main className="flex-1 p-8 overflow-y-auto">{children}</main>
 
           <footer className="border-t bg-muted/30 px-6 py-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">

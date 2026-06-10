@@ -31,6 +31,13 @@ const Callbacks = lazy(() => import("./pages/Callbacks"));
 const WhatsApp = lazy(() => import("./pages/WhatsApp"));
 const Kanban = lazy(() => import("./pages/Kanban"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
+const PromisingLeads = lazy(() => import("./pages/PromisingLeads"));
+const ManagerImportLeads = lazy(() => import("./pages/ManagerImportLeads"));
+const ManagerRefreshPerformance = lazy(() => import("./pages/ManagerRefreshPerformance"));
+const ManagerHelp = lazy(() => import("./pages/ManagerHelp"));
+const AgentHelp = lazy(() => import("./pages/AgentHelp"));
+const CrmDashboard = lazy(() => import("./pages/CrmDashboard"));
+const CrmImportLeads = lazy(() => import("./pages/CrmImportLeads"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -166,6 +173,21 @@ const App = () => (
                         <Kanban />
                       </ProtectedRoute>
                     } />
+                    <Route path="/promising-leads" element={
+                      <ProtectedRoute>
+                        <PromisingLeads />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/manager/import-leads" element={
+                      <ProtectedRoute>
+                        <ManagerImportLeads />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/manager/refresh-performance" element={
+                      <ProtectedRoute>
+                        <ManagerRefreshPerformance />
+                      </ProtectedRoute>
+                    } />
                     <Route path="/settings" element={
                       <ProtectedRoute>
                         <RoleBasedSettings />
@@ -179,6 +201,26 @@ const App = () => (
                     <Route path="/users" element={
                       <ProtectedRoute>
                         <UserManagement />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/help/manager" element={
+                      <ProtectedRoute>
+                        <ManagerHelp />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/help/agent" element={
+                      <ProtectedRoute>
+                        <AgentHelp />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/crm/dashboard" element={
+                      <ProtectedRoute allowedRoles={['crm', 'admin']}>
+                        <CrmDashboard />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/crm/import-leads" element={
+                      <ProtectedRoute allowedRoles={['crm', 'admin']}>
+                        <CrmImportLeads />
                       </ProtectedRoute>
                     } />
                     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

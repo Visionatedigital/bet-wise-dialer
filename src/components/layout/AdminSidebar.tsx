@@ -1,4 +1,4 @@
-import { Users, UserCog, FileText, Settings, LayoutDashboard, Phone } from "lucide-react";
+import { Users, UserCog, FileText, Settings, LayoutDashboard, Phone, Upload, RefreshCcw } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -16,6 +16,8 @@ import {
 const adminMenuItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "User Management", url: "/user-management", icon: UserCog },
+  { title: "Import Leads", url: "/manager/import-leads", icon: Upload },
+  { title: "Refresh Performance", url: "/manager/refresh-performance", icon: RefreshCcw },
   { title: "Reports", url: "/reports", icon: FileText },
   { title: "Settings", url: "/settings", icon: Settings },
 ];

@@ -8,6 +8,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import Dashboard from '@/pages/Dashboard';
 import AdminDashboard from '@/pages/AdminDashboard';
 import ManagementDashboard from '@/pages/ManagementDashboard';
+import CrmDashboard from '@/pages/CrmDashboard';
 import { DashboardSelectionDialog } from './DashboardSelectionDialog';
 
 export const RoleBasedDashboard = () => {
@@ -31,7 +32,7 @@ export const RoleBasedDashboard = () => {
   }, [role, loading]);
 
 
-  const handleDashboardSelection = (dashboard: 'agent' | 'management' | 'admin') => {
+  const handleDashboardSelection = (dashboard: 'agent' | 'management' | 'admin' | 'crm') => {
     localStorage.setItem('adminViewMode', dashboard);
     setShowDashboardSelection(false);
     window.location.reload();
@@ -68,10 +69,14 @@ export const RoleBasedDashboard = () => {
       return <Dashboard />;
     } else if (adminViewMode === 'management') {
       return <ManagementDashboard />;
+    } else if (adminViewMode === 'crm') {
+      return <CrmDashboard />;
     }
     return <AdminDashboard />;
   } else if (role === 'management') {
     return <ManagementDashboard />;
+  } else if (role === 'crm') {
+    return <CrmDashboard />;
   } else {
     return <Dashboard />;
   }

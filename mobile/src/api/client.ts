@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 
 // Change this to your backend IP/URL
-const API_BASE = "http://159.89.51.97:3001/api";
+export const API_BASE = "https://159.89.51.97.sslip.io/api";
 
 export const TOKEN_KEY = "bangbet_token";
 
@@ -68,6 +68,9 @@ export const api = {
     }),
   patch: <T>(path: string, body: unknown) =>
     apiRequest<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
-  delete: <T>(path: string) =>
-    apiRequest<T>(path, { method: "DELETE" }),
+  delete: <T>(path: string, body?: unknown) =>
+    apiRequest<T>(path, {
+      method: "DELETE",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
 };

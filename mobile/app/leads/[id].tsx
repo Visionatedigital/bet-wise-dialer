@@ -12,6 +12,9 @@ import { api } from "../../src/api/client";
 import { parseCallbackIntent } from "../../src/utils/parseCallbackIntent";
 import { colors } from "../../src/theme/colors";
 import { leadDisplayName } from "../../src/utils/leadDisplayName";
+import { computeCooldown } from "../../src/utils/cooldown";
+import { getCurrencyFromPhone, getCurrencyFromCountry, formatCurrency, CURRENCY_SYMBOLS } from "../../src/utils/formatCurrency";
+import { useAuth } from "../../src/contexts/AuthContext";
 
 const DISPOSITIONS = [
   { value: "interested", label: "Interested", icon: "thumbs-up" as const, color: "#10b981", bg: "#dcfce7" },
@@ -30,6 +33,7 @@ export default function LeadDetailScreen() {
   const { data: lead, isLoading } = useLead(id!);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   // Call outcome modal state
   const [showOutcome, setShowOutcome] = useState(false);
@@ -56,7 +60,9 @@ export default function LeadDetailScreen() {
   const handleCall = () => {
     if (!lead) return;
     callPending.current = true;
-    Linking.openURL(`tel:${lead.phone}`);
+    const cleanPhone = lead.phone.replace(/\s+/g, '');
+    const phoneNumber = cleanPhone.startsWith("+") ? cleanPhone : `+${cleanPhone}`;
+    Linking.openURL(`tel:${phoneNumber}`);
   };
 
   const handleSaveOutcome = async () => {
@@ -73,17 +79,18 @@ export default function LeadDetailScreen() {
         phone_number: lead.phone,
         lead_name: lead.name,
         call_type: "native_dialer",
-        status: disposition === "interested" || disposition === "not_interested" ? "connected" : disposition,
+        status: disposition,
         duration_seconds: 0,
         deposit_amount: depositAmount ? Number(depositAmount) : null,
         notes: notes || null,
         campaign_id: lead.campaign_id || null,
       });
 
-      // Update lead status (stored in last_activity)
       await api.patch(`/leads/${lead.id}`, {
+        status: disposition,
         last_activity: disposition,
         last_contact_at: new Date().toISOString(),
+        ...(disposition === "interested" ? { lifecycle_stage: "interested" } : {}),
       });
 
       // Auto-detect or manual callback
@@ -122,6 +129,11 @@ export default function LeadDetailScreen() {
     setScheduleCallback(false);
   };
 
+  const currency = lead 
+    ? (lead.country ? getCurrencyFromCountry(lead.country) : getCurrencyFromPhone(lead.phone, user?.country || 'UG'))
+    : 'UGX';
+  const symbol = CURRENCY_SYMBOLS[currency] || currency;
+
   if (isLoading || !lead) {
     return (
       <>
@@ -135,7 +147,7 @@ export default function LeadDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: leadDisplayName(lead.phone), headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default }, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
+      <Stack.Screen options={{ headerShown: true, title: leadDisplayName(lead.phone), headerStyle: { backgroundColor: colors.bg.card, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: colors.border.default } as any, headerTintColor: colors.text.primary, headerTitleStyle: { fontWeight: "700" } }} />
       <ScrollView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -149,6 +161,21 @@ export default function LeadDetailScreen() {
           </View>
         </View>
 
+        {(() => {
+          const cd = computeCooldown(lead.last_contact_at, lead.last_activity || lead.status);
+          if (cd.severity === "none") return null;
+          return (
+            <View style={[styles.cooldownBanner, { backgroundColor: cd.bg, borderColor: cd.color }]}>
+              <Feather
+                name={cd.severity === "strong" ? "alert-octagon" : cd.severity === "mild" ? "clock" : "check-circle"}
+                size={14}
+                color={cd.color}
+              />
+              <Text style={[styles.cooldownText, { color: cd.color }]}>{cd.message}</Text>
+            </View>
+          );
+        })()}
+
         <TouchableOpacity style={styles.callButton} onPress={handleCall} activeOpacity={0.8}>
           <Feather name="phone-outgoing" size={18} color="#fff" />
           <Text style={styles.callText}>Call {leadDisplayName(lead.phone)}</Text>
@@ -159,32 +186,152 @@ export default function LeadDetailScreen() {
           <Text style={styles.logText}>Log Call Outcome</Text>
         </TouchableOpacity>
 
-        {/* Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Lead Info</Text>
-          <InfoRow label="Campaign" value={lead.campaign_name || lead.campaign || "—"} />
-          <InfoRow label="Segment" value={lead.segment || "—"} />
-          <InfoRow label="Priority" value={lead.priority} />
-          <InfoRow label="Score" value={lead.score?.toString() || "—"} />
-          <InfoRow label="Last Deposit" value={lead.last_deposit_ugx ? `UGX ${lead.last_deposit_ugx.toLocaleString()}` : "—"} />
-          <InfoRow label="Product" value={lead.preferred_product || lead.intent || "—"} />
-          <InfoRow label="Trait" value={lead.trait || "—"} last />
-        </View>
+        {/* ===== BETTING INTEL CARD ===== */}
+        {(lead.trait || lead.lead_score != null || lead.lifetime_value != null || lead.betting_patterns != null || lead.deposit_count != null) ? (
+          <>
+            {/* Derive display tier from trait or lead_score */}
+            {(() => {
+              const score = lead.lead_score ?? lead.score ?? 0;
+              const tier = lead.trait || (
+                score >= 70 ? 'High Staker' :
+                score >= 40 ? 'Medium Staker' :
+                score >= 20 ? 'Frequent Bettor' :
+                (lead.deposit_count ?? 0) > 0 ? 'Low Staker' : 'Dormant'
+              );
+              const tierColors: Record<string, { bg: string; border: string; iconBg: string; icon: string; iconColor: string; textColor: string }> = {
+                'High Staker':    { bg: '#fef2f2', border: '#fecaca', iconBg: '#fee2e2', icon: 'award',      iconColor: '#dc2626', textColor: '#991b1b' },
+                'Medium Staker':  { bg: '#fffbeb', border: '#fde68a', iconBg: '#fef3c7', icon: 'trending-up', iconColor: '#d97706', textColor: '#92400e' },
+                'Frequent Bettor':{ bg: '#eff6ff', border: '#bfdbfe', iconBg: '#dbeafe', icon: 'activity',   iconColor: '#2563eb', textColor: '#1e40af' },
+                'Dormant':        { bg: '#f9fafb', border: '#e5e7eb', iconBg: '#f3f4f6', icon: 'moon',       iconColor: '#6b7280', textColor: '#374151' },
+                'Low Staker':     { bg: '#ecfdf5', border: '#a7f3d0', iconBg: '#dcfce7', icon: 'user',       iconColor: '#059669', textColor: '#065f46' },
+              };
+              const tc = tierColors[tier] || tierColors['Low Staker'];
+              return (
+                <View style={[styles.tierBanner, { backgroundColor: tc.bg, borderColor: tc.border }]}>
+                  <View style={[styles.tierIcon, { backgroundColor: tc.iconBg }]}>
+                    <Feather name={tc.icon as any} size={18} color={tc.iconColor} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.tierTitle, { color: tc.textColor }]}>{tier}</Text>
+                    <Text style={styles.tierSub}>
+                      {lead.preferred_product ? `${lead.preferred_product} player` : lead.segment?.toUpperCase()} · Score {lead.lead_score ?? lead.score ?? '—'}/100
+                    </Text>
+                  </View>
+                  {(lead.lead_score ?? lead.score) != null && (
+                    <View style={[styles.scoreRing, {
+                      borderColor: score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444',
+                    }]}>
+                      <Text style={[styles.scoreNum, {
+                        color: score >= 70 ? '#059669' : score >= 40 ? '#d97706' : '#dc2626',
+                      }]}>{score}</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
 
-        {lead.last_activity && (
+            {/* Key Stats Grid */}
+            <View style={styles.statsGrid}>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>
+                  {lead.betting_patterns?.deposit_usd ? `$${Number(lead.betting_patterns.deposit_usd).toLocaleString(undefined, {maximumFractionDigits: 0})}` : '—'}
+                </Text>
+                <Text style={styles.statLabel}>Deposited</Text>
+              </View>
+              <View style={[styles.statBox, styles.statBorder]}>
+                <Text style={styles.statValue}>
+                  {lead.deposit_count ? Number(lead.deposit_count).toLocaleString() : '—'}
+                </Text>
+                <Text style={styles.statLabel}>Total Bets</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>
+                  {lead.last_bet_date ? (() => {
+                    const d = Math.floor((Date.now() - new Date(lead.last_bet_date).getTime()) / 86400000);
+                    return d === 0 ? 'Today' : d < 30 ? `${d}d ago` : `${Math.floor(d/30)}mo ago`;
+                  })() : '—'}
+                </Text>
+                <Text style={styles.statLabel}>Last Active</Text>
+              </View>
+            </View>
+
+            {/* What They Play */}
+            {lead.betting_patterns && (lead.betting_patterns.sports_bets > 0 || lead.betting_patterns.game_bets > 0) && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>What They Play</Text>
+                {lead.betting_patterns.sports_bets > 0 && (
+                  <View style={styles.barRow}>
+                    <View style={styles.barLabel}>
+                      <Feather name="target" size={12} color="#059669" />
+                      <Text style={styles.barLabelText}>Sports</Text>
+                    </View>
+                    <View style={styles.barTrack}>
+                      <View style={[styles.barFill, { width: `${Math.min(100, Math.round((lead.betting_patterns.sports_bets / (lead.deposit_count || 1)) * 100))}%`, backgroundColor: '#10b981' }]} />
+                    </View>
+                    <Text style={styles.barCount}>{Number(lead.betting_patterns.sports_bets).toLocaleString()}</Text>
+                  </View>
+                )}
+                {lead.betting_patterns.game_bets > 0 && (
+                  <View style={styles.barRow}>
+                    <View style={styles.barLabel}>
+                      <Feather name="monitor" size={12} color="#6366f1" />
+                      <Text style={styles.barLabelText}>Casino</Text>
+                    </View>
+                    <View style={styles.barTrack}>
+                      <View style={[styles.barFill, { width: `${Math.min(100, Math.round((lead.betting_patterns.game_bets / (lead.deposit_count || 1)) * 100))}%`, backgroundColor: '#6366f1' }]} />
+                    </View>
+                    <Text style={styles.barCount}>{Number(lead.betting_patterns.game_bets).toLocaleString()}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Financial Details */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Financial Summary</Text>
+              <InfoRow label={`Deposits (${symbol})`} value={lead.lifetime_value ? formatCurrency(Number(lead.lifetime_value), currency) : '—'} />
+              <InfoRow label="Deposits (USD)" value={lead.betting_patterns?.deposit_usd ? `$${Number(lead.betting_patterns.deposit_usd).toLocaleString()}` : '—'} />
+              {(lead.betting_patterns?.total_bet_amount ?? 0) > 0 && (
+                <InfoRow label="Total Wagered" value={formatCurrency(Number(lead.betting_patterns!.total_bet_amount), currency)} />
+              )}
+              {(lead.betting_patterns?.total_ggr ?? 0) > 0 && (
+                <InfoRow label="GGR" value={formatCurrency(Number(lead.betting_patterns!.total_ggr), currency)} />
+              )}
+              <InfoRow label="Last Login" value={lead.last_bet_date ? new Date(lead.last_bet_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : '—'} last />
+            </View>
+          </>
+        ) : (
+          /* Fallback for leads without betting data */
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Last Activity</Text>
-            <Text style={styles.notesText}>{lead.last_activity}</Text>
+            <Text style={styles.sectionTitle}>Lead Info</Text>
+            <InfoRow label="Segment" value={lead.segment || "—"} />
+            <InfoRow label="Priority" value={lead.priority} />
+            <InfoRow label="Score" value={lead.score?.toString() || "—"} />
+            <InfoRow label="Last Deposit" value={lead.last_deposit_ugx ? formatCurrency(Number(lead.last_deposit_ugx), currency) : "—"} last />
           </View>
         )}
 
-        {lead.next_action && (
+        {/* Campaign & Assignment */}
+        {(lead.campaign_name || lead.campaign || lead.next_action) && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Next Action</Text>
-            <Text style={styles.notesText}>{lead.next_action}</Text>
-            {lead.next_action_due && <Text style={styles.dueDate}>Due: {new Date(lead.next_action_due).toLocaleDateString()}</Text>}
+            <Text style={styles.sectionTitle}>Assignment</Text>
+            {(lead.campaign_name || lead.campaign) && (
+              <InfoRow label="Campaign" value={lead.campaign_name || lead.campaign || "—"} />
+            )}
+            {lead.next_action && (
+              <>
+                <InfoRow label="AI Strategy" value={lead.next_action} />
+                {lead.next_action_due && (
+                  <InfoRow label="Due" value={new Date(lead.next_action_due).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                )}
+              </>
+            )}
+            {lead.last_activity && lead.last_activity !== 'unassigned' && (
+              <InfoRow label="Last Disposition" value={lead.last_activity.replace(/_/g, ' ')} last />
+            )}
           </View>
         )}
+
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -232,7 +379,7 @@ export default function LeadDetailScreen() {
             {disposition === "interested" && (
               <>
                 <Text style={m.label}>
-                  <Feather name="trending-up" size={12} color={colors.status.success} /> Promised Deposit (UGX)
+                  <Feather name="trending-up" size={12} color={colors.status.success} /> Promised Deposit ({symbol})
                 </Text>
                 <TextInput style={m.input} placeholder="e.g. 50000" placeholderTextColor={colors.text.muted} value={depositAmount} onChangeText={setDepositAmount} keyboardType="numeric" />
 
@@ -333,10 +480,34 @@ const styles = StyleSheet.create({
   name: { fontSize: 22, fontWeight: "700", color: colors.text.primary },
   phone: { fontSize: 15, color: colors.text.secondary, marginTop: 2 },
   badges: { flexDirection: "row", gap: 8, marginTop: 12 },
+  cooldownBanner: { marginHorizontal: 20, marginTop: 16, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  cooldownText: { fontSize: 12, fontWeight: "600", flex: 1 },
   callButton: { backgroundColor: colors.brand.green, marginHorizontal: 20, marginTop: 16, borderRadius: 8, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
   callText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   logButton: { backgroundColor: colors.bg.card, marginHorizontal: 20, marginTop: 8, borderRadius: 8, paddingVertical: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: colors.brand.green },
   logText: { color: colors.brand.green, fontSize: 14, fontWeight: "700" },
+  // Tier banner
+  tierBanner: { flexDirection: "row", alignItems: "center", gap: 12, marginHorizontal: 20, marginTop: 16, borderRadius: 12, padding: 14, borderWidth: 1 },
+  tierIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  tierTitle: { fontSize: 16, fontWeight: "800" },
+  tierSub: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
+  scoreRing: { width: 44, height: 44, borderRadius: 22, borderWidth: 3, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg.card },
+  scoreNum: { fontSize: 16, fontWeight: "800" },
+
+  // Stats grid
+  statsGrid: { flexDirection: "row", marginHorizontal: 20, marginTop: 12, backgroundColor: colors.bg.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, overflow: "hidden" },
+  statBox: { flex: 1, alignItems: "center", paddingVertical: 14 },
+  statBorder: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border.default },
+  statValue: { fontSize: 16, fontWeight: "800", color: colors.text.primary },
+  statLabel: { fontSize: 10, fontWeight: "600", color: colors.text.muted, textTransform: "uppercase", letterSpacing: 0.3, marginTop: 3 },
+
+  // Bar chart rows
+  barRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
+  barLabel: { flexDirection: "row", alignItems: "center", gap: 6, width: 70 },
+  barLabelText: { fontSize: 13, fontWeight: "600", color: colors.text.secondary },
+  barTrack: { flex: 1, height: 8, backgroundColor: "#f1f5f9", borderRadius: 4, overflow: "hidden" },
+  barFill: { height: 8, borderRadius: 4 },
+  barCount: { fontSize: 12, fontWeight: "700", color: colors.text.primary, width: 50, textAlign: "right" },
   section: { backgroundColor: colors.bg.card, marginHorizontal: 20, marginTop: 16, borderRadius: 8, padding: 16, borderWidth: 1, borderColor: colors.border.default },
   sectionTitle: { fontSize: 11, fontWeight: "700", color: colors.text.secondary, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
   notesText: { fontSize: 14, color: colors.text.primary, lineHeight: 20 },
