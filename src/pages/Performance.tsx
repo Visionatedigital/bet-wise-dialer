@@ -33,6 +33,7 @@ interface AgentPerformance {
   agentName: string;
   email: string;
   calls: number;
+  rawCalls?: number;
   connects: number;
   conversions: number;
   revenue: number;
@@ -69,6 +70,7 @@ export default function Performance() {
   // Calculate team metrics from fetched data instead of using usePerformanceData (which only shows user's own data)
   const [teamMetrics, setTeamMetrics] = useState({
     totalCalls: 0,
+    rawCalls: 0,
     connects: 0,
     conversions: 0,
     totalRevenue: 0,
@@ -456,11 +458,12 @@ export default function Performance() {
       });
 
       // Calculate metrics using deduplicated calls
+      const rawCalls = finalAgentCalls.length;
       const totalCalls = allAgentCallAttempts.length; // All deduplicated call attempts (one per phone number)
       const connects = deduplicatedConnectedAgentCalls.length; // Deduplicated connected calls
       const conversions = deduplicatedConnectedAgentCalls.filter((c: any) => c.status === 'converted').length;
       const revenue = deduplicatedConnectedAgentCalls.reduce((sum: number, c: any) => sum + (Number(c.deposit_amount) || 0), 0);
-      const connectRate = totalCalls > 0 ? ((connects / totalCalls) * 100) : 0;
+      const connectRate = rawCalls > 0 ? ((connects / rawCalls) * 100) : 0;
       const conversionRate = connects > 0 ? ((conversions / connects) * 100) : 0;
 
       setAgentPerformance({
@@ -468,6 +471,7 @@ export default function Performance() {
         agentName: profile.full_name || profile.email || 'Unknown',
         email: profile.email || '',
         calls: totalCalls,
+        rawCalls,
         connects,
         conversions,
         revenue,
@@ -758,6 +762,7 @@ export default function Performance() {
       // Calculate team metrics from FULL data (before filtering for display)
       // This ensures accurate totals regardless of how many days are shown in the chart
       // IMPORTANT: dailyData is now built from callsForDailyData which is filtered by assigned agents
+      const rawCalls = finalCalls.length;
       const totalCalls = dailyData.reduce((sum, day) => sum + day.calls, 0);
       const totalConnects = dailyData.reduce((sum, day) => sum + day.connects, 0);
       const totalConversions = dailyData.reduce((sum, day) => sum + day.conversions, 0);
@@ -765,10 +770,11 @@ export default function Performance() {
       
       console.log('[Performance] Team Metrics Calculation:', {
         totalCalls,
+        rawCalls,
         totalConnects,
         totalConversions,
         totalRevenue,
-        connectRate: totalCalls > 0 ? (totalConnects / totalCalls) * 100 : 0,
+        connectRate: rawCalls > 0 ? (totalConnects / rawCalls) * 100 : 0,
         conversionRate: totalConnects > 0 ? (totalConversions / totalConnects) * 100 : 0,
         allTeamCallAttemptsCount: allTeamCallAttempts.length,
         connectedCallsCount: connectedCalls.length,
@@ -777,10 +783,11 @@ export default function Performance() {
       
       setTeamMetrics({
         totalCalls,
+        rawCalls,
         connects: totalConnects,
         conversions: totalConversions,
         totalRevenue,
-        connectRate: totalCalls > 0 ? (totalConnects / totalCalls) * 100 : 0,
+        connectRate: rawCalls > 0 ? (totalConnects / rawCalls) * 100 : 0,
         conversionRate: totalConnects > 0 ? (totalConversions / totalConnects) * 100 : 0,
       });
 
@@ -1109,11 +1116,11 @@ export default function Performance() {
               <Phone className="h-4 w-4 text-primary mb-2" />
               <div className="text-2xl font-bold">
                 {selectedAgent !== 'all' && agentPerformance 
-                  ? agentPerformance.calls 
-                  : teamMetrics.totalCalls}
+                  ? `${(agentPerformance.rawCalls || 0).toLocaleString()} (${agentPerformance.calls.toLocaleString()} unique)` 
+                  : `${teamMetrics.rawCalls.toLocaleString()} (${teamMetrics.totalCalls.toLocaleString()} unique)`}
               </div>
               <div className="text-xs text-muted-foreground">
-                {selectedAgent !== 'all' ? 'Agent Calls' : 'Total Calls'}
+                {selectedAgent !== 'all' ? 'Agent Calls (attempts)' : 'Total Calls (attempts)'}
               </div>
             </CardContent>
           </Card>
@@ -1162,9 +1169,9 @@ export default function Performance() {
           <Card className="border-2 border-dashed">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Lightbulb className="h-5 w-5 text-yellow-500" />
-                  Data Verification
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-purple-500 animate-pulse" />
+                  Agent Verification Panel (Raw Database Records)
                 </CardTitle>
                 <Button
                   variant="ghost"
@@ -1175,7 +1182,7 @@ export default function Performance() {
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground mt-2">
-                Verify that {teamMetrics.totalCalls.toLocaleString()} calls are from {verificationData.totalAgents} agent(s) between {verificationData.dateRange.start} and {verificationData.dateRange.end}
+                Verify that {teamMetrics.rawCalls.toLocaleString()} calls are from {verificationData.totalAgents} agent(s) between {verificationData.dateRange.start} and {verificationData.dateRange.end}
               </p>
             </CardHeader>
             {showVerification && (

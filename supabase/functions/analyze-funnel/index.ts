@@ -68,11 +68,12 @@ serve(async (req) => {
 
     // Calculate date range
     let endDate = new Date();
+    endDate.setHours(23, 59, 59, 999);
     let startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
     
     switch (dateRange) {
       case "today":
-        startDate.setHours(0, 0, 0, 0);
         break;
       case "yesterday":
         startDate.setDate(startDate.getDate() - 1);
@@ -82,22 +83,29 @@ serve(async (req) => {
         break;
       case "7d":
         startDate.setDate(startDate.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case "30d":
         startDate.setDate(startDate.getDate() - 30);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case "month":
         startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case "last-month":
         startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 1, 1);
+        startDate.setHours(0, 0, 0, 0);
         endDate = new Date(endDate.getFullYear(), endDate.getMonth(), 0);
+        endDate.setHours(23, 59, 59, 999);
         break;
       case "week":
         startDate.setDate(startDate.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case "quarter":
         startDate.setDate(startDate.getDate() - 90);
+        startDate.setHours(0, 0, 0, 0);
         break;
     }
 

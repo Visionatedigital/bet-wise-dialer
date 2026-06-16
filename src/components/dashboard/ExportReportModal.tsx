@@ -329,7 +329,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
       let reportText = '';
       
       // Calculate team-wide metrics for context (needed for both report types)
-      const teamTotalCalls = enrichedCallActivities.length;
+      const teamRawCalls = beforeDedupCount;
+      const teamTotalCalls = afterDedupCount;
       // Only count calls that actually rang and were answered (duration > 0 OR status is converted)
       const teamConnects = enrichedCallActivities.filter(c => {
         if (c.status === 'converted') return true;
@@ -340,7 +341,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
       }).length;
       const teamConversions = enrichedCallActivities.filter(c => c.status === 'converted').length;
       const teamTotalDuration = enrichedCallActivities.reduce((sum, c) => sum + (Number(c.duration_seconds) || 0), 0);
-      const teamAvgHandleTime = teamTotalCalls > 0 ? Math.round(teamTotalDuration / teamTotalCalls) : 0;
+      const teamAvgHandleTime = teamRawCalls > 0 ? Math.round(teamTotalDuration / teamRawCalls) : 0;
       
       // Calculate calls per hour for team
       const daysMapForWorkingHours: Record<string, number> = {
@@ -348,14 +349,14 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         'week': 7,
         'month': 30,
         'quarter': 90,
-        '7d': 7,
-        '30d': 30,
-        '90d': 90
       };
-      const days = daysMapForWorkingHours[dateRange] || 30;
-      const workingHoursPerDay = 8;
-      const totalWorkingHours = days * workingHoursPerDay;
-      const teamCallsPerHour = totalWorkingHours > 0 ? (teamTotalCalls / totalWorkingHours).toFixed(1) : '0.0';
+      
+      const workingDays = daysMapForWorkingHours[dateRange] || 30;
+      const totalWorkingHours = workingDays * 8; // Assume 8 working hours per day
+      
+      // Calculate team metrics
+      // Connect rate calculated from connections / attempts (rawCalls)
+      const teamCallsPerHour = totalWorkingHours > 0 ? (teamRawCalls / totalWorkingHours).toFixed(1) : '0.0';
 
       // AI report generation not available — reportText will be populated from local data
       reportText = '';
@@ -865,10 +866,11 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             [],
             ['Team Performance Summary'],
             ['Metric', 'Value'],
-            ['Total Calls', teamTotalCalls],
+            ['Total Call Attempts (Raw)', teamRawCalls],
+            ['Unique Contacts (Deduplicated)', teamTotalCalls],
             ['Calls Per Hour', parseFloat(teamCallsPerHour)],
             ['Connects', teamConnects],
-            ['Connect Rate', teamTotalCalls > 0 ? `${((teamConnects / teamTotalCalls) * 100).toFixed(1)}%` : '0%'],
+            ['Connect Rate', teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%'],
             ['Conversions', teamConversions],
             ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']
           );
@@ -1076,8 +1078,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           if (selectedAgent !== 'all' && agentKPIs) {
             summaryData.push(['Agent:', agentKPIs.agentName], ['Email:', agentKPIs.email], [], ['Key Performance Indicators'], ['Metric', 'Value', 'Target']);
             summaryData.push(['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `UGX ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
-          } else {
-            summaryData.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Calls', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamTotalCalls > 0 ? `${((teamConnects / teamTotalCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
+            summaryData.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Call Attempts (Raw)', teamRawCalls], ['Unique Contacts (Deduplicated)', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
           }
           const xlsxSummarySheet = XLSX.utils.aoa_to_sheet(summaryData);
           XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxSummarySheet, 'Summary');
@@ -1146,10 +1147,11 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         } else {
           csvRows.push('Team Performance Summary');
           csvRows.push('Metric,Value');
-          csvRows.push(`Total Calls,${teamTotalCalls}`);
+          csvRows.push(`Total Call Attempts (Raw),${teamRawCalls}`);
+          csvRows.push(`Unique Contacts (Deduplicated),${teamTotalCalls}`);
           csvRows.push(`Calls Per Hour,${teamCallsPerHour}`);
           csvRows.push(`Connects,${teamConnects}`);
-          csvRows.push(`Connect Rate,${teamTotalCalls > 0 ? ((teamConnects / teamTotalCalls) * 100).toFixed(1) : '0'}%`);
+          csvRows.push(`Connect Rate,${teamRawCalls > 0 ? ((teamConnects / teamRawCalls) * 100).toFixed(1) : '0'}%`);
           csvRows.push(`Conversions,${teamConversions}`);
           csvRows.push(`Conversion Rate,${teamConnects > 0 ? ((teamConversions / teamConnects) * 100).toFixed(1) : '0'}%`);
         }
@@ -1283,14 +1285,16 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           summarySheet.addRow([]);
           summarySheet.addRow(['Team Performance Summary']);
           summarySheet.addRow(['Metric', 'Value']);
-          const teamRow1 = summarySheet.addRow(['Total Calls']);
-          teamRow1.getCell(2).value = teamTotalCalls;
+          const teamRow1 = summarySheet.addRow(['Total Call Attempts (Raw)']);
+          teamRow1.getCell(2).value = teamRawCalls;
+          const teamRow1b = summarySheet.addRow(['Unique Contacts (Deduplicated)']);
+          teamRow1b.getCell(2).value = teamTotalCalls;
           const teamRow2 = summarySheet.addRow(['Calls Per Hour']);
           teamRow2.getCell(2).value = parseFloat(teamCallsPerHour);
           const teamRow3 = summarySheet.addRow(['Connects']);
           teamRow3.getCell(2).value = teamConnects;
           const teamRow4 = summarySheet.addRow(['Connect Rate']);
-          teamRow4.getCell(2).value = teamTotalCalls > 0 ? `${((teamConnects / teamTotalCalls) * 100).toFixed(1)}%` : '0%';
+          teamRow4.getCell(2).value = teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%';
           const teamRow5 = summarySheet.addRow(['Conversions']);
           teamRow5.getCell(2).value = teamConversions;
           const teamRow6 = summarySheet.addRow(['Conversion Rate']);
@@ -1417,7 +1421,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             summaryData.push(['Agent:', agentKPIs.agentName], ['Email:', agentKPIs.email], [], ['Key Performance Indicators'], ['Metric', 'Value', 'Target']);
             summaryData.push(['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `UGX ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
           } else {
-            summaryData.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Calls', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamTotalCalls > 0 ? `${((teamConnects / teamTotalCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
+            summaryData.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Call Attempts (Raw)', teamRawCalls], ['Unique Contacts (Deduplicated)', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
           }
           const xlsxSummarySheet = XLSX.utils.aoa_to_sheet(summaryData);
           XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxSummarySheet, 'Summary');
@@ -1450,7 +1454,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           summaryDataRows.push(['Agent:', agentKPIs.agentName], ['Email:', agentKPIs.email], [], ['Key Performance Indicators'], ['Metric', 'Value', 'Target']);
           summaryDataRows.push(['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `UGX ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
         } else {
-          summaryDataRows.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Calls', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamTotalCalls > 0 ? `${((teamConnects / teamTotalCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
+          summaryDataRows.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Call Attempts (Raw)', teamRawCalls], ['Unique Contacts (Deduplicated)', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
         }
         
         const xlsxWorkbook = XLSX.utils.book_new();

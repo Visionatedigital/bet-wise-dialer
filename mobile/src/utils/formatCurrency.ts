@@ -10,10 +10,17 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
 
 export function formatCurrency(amount: number, currency: string): string {
   const symbol = CURRENCY_SYMBOLS[currency] || currency;
-  const formatted = new Intl.NumberFormat('en', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  let formatted = '';
+  try {
+    formatted = new Intl.NumberFormat('en', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Number(amount));
+  } catch (e) {
+    // Robust fallback if Intl is not available or throws
+    const cleanAmount = Math.round(Number(amount) || 0);
+    formatted = String(cleanAmount).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
   return `${symbol} ${formatted}`;
 }
 

@@ -45,6 +45,7 @@ export default function WhatsAppChatScreen() {
   }
 
   const sendMessage = async () => {
+    if (!lead) return;
     const textToSend = message.trim();
     if (!textToSend) return;
     

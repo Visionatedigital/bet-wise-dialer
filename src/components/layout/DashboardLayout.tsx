@@ -90,13 +90,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         setQueueCount(leadsCount || 0);
 
         // Fetch today's calls count - for managers, sum across all agents
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
         let callsQuery = supabase
           .from('call_activities')
           .select('*', { count: 'exact', head: true })
           .in('user_id', userIds)
-          .gte('start_time', `${today}T00:00:00`)
-          .lt('start_time', `${today}T23:59:59`);
+          .gte('start_time', `${today}T00:00:00.000Z`)
+          .lt('start_time', `${today}T23:59:59.999Z`);
 
         const { count: callsCount } = await callsQuery;
         setTodayCallsCount(callsCount || 0);

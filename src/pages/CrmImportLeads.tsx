@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 // ─── Column mapping ────────────────────────────────────────────────────────────
 const COL_MAP: Record<string, string> = {
   username: "phone",
+  "手机号": "phone",
   "最后登录时间": "last_login",
   "分类": "category",
   "总票数": "total_bets",
@@ -83,10 +84,22 @@ function parseRows(json: any[], defaultCountry = 'UG'): any[] {
       const r: any = {};
       for (const [k, v] of Object.entries(raw)) r[COL_MAP[k] ?? k.toLowerCase()] = v;
       
-      const rawPhone = String(r.phone ?? r.number ?? r.phonenumber ?? r.username ?? "").trim();
-      if (!rawPhone) return null;
-      const country = detectCountryFromPhone(rawPhone, defaultCountry);
-      const phone = formatPhoneForCountry(rawPhone, country);
+      const rawPhone = String(
+        r.phone ?? r.number ?? r.phonenumber ?? r.username ?? r["手机号"] ?? ""
+      ).trim();
+      let resolvedPhone = rawPhone;
+      if (!resolvedPhone) {
+        for (const val of Object.values(raw)) {
+          const s = String(val || "").replace(/\D/g, "");
+          if (s.length >= 9 && s.length <= 15) {
+            resolvedPhone = s;
+            break;
+          }
+        }
+      }
+      if (!resolvedPhone) return null;
+      const country = detectCountryFromPhone(resolvedPhone, defaultCountry);
+      const phone = formatPhoneForCountry(resolvedPhone, country);
       const digits = phone.replace(/\D/g, "");
       if (digits.length < 10) return null;
       if (seen.has(digits)) return null;
@@ -162,6 +175,7 @@ export default function CrmImportLeads() {
             headers.forEach((h, i) => { obj[h] = vals[i]; });
             return obj;
           });
+        }
         const parsed = parseRows(json, user?.country || 'UG');
         if (parsed.length === 0) { toast.error("No valid phone numbers found"); return; }
         setLeads(parsed);

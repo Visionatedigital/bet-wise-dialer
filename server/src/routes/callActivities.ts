@@ -68,7 +68,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     );
 
     // Update daily metrics
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
     const ANSWERED_STATUSES = ['interested', 'not_interested', 'answered_no_response', 'connected'];
     const isConnect = duration_seconds > 0 || ANSWERED_STATUSES.includes(status);
     const isConversion = deposit_amount !== null && deposit_amount > 0;

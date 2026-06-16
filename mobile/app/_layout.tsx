@@ -54,9 +54,6 @@ export default function RootLayout() {
                 headerShown: false,
                 contentStyle: { backgroundColor: "#f8fafc" },
                 animation: "slide_from_right",
-                statusBarTranslucent: false,
-                statusBarColor: "#ffffff",
-                statusBarStyle: "dark",
               }}
             />
           </AuthProvider>

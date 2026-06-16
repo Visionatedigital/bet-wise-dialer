@@ -66,6 +66,7 @@ function CustomDrawerContent(props: any) {
 
 export default function TabLayout() {
   const { user } = useAuth();
+  const router = useRouter();
   const isManager = user?.role === "management" || user?.role === "admin";
   const isCrm = user?.role === "crm";
   const isAgent = user?.role === "agent";

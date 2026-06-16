@@ -24,14 +24,14 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
 }
 
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
-  if (!req.user || !['admin', 'management'].includes(req.user.role)) {
+  if (!req.user || !['admin', 'moderator', 'management'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
 }
 
 export function requireAdminOrCrm(req: AuthRequest, res: Response, next: NextFunction) {
-  if (!req.user || !['admin', 'management', 'crm'].includes(req.user.role)) {
+  if (!req.user || !['admin', 'moderator', 'management', 'crm'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
   next();

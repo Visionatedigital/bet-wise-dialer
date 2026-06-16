@@ -27,21 +27,25 @@ serve(async (req) => {
 
     // Calculate date range
     let endDate = new Date();
+    endDate.setHours(23, 59, 59, 999);
     let startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
     
     switch (dateRange) {
       case "today":
-        startDate.setHours(0, 0, 0, 0);
         break;
       case "week":
         startDate.setDate(startDate.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case "month":
         startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case "quarter":
         const currentQuarter = Math.floor(endDate.getMonth() / 3);
         startDate = new Date(endDate.getFullYear(), currentQuarter * 3, 1);
+        startDate.setHours(0, 0, 0, 0);
         break;
     }
 

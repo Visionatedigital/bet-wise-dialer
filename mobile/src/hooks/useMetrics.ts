@@ -7,7 +7,7 @@ export function useTodayMetrics() {
     queryKey: ["daily-metrics"],
     queryFn: async () => {
       const data = await api.get<DailyMetrics[]>("/daily-metrics");
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
       return (
         data.find((m) => m.date?.startsWith(today)) || {
           calls_made: 0,
@@ -26,7 +26,7 @@ export function useTeamMetrics() {
   return useQuery({
     queryKey: ["team-metrics-today"],
     queryFn: async () => {
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
       const data = await api.get<DailyMetrics[]>(`/daily-metrics?date=${today}`);
       const totals = data.reduce(
         (acc, m) => ({

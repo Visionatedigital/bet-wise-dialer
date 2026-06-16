@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 // ─── Column mapping: betting-platform (Chinese) → internal ────────────────────
 const COL_MAP: Record<string, string> = {
   username: "phone",
+  "手机号": "phone",
   "最后登录时间": "last_login",
   "分类": "category",
   "总票数": "total_bets",
@@ -163,10 +164,22 @@ function parseRows(json: any[], defaultCountry = 'UG'): ParsedLead[] {
         r[COL_MAP[k] ?? k.toLowerCase()] = v;
       }
 
-      const rawPhone = String(r.phone ?? r.number ?? r.phonenumber ?? r.username ?? "").trim();
-      if (!rawPhone) return null;
-      const country = detectCountryFromPhone(rawPhone, defaultCountry);
-      const phone = formatPhoneForCountry(rawPhone, country);
+      const rawPhone = String(
+        r.phone ?? r.number ?? r.phonenumber ?? r.username ?? r["手机号"] ?? ""
+      ).trim();
+      let resolvedPhone = rawPhone;
+      if (!resolvedPhone) {
+        for (const val of Object.values(raw)) {
+          const s = String(val || "").replace(/\D/g, "");
+          if (s.length >= 9 && s.length <= 15) {
+            resolvedPhone = s;
+            break;
+          }
+        }
+      }
+      if (!resolvedPhone) return null;
+      const country = detectCountryFromPhone(resolvedPhone, defaultCountry);
+      const phone = formatPhoneForCountry(resolvedPhone, country);
       const digits = phone.replace(/\D/g, "");
       if (digits.length < 10) return null;
       if (seen.has(digits)) return null;
@@ -426,10 +439,22 @@ export default function ManagerImportLeads() {
     setImporting(true);
     try {
       const BATCH = 100;
+      const leadMap: Record<string, string> = {};
       for (let i = 0; i < leads.length; i += BATCH) {
         const batch = leads.slice(i, i + BATCH);
-        await api.post("/leads/import-csv", { leads: batch, source_filename: fileName });
+        const resp = await api.post<{ lead_map?: Record<string, string> }>(
+          "/leads/import-csv",
+          { leads: batch, source_filename: fileName }
+        );
+        if (resp.lead_map) Object.assign(leadMap, resp.lead_map);
       }
+      setLeads(prev =>
+        prev.map(lead => {
+          const digits = lead.phone.replace(/\D/g, "");
+          const dbId = leadMap[digits];
+          return dbId ? { ...lead, id: dbId } : lead;
+        })
+      );
       toast.success(`${leads.length} leads imported successfully`);
       setStep(3);
     } catch (err: any) {
@@ -457,10 +482,18 @@ export default function ManagerImportLeads() {
 
   const assignLeads = async () => {
     if (!assigningAgent || selectedIds.size === 0) return;
+    const leadIds = [...selectedIds].filter(id => /^[0-9a-f-]{36}$/i.test(id));
+    if (leadIds.length === 0) {
+      toast.error("Selected leads could not be matched in the database. Try re-importing the file.");
+      return;
+    }
+    if (leadIds.length < selectedIds.size) {
+      toast.warning(`${selectedIds.size - leadIds.length} selected leads were skipped during import and cannot be assigned`);
+    }
     setAssigning(true);
     try {
       const resp = await api.post<{ updated: number }>("/leads/bulk-assign", {
-        lead_ids: [...selectedIds],
+        lead_ids: leadIds,
         agent_id: assigningAgent,
       });
       const agentName = agents.find(a => a.id === assigningAgent)?.full_name ?? "agent";

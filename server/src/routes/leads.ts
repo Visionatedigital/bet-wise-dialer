@@ -366,6 +366,7 @@ router.post('/import-csv', requireAdminOrCrm as any, async (req: AuthRequest, re
     // INSERT net-new leads.
     const BATCH_SIZE = 500;
     const newlyInsertedIds: string[] = [];
+    const leadMap: Record<string, string> = {};
     for (let i = 0; i < newRecords.length; i += BATCH_SIZE) {
       const batch = newRecords.slice(i, i + BATCH_SIZE);
       const insertValues: string[] = [];
@@ -405,6 +406,9 @@ router.post('/import-csv', requireAdminOrCrm as any, async (req: AuthRequest, re
         insertParams
       );
       for (const row of ins.rows) newlyInsertedIds.push(row.id);
+      for (let j = 0; j < ins.rows.length; j++) {
+        leadMap[batch[j].phoneDigits] = ins.rows[j].id;
+      }
     }
 
     // Emit imported events for newly-inserted leads.
@@ -484,6 +488,7 @@ router.post('/import-csv', requireAdminOrCrm as any, async (req: AuthRequest, re
           score_change: newScore - prevScore,
         }
       });
+      leadMap[fresh.phoneDigits] = row.id;
     }
 
     // Batch insert enrichment events.
@@ -526,6 +531,7 @@ router.post('/import-csv', requireAdminOrCrm as any, async (req: AuthRequest, re
         `INSERT INTO lead_events (lead_id, user_id, event_type, event_data) VALUES ($1, $2, $3, $4)`,
         [row.id, req.user!.id, 'recycled', JSON.stringify({ source_filename })]
       );
+      leadMap[fresh.phoneDigits] = row.id;
     }
 
     // Distribute newly-inserted and recycled leads.
@@ -577,6 +583,7 @@ router.post('/import-csv', requireAdminOrCrm as any, async (req: AuthRequest, re
       skipped_detail: skipped.slice(0, 50),
       imported: newlyInsertedIds.length,
       duplicates: enrichUpdates.length + skipped.length,
+      lead_map: leadMap,
     });
   } catch (err: any) {
     await client.query('ROLLBACK');

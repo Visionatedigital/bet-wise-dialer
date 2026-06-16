@@ -22,6 +22,7 @@ export const COUNTRY_MAP: Record<string, CountryConfig> = Object.fromEntries(
 
 /** Detect country code from a raw phone number string */
 export function detectCountryFromPhone(phone: string, defaultCountry = 'UG'): string {
+  if (!phone) return defaultCountry;
   const d = phone.replace(/\D/g, '');
   if (d.startsWith('256')) return 'UG';
   if (d.startsWith('233')) return 'GH';
@@ -33,6 +34,7 @@ export function detectCountryFromPhone(phone: string, defaultCountry = 'UG'): st
 
 /** Normalise a raw phone string to E.164 format for the given country */
 export function formatPhoneForCountry(raw: string, countryCode: string): string {
+  if (!raw) return '';
   const c = COUNTRY_MAP[countryCode] || COUNTRY_MAP['UG'];
   let digits = raw.replace(/\D/g, '');
   // Strip leading 0 and prepend country dial code
@@ -44,6 +46,7 @@ export function formatPhoneForCountry(raw: string, countryCode: string): string 
 
 /** Display a phone with masked middle digits, country-aware */
 export function maskPhoneDisplay(phone: string): string {
+  if (!phone) return '';
   const digits = phone.replace(/\D/g, '');
   for (const c of COUNTRIES) {
     if (digits.startsWith(c.dialCode)) {

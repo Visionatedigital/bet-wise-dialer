@@ -46,8 +46,10 @@ export const useCallMetrics = () => {
     setError(null);
 
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
+      const yesterdayDate = new Date();
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+      const yesterday = yesterdayDate.toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
 
       // Fetch daily metrics
       const fetchedMetrics = await api.get<DailyMetrics[]>(`/daily-metrics?user_id=${user.id}&start_date=${yesterday}&end_date=${today}`);

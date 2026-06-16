@@ -92,6 +92,7 @@ export function usePerformanceData(dateRange: string, campaignId?: string, force
         switch (dateRange) {
           case "today":
             startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
             break;
           case "yesterday":
             startDate.setDate(startDate.getDate() - 1);
@@ -101,16 +102,24 @@ export function usePerformanceData(dateRange: string, campaignId?: string, force
             break;
           case "7d":
             startDate.setDate(startDate.getDate() - 7);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
             break;
           case "30d":
             startDate.setDate(startDate.getDate() - 30);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
             break;
           case "month":
             startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
             break;
           case "last-month":
             startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 1, 1);
+            startDate.setHours(0, 0, 0, 0);
             endDate = new Date(endDate.getFullYear(), endDate.getMonth(), 0);
+            endDate.setHours(23, 59, 59, 999);
             break;
         }
 

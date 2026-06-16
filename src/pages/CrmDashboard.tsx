@@ -162,7 +162,6 @@ export default function CrmDashboard() {
   const vipClients = leads.filter(l => l.segment === 'vip').length;
 
   return (
-  return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
         

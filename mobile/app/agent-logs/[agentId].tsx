@@ -19,7 +19,6 @@ import { colors } from "../../src/theme/colors";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { getCurrencyFromCountry, getCurrencyFromPhone, formatCurrency } from "../../src/utils/formatCurrency";
 import * as FileSystem from "expo-file-system/legacy";
-import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -81,18 +80,42 @@ function getPresetRange(preset: PresetKey, custom: DateRange): DateRange {
 }
 
 function formatRangeLabel(range: DateRange): string {
-  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  const s = range.start.toLocaleDateString("en-US", opts);
-  const e = range.end.toLocaleDateString("en-US", opts);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const sMonth = months[range.start.getMonth()];
+  const sDay = range.start.getDate();
+  const eMonth = months[range.end.getMonth()];
+  const eDay = range.end.getDate();
+  
+  const s = `${sMonth} ${sDay}`;
+  const e = `${eMonth} ${eDay}`;
   return s === e ? s : `${s} – ${e}`;
 }
 
 function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  let hours = d.getHours();
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${hours}:${minutes} ${ampm}`;
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const month = months[d.getMonth()];
+  const day = d.getDate();
+  let hours = d.getHours();
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${month} ${day}, ${hours}:${minutes} ${ampm}`;
 }
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> = {
@@ -146,13 +169,15 @@ export default function AgentLogsScreen() {
 
   const callbacksByPhone = React.useMemo(() => {
     const map: Record<string, Callback> = {};
-    callbacks?.forEach((cb) => { map[cb.phone_number] = cb; });
+    if (Array.isArray(callbacks)) {
+      callbacks.forEach((cb) => { map[cb.phone_number] = cb; });
+    }
     return map;
   }, [callbacks]);
 
-  const totalCalls  = calls?.length ?? 0;
-  const connects    = calls?.filter((c) => ["connected", "interested", "converted"].includes(c.status)).length ?? 0;
-  const conversions = calls?.filter((c) => c.deposit_amount && c.deposit_amount > 0).length ?? 0;
+  const totalCalls  = Array.isArray(calls) ? calls.length : 0;
+  const connects    = Array.isArray(calls) ? calls.filter((c) => ["connected", "interested", "converted"].includes(c.status)).length : 0;
+  const conversions = Array.isArray(calls) ? calls.filter((c) => c.deposit_amount && c.deposit_amount > 0).length : 0;
 
   function openCustomModal() {
     setTempStart(custom.start);
@@ -206,9 +231,24 @@ export default function AgentLogsScreen() {
       const uri = FileSystem.documentDirectory + filename;
 
       await FileSystem.writeAsStringAsync(uri, wbout, { encoding: FileSystem.EncodingType.Base64 });
-      await Sharing.shareAsync(uri, {
-        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        dialogTitle: `${agentName || "Agent"} Report — ${rangeLabel}`,
+      
+      try {
+        const Sharing = require("expo-sharing");
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri, {
+            mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            dialogTitle: `${agentName || "Agent"} Report — ${rangeLabel}`,
+          });
+          return;
+        }
+      } catch (e) {
+        console.warn("expo-sharing is not available, falling back to React Native Share", e);
+      }
+
+      // Fallback: React Native built-in Share
+      await Share.share({
+        title: `${agentName || "Agent"} Report — ${rangeLabel}`,
+        url: uri,
       });
     } catch (error) {
       console.error("Export report error:", error);
@@ -305,13 +345,14 @@ export default function AgentLogsScreen() {
               <ActivityIndicator color={colors.brand.green} />
               <Text style={styles.loadingText}>Loading logs...</Text>
             </View>
-          ) : !calls || calls.length === 0 ? (
+          ) : !Array.isArray(calls) || calls.length === 0 ? (
             <View style={styles.emptyBox}>
               <Feather name="phone-off" size={22} color={colors.text.muted} />
               <Text style={styles.emptyText}>No calls in this period</Text>
             </View>
           ) : (
             calls.map((call, i) => {
+              if (!call) return null;
               const s  = STATUS_STYLE[call.status] || { bg: "#f3f4f6", text: "#374151", label: call.status };
               const cb = callbacksByPhone[call.phone_number];
               return (

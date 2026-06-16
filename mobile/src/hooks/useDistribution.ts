@@ -9,6 +9,7 @@ interface AgentAvailable {
   role: string;
   assigned_leads: string;
   total_score: string;
+  avatar_url?: string;
 }
 
 interface DistributionStats {

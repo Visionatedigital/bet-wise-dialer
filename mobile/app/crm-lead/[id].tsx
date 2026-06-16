@@ -280,7 +280,7 @@ export default function LeadProfileScreen() {
                     onPress={async () => {
                       setAiAnalyzing(true);
                       try {
-                        const analysis = await api.post("/crm/activities/analyze", {
+                        const analysis = await api.post<any>("/crm/activities/analyze", {
                           lead_id: lead.id,
                           pasted_text: pastedText,
                           agent_notes: agentNote,

@@ -20,6 +20,7 @@ interface AgentStats {
   agentName: string;
   email: string;
   calls: number;
+  rawCalls: number;
   connects: number;
   qualified: number;
   conversions: number;
@@ -42,7 +43,7 @@ const ManagementDashboard = () => {
     fetchAgentStats();
   }, [dateRange, selectedAgent]);
 
-  // Deduplication function: Groups calls by phone_number and removes duplicates within 10 minutes
+  // Deduplication function: Groups calls by phone_number (since we're already filtering by agent)
   // If agent calls same number multiple times within 10 minutes, keep only one
   // Priority: converted > connected > longest duration > most recent
   const deduplicateCallsForAgent = (calls: any[]): any[] => {
@@ -218,6 +219,7 @@ const ManagementDashboard = () => {
             agentName: profile.full_name || 'Unknown',
             email: profile.email || '',
             calls: totalCalls,
+            rawCalls: calls?.length || 0,
             connects,
             qualified,
             conversions,
@@ -242,16 +244,17 @@ const ManagementDashboard = () => {
   const totals = filteredAgents.reduce(
     (acc, agent) => ({
       calls: acc.calls + agent.calls,
+      rawCalls: acc.rawCalls + agent.rawCalls,
       connects: acc.connects + agent.connects,
       qualified: acc.qualified + (agent.qualified || 0),
       conversions: acc.conversions + agent.conversions,
       deposits: acc.deposits + agent.deposits
     }),
-    { calls: 0, connects: 0, qualified: 0, conversions: 0, deposits: 0 }
+    { calls: 0, rawCalls: 0, connects: 0, qualified: 0, conversions: 0, deposits: 0 }
   );
 
-  // Calculate rates from totals to ensure accuracy
-  const connectRate = totals.calls > 0 ? ((totals.connects / totals.calls) * 100).toFixed(1) : '0.0';
+  // Calculate rates from totals to ensure accuracy (connect rate calculated on raw call attempts to see true outreach efficiency)
+  const connectRate = totals.rawCalls > 0 ? ((totals.connects / totals.rawCalls) * 100).toFixed(1) : '0.0';
   const qualificationRate = totals.connects > 0 ? ((totals.qualified / totals.connects) * 100).toFixed(1) : '0.0';
   const conversionRate = totals.qualified > 0 ? ((totals.conversions / totals.qualified) * 100).toFixed(1) : '0.0';
 
@@ -306,9 +309,11 @@ const ManagementDashboard = () => {
               <Phone className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totals.calls.toLocaleString()}</div>
+              <div className="text-2xl font-bold">
+                {totals.rawCalls.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">({totals.calls.toLocaleString()} unique)</span>
+              </div>
               <p className="text-xs text-muted-foreground">
-                {connectRate}% connect rate
+                {connectRate}% connect rate (attempts)
               </p>
             </CardContent>
           </Card>

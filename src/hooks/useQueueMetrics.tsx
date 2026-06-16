@@ -25,9 +25,19 @@ export function useQueueMetrics() {
         return;
       }
 
-      // Fetch calls for today
-      const today = new Date().toISOString().split('T')[0];
-      const callActivities = await api.get<any[]>(`/call-activities?start_date=${today}T00:00:00&end_date=${today}T23:59:59&limit=5000`);
+      // Fetch calls for today in Uganda timezone (EAT = UTC+3)
+      const now = new Date();
+      // Uganda start of day (00:00:00 EAT) is 21:00:00 UTC of previous day
+      const startOfTodayEAT = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Kampala' }));
+      startOfTodayEAT.setHours(0, 0, 0, 0);
+      // EAT is 3 hours ahead of UTC, so subtract 3 hours to get the UTC time
+      const startOfTodayUTC = new Date(startOfTodayEAT.getTime() - (3 * 60 * 60 * 1000));
+      
+      const endOfTodayEAT = new Date(startOfTodayEAT);
+      endOfTodayEAT.setHours(23, 59, 59, 999);
+      const endOfTodayUTC = new Date(endOfTodayEAT.getTime() - (3 * 60 * 60 * 1000));
+
+      const callActivities = await api.get<any[]>(`/call-activities?start_date=${startOfTodayUTC.toISOString()}&end_date=${endOfTodayUTC.toISOString()}&limit=5000`);
 
       // Mock calculation for Leads, since fetching all leads is expensive locally
       const queueMetrics: QueueMetric[] = campaigns.map(campaign => {

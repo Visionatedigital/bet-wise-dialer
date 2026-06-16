@@ -44,6 +44,7 @@ export function useAdminReports(dateRange: string = "30d") {
       const daysAgo = dateRange === "7d" ? 7 : dateRange === "30d" ? 30 : 90;
       const start = new Date();
       start.setDate(start.getDate() - daysAgo);
+      start.setHours(0, 0, 0, 0);
       const startDateStr = start.toISOString();
       
       const data = await api.get<SystemMetrics>(`/reports/admin?start_date=${startDateStr}`);

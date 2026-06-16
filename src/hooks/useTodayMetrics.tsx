@@ -23,11 +23,21 @@ export function useTodayMetrics() {
 
   const fetchMetrics = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Get start and end of today in Uganda timezone (EAT = UTC+3)
+      const now = new Date();
+      // Uganda start of day (00:00:00 EAT) is 21:00:00 UTC of previous day
+      const startOfTodayEAT = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Kampala' }));
+      startOfTodayEAT.setHours(0, 0, 0, 0);
+      // EAT is 3 hours ahead of UTC, so subtract 3 hours to get the UTC time
+      const startOfTodayUTC = new Date(startOfTodayEAT.getTime() - (3 * 60 * 60 * 1000));
+      
+      const endOfTodayEAT = new Date(startOfTodayEAT);
+      endOfTodayEAT.setHours(23, 59, 59, 999);
+      const endOfTodayUTC = new Date(endOfTodayEAT.getTime() - (3 * 60 * 60 * 1000));
 
       // Fetch all call activities for today
       // Setting high limit to get all calls for today.
-      const callActivities = await api.get<any[]>(`/call-activities?start_date=${today}T00:00:00&end_date=${today}T23:59:59&limit=1000`);
+      const callActivities = await api.get<any[]>(`/call-activities?start_date=${startOfTodayUTC.toISOString()}&end_date=${endOfTodayUTC.toISOString()}&limit=1000`);
 
       const totalCalls = callActivities?.length || 0;
       

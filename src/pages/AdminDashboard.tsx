@@ -189,6 +189,10 @@ const AdminDashboard = () => {
             <p className="text-muted-foreground">Manage users, agents and lead assignments</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowImportModal(true)}>
+              <FileUp className="h-4 w-4 mr-2" />
+              Import CSV/Excel
+            </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline">
@@ -298,6 +302,15 @@ const AdminDashboard = () => {
                   </p>
                 </div>
               </div>
+
+              <Button
+                onClick={() => setShowImportModal(true)}
+                variant="secondary"
+                className="w-full"
+              >
+                <FileUp className="h-4 w-4 mr-2" />
+                Import CSV/Excel
+              </Button>
 
               <Button
                 onClick={handleRequestLeads}
