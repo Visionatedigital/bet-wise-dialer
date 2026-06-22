@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { BarChart3, TrendingUp, Phone, DollarSign, Download, CheckCircle, Lightbulb } from "lucide-react";
+import { BarChart3, TrendingUp, Phone, DollarSign, Download, CheckCircle, Lightbulb, Share2, Loader2 } from "lucide-react";
 import { ExportReportModal } from "@/components/dashboard/ExportReportModal";
+import { api } from "@/integrations/supabase/client";
 import { RecentCallActivities } from "@/components/dashboard/RecentCallActivities";
 import { useFunnelAnalysis } from '@/hooks/useFunnelAnalysis';
 import { useAgentAnalysis } from '@/hooks/useAgentAnalysis';
@@ -34,6 +35,8 @@ const ManagementDashboard = () => {
   const [dateRange, setDateRange] = useState("week");
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [showExportModal, setShowExportModal] = useState(false);
+  const [redistributing, setRedistributing] = useState(false);
+  const [totalAssignedLeads, setTotalAssignedLeads] = useState(0);
 
   // Pass manager ID to ensure funnel analysis filters by assigned agents
   const { funnelData, insights, message: funnelMessage, loading: funnelLoading } = useFunnelAnalysis(dateRange, '', user?.id || null);
@@ -194,18 +197,11 @@ const ManagementDashboard = () => {
           // Total calls = all deduplicated call attempts (one per phone number)
           const totalCalls = deduplicatedAllCalls.length;
           
-          // Connects = only calls that actually rang and were answered
-          // A call is considered "connected" if:
-          // 1. Status is 'converted' (definitely answered)
-          // 2. Status is 'connected' AND duration_seconds > 0 (actually rang and was answered)
-          const connects = deduplicatedAllCalls.filter(c => {
-            if (c.status === 'converted') return true;
-            if (c.status === 'connected') {
-              return (Number(c.duration_seconds) || 0) > 0;
-            }
-            return false;
-          }).length;
-          const conversions = calls?.filter(c => c.status === 'converted').length || 0;
+          // Connects = calls that actually rang and were answered
+          const connects = deduplicatedAllCalls.filter(c => 
+            ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(c.status) || (Number(c.duration_seconds) || 0) > 0
+          ).length;
+          const conversions = calls?.filter(c => c.status === 'converted' || (c.deposit_amount && Number(c.deposit_amount) > 0)).length || 0;
           // Qualified = connects that actually rang, were answered, and lasted more than 2 minutes
           const qualified = calls?.filter(c => {
             const isConnected = c.status === 'converted' || 
@@ -229,6 +225,13 @@ const ManagementDashboard = () => {
       );
 
       setAgentStats(agentStats);
+
+      // Sum up assigned leads across all agents on this manager's team
+      const { count: assignedCount } = await supabase
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .in('user_id', (profiles || []).map((p: any) => p.id));
+      setTotalAssignedLeads(assignedCount || 0);
     } catch (error) {
       console.error('Error fetching agent stats:', error);
       toast.error('Failed to load performance data');
@@ -240,6 +243,20 @@ const ManagementDashboard = () => {
   const filteredAgents = selectedAgent === "all"
     ? agentStats 
     : agentStats.filter(a => a.agentId === selectedAgent);
+
+  const handleRedistribute = async () => {
+    setRedistributing(true);
+    try {
+      const res = await api.post<{ message: string; total_distributed: number }>('/leads/distribute', { limit: 10000 });
+      toast.success(res.message || `Redistributed ${res.total_distributed} leads to your team`);
+      fetchAgentStats(); // refresh counts
+    } catch (error: any) {
+      console.error('Error redistributing leads:', error);
+      toast.error(error?.message || 'Failed to redistribute leads');
+    } finally {
+      setRedistributing(false);
+    }
+  };
 
   const totals = filteredAgents.reduce(
     (acc, agent) => ({
@@ -302,7 +319,7 @@ const ManagementDashboard = () => {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Calls</CardTitle>
@@ -359,6 +376,32 @@ const ManagementDashboard = () => {
               <p className="text-xs text-amber-600/70">
                 Avg: {formatUGX(totals.conversions > 0 ? totals.deposits / totals.conversions : 0)}
               </p>
+            </CardContent>
+          </Card>
+
+          {/* Numbers Assigned Card */}
+          <Card className="border-dashed border-blue-500/50 bg-blue-500/5">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Numbers Assigned</CardTitle>
+              <Share2 className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-700">
+                {totalAssignedLeads.toLocaleString()}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full text-xs border-blue-500/40 text-blue-700 hover:bg-blue-500/10"
+                onClick={handleRedistribute}
+                disabled={redistributing}
+              >
+                {redistributing ? (
+                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Redistributing…</>
+                ) : (
+                  <><Share2 className="h-3 w-3 mr-1" /> Re-distribute</>  
+                )}
+              </Button>
             </CardContent>
           </Card>
         </div>

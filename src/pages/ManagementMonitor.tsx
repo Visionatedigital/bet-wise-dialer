@@ -48,14 +48,11 @@ export default function ManagementMonitor() {
 
   React.useEffect(() => {
     const fetchMetrics = async () => {
-      // Skip fetching for 'daily' period since we use hook data
-      if (timePeriod === 'daily') {
-        setPeriodLeads({});
-        setPeriodCalls({});
-        return;
-      }
+      // For 'daily', compute today's midnight; for others, use periodStart
+      const start = timePeriod === 'daily'
+        ? (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); })()
+        : periodStart(timePeriod).toISOString();
 
-      const start = periodStart(timePeriod).toISOString();
       try {
         // Leads assigned per agent for the selected period
         const leadsQuery = supabase
@@ -64,7 +61,7 @@ export default function ManagementMonitor() {
           .not('user_id', 'is', null)
           .not('assigned_at', 'is', null)
           .range(0, 9999); // Bypass default 500-row PostgREST cap
-        
+
         const { data: leadsData, error: leadsError } = await (timePeriod === 'all'
           ? leadsQuery
           : leadsQuery.gte('assigned_at', start));
@@ -72,11 +69,11 @@ export default function ManagementMonitor() {
         if (leadsError) {
           console.error('[Monitor] Error fetching leads:', leadsError);
         } else {
-        const lMap: Record<string, number> = {};
-        (leadsData || []).forEach((r: any) => {
-          if (r.user_id) lMap[r.user_id] = (lMap[r.user_id] || 0) + 1;
-        });
-        setPeriodLeads(lMap);
+          const lMap: Record<string, number> = {};
+          (leadsData || []).forEach((r: any) => {
+            if (r.user_id) lMap[r.user_id] = (lMap[r.user_id] || 0) + 1;
+          });
+          setPeriodLeads(lMap);
         }
 
         // Calls per agent for the selected period
@@ -85,7 +82,7 @@ export default function ManagementMonitor() {
           .select('user_id, start_time')
           .not('start_time', 'is', null)
           .range(0, 9999); // Bypass default 500-row PostgREST cap
-        
+
         const { data: callsData, error: callsError } = await (timePeriod === 'all'
           ? callsQuery
           : callsQuery.gte('start_time', start));
@@ -93,11 +90,11 @@ export default function ManagementMonitor() {
         if (callsError) {
           console.error('[Monitor] Error fetching calls:', callsError);
         } else {
-        const cMap: Record<string, number> = {};
-        (callsData || []).forEach((r: any) => {
-          if (r.user_id) cMap[r.user_id] = (cMap[r.user_id] || 0) + 1;
-        });
-        setPeriodCalls(cMap);
+          const cMap: Record<string, number> = {};
+          (callsData || []).forEach((r: any) => {
+            if (r.user_id) cMap[r.user_id] = (cMap[r.user_id] || 0) + 1;
+          });
+          setPeriodCalls(cMap);
         }
       } catch (e) {
         console.error('[Monitor] Failed to load period metrics', e);
@@ -163,7 +160,7 @@ export default function ManagementMonitor() {
                       <div>
                         <div className="text-muted-foreground">Assigned ({timePeriod === 'daily' ? 'Today' : timePeriod === 'weekly' ? 'Week' : timePeriod === 'monthly' ? 'Month' : 'All'})</div>
                         <div className="font-medium">
-                          {timePeriod === 'daily' ? a.assignedLeads : getFilteredLeads(a, timePeriod)}
+                          {getFilteredLeads(a, timePeriod)}
                         </div>
                       </div>
                       <div>

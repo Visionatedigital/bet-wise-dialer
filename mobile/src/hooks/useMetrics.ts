@@ -1,13 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { DailyMetrics } from "../types";
+import { useAuth } from "../contexts/AuthContext";
+import { COUNTRY_MAP } from "../config/countries";
 
 export function useTodayMetrics() {
+  const { user } = useAuth();
+  const countryCode = user?.country || 'UG';
+  const tz = COUNTRY_MAP[countryCode]?.timezone || 'Africa/Kampala';
+
   return useQuery({
-    queryKey: ["daily-metrics"],
+    queryKey: ["daily-metrics", countryCode],
     queryFn: async () => {
       const data = await api.get<DailyMetrics[]>("/daily-metrics");
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
       return (
         data.find((m) => m.date?.startsWith(today)) || {
           calls_made: 0,
@@ -23,10 +29,14 @@ export function useTodayMetrics() {
 }
 
 export function useTeamMetrics() {
+  const { user } = useAuth();
+  const countryCode = user?.country || 'UG';
+  const tz = COUNTRY_MAP[countryCode]?.timezone || 'Africa/Kampala';
+
   return useQuery({
-    queryKey: ["team-metrics-today"],
+    queryKey: ["team-metrics-today", countryCode],
     queryFn: async () => {
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
       const data = await api.get<DailyMetrics[]>(`/daily-metrics?date=${today}`);
       const totals = data.reduce(
         (acc, m) => ({

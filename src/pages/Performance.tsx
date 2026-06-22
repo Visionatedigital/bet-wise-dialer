@@ -12,6 +12,7 @@ import { useAgentAnalysis } from "@/hooks/useAgentAnalysis";
 import { ExportReportModal } from "@/components/dashboard/ExportReportModal";
 import { formatUGX } from "@/lib/formatters";
 import { useAuth } from "@/contexts/AuthContext";
+import { COUNTRY_MAP } from "@/config/countries";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -44,6 +45,8 @@ interface AgentPerformance {
 export default function Performance() {
   const { user } = useAuth();
   const { isManagement, isAdmin } = useUserRole();
+  const userCountry = user?.country || 'UG';
+  const userTimezone = COUNTRY_MAP[userCountry]?.timezone || 'Africa/Kampala';
   const [dateRange, setDateRange] = useState("30d");
   const [campaignId, setCampaignId] = useState<string | undefined>("all");
   const [selectedAgent, setSelectedAgent] = useState<string>("all");
@@ -434,13 +437,7 @@ export default function Performance() {
       // Connected calls = calls that actually rang and were answered (duration > 0 OR status is converted)
       const allAgentCallAttempts = deduplicatedAllAgentCalls; // All deduplicated call attempts (one per phone number)
       const connectedAgentCalls = deduplicatedAllAgentCalls.filter((call: any) => {
-        // Converted calls are always connects
-        if (call.status === 'converted') return true;
-        // Connected calls must have duration > 0 to count as actually answered
-        if (call.status === 'connected') {
-          return (Number(call.duration_seconds) || 0) > 0;
-        }
-        return false;
+        return ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(call.status) || (Number(call.duration_seconds) || 0) > 0;
       });
 
       // Connected calls are already deduplicated
@@ -461,7 +458,7 @@ export default function Performance() {
       const rawCalls = finalAgentCalls.length;
       const totalCalls = allAgentCallAttempts.length; // All deduplicated call attempts (one per phone number)
       const connects = deduplicatedConnectedAgentCalls.length; // Deduplicated connected calls
-      const conversions = deduplicatedConnectedAgentCalls.filter((c: any) => c.status === 'converted').length;
+      const conversions = deduplicatedConnectedAgentCalls.filter((c: any) => c.status === 'converted' || (c.deposit_amount && Number(c.deposit_amount) > 0)).length;
       const revenue = deduplicatedConnectedAgentCalls.reduce((sum: number, c: any) => sum + (Number(c.deposit_amount) || 0), 0);
       const connectRate = rawCalls > 0 ? ((connects / rawCalls) * 100) : 0;
       const conversionRate = connects > 0 ? ((conversions / connects) * 100) : 0;
@@ -683,13 +680,7 @@ export default function Performance() {
       // This excludes calls that were attempted but never rang (no_answer, busy, voicemail, disconnected with duration 0)
       const allTeamCallAttempts = deduplicatedAllCalls; // All deduplicated call attempts
       const connectedCalls = deduplicatedAllCalls.filter((call: any) => {
-        // Converted calls are always connects
-        if (call.status === 'converted') return true;
-        // Connected calls must have duration > 0 to count as actually answered
-        if (call.status === 'connected') {
-          return (Number(call.duration_seconds) || 0) > 0;
-        }
-        return false;
+        return ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(call.status) || (Number(call.duration_seconds) || 0) > 0;
       });
 
       // Connected calls are already deduplicated, so we can use them directly
@@ -714,21 +705,21 @@ export default function Performance() {
         const date = callDate.toLocaleDateString('en-US', { 
           month: 'short', 
           day: 'numeric',
-          timeZone: 'UTC'
+          timeZone: userTimezone
         });
         const existing = dailyMap.get(date) || { calls: 0, connects: 0, conversions: 0, revenue: 0 };
         existing.calls++; // Count ALL deduplicated call attempts (one per phone number per agent)
         
         // Check if this call actually rang and was answered
-        // Count as connect if: converted OR (connected AND duration > 0)
-        const isConnected = call.status === 'converted' || 
-          (call.status === 'connected' && (Number(call.duration_seconds) || 0) > 0);
+        const isConnected = ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(call.status) || 
+          (Number(call.duration_seconds) || 0) > 0;
         
         if (isConnected) {
           existing.connects++; // Count connected calls (already deduplicated)
-        if (call.status === 'converted') {
-          existing.conversions++;
-          existing.revenue += Number(call.deposit_amount) || 0;
+          const isConversion = call.status === 'converted' || (call.deposit_amount && Number(call.deposit_amount) > 0);
+          if (isConversion) {
+            existing.conversions++;
+            existing.revenue += Number(call.deposit_amount) || 0;
           }
         }
         dailyMap.set(date, existing);
@@ -844,7 +835,7 @@ export default function Performance() {
             const hour = callDate.toLocaleString('en-US', { 
               hour: '2-digit', 
               hour12: false,
-              timeZone: 'Africa/Kampala'
+              timeZone: userTimezone
             });
             const count = hourlyBreakdownMap.get(hour) || 0;
             hourlyBreakdownMap.set(hour, count + 1);
@@ -864,7 +855,7 @@ export default function Performance() {
           agentName: agentMap.get(call.user_id) || 'Unknown',
           phone: call.phone_number || 'N/A',
           startTime: new Date(call.start_time || call.created_at).toLocaleString('en-US', {
-            timeZone: 'Africa/Kampala',
+            timeZone: userTimezone,
             dateStyle: 'short',
             timeStyle: 'medium'
           }),
@@ -876,8 +867,8 @@ export default function Performance() {
           hourlyBreakdown,
           sampleCalls,
           dateRange: {
-            start: startDate.toLocaleString('en-US', { timeZone: 'Africa/Kampala', dateStyle: 'short', timeStyle: 'medium' }),
-            end: endDate.toLocaleString('en-US', { timeZone: 'Africa/Kampala', dateStyle: 'short', timeStyle: 'medium' }),
+            start: startDate.toLocaleString('en-US', { timeZone: userTimezone, dateStyle: 'short', timeStyle: 'medium' }),
+            end: endDate.toLocaleString('en-US', { timeZone: userTimezone, dateStyle: 'short', timeStyle: 'medium' }),
           },
           totalAgents: agentProfiles?.length || 0, // Count only agents assigned to manager (filtered above)
         });

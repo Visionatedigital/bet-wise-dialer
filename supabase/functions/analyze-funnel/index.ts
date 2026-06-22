@@ -248,16 +248,16 @@ serve(async (req) => {
 
     // Calculate funnel metrics with error handling
     const totalCalls = calls?.length || 0;
-    // Connects = calls that actually rang and were answered (duration > 0 OR status is converted)
+    // Connects = calls that actually rang and were answered
     const connects = calls?.filter((c: any) => 
-      c?.status === 'converted' || (c?.status === 'connected' && (Number(c?.duration_seconds) || 0) > 0)
+      ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(c?.status) || (Number(c?.duration_seconds) || 0) > 0
     ).length || 0;
-    const conversions = calls?.filter((c: any) => c?.status === 'converted').length || 0;
+    const conversions = calls?.filter((c: any) => c?.status === 'converted' || (c?.deposit_amount && Number(c?.deposit_amount) > 0)).length || 0;
     
     // Qualified = calls that actually rang, were answered, and lasted more than 2 minutes
     const qualified = calls?.filter((c: any) => {
-      const isConnected = c?.status === 'converted' || 
-        (c?.status === 'connected' && (Number(c?.duration_seconds) || 0) > 0);
+      const isConnected = ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(c?.status) || 
+        (Number(c?.duration_seconds) || 0) > 0;
       return isConnected && (Number(c?.duration_seconds) || 0) > 120;
     }).length || 0;
 

@@ -20,6 +20,7 @@ import { useAuth } from "../../src/contexts/AuthContext";
 import { getCurrencyFromCountry, getCurrencyFromPhone, formatCurrency } from "../../src/utils/formatCurrency";
 import * as FileSystem from "expo-file-system/legacy";
 import * as XLSX from "xlsx";
+import { COUNTRY_MAP, COUNTRY_OFFSETS } from "../../src/config/countries";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,47 +33,80 @@ interface DateRange {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+function getUtcRangeForLocalDate(dateStr: string, offsetHours: number): DateRange {
+  const parts = dateStr.split('-').map(Number);
+  const year = parts[0];
+  const monthIdx = parts[1] - 1;
+  const day = parts[2];
+
+  const start = new Date(Date.UTC(year, monthIdx, day, 0, 0, 0, 0));
+  start.setUTCHours(start.getUTCHours() - offsetHours);
+
+  const end = new Date(Date.UTC(year, monthIdx, day, 23, 59, 59, 999));
+  end.setUTCHours(end.getUTCHours() - offsetHours);
+
+  return { start, end };
 }
 
-function endOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
+function getPresetRange(preset: PresetKey, countryCode: string, custom: DateRange): DateRange {
+  const tz = COUNTRY_MAP[countryCode]?.timezone || 'Africa/Kampala';
+  const offset = COUNTRY_OFFSETS[countryCode] ?? 3;
 
-function getPresetRange(preset: PresetKey, custom: DateRange): DateRange {
-  const now = new Date();
+  const getAgentLocalTime = (d = new Date()) => {
+    return new Date(d.toLocaleString('en-US', { timeZone: tz }));
+  };
+
+  const localNow = getAgentLocalTime();
+
   switch (preset) {
-    case "today":
-      return { start: startOfDay(now), end: endOfDay(now) };
+    case "today": {
+      const dateStr = localNow.toLocaleDateString('en-CA'); // 'YYYY-MM-DD'
+      return getUtcRangeForLocalDate(dateStr, offset);
+    }
     case "yesterday": {
-      const y = new Date(now);
-      y.setDate(y.getDate() - 1);
-      return { start: startOfDay(y), end: endOfDay(y) };
+      const yesterday = new Date(localNow);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const dateStr = yesterday.toLocaleDateString('en-CA');
+      return getUtcRangeForLocalDate(dateStr, offset);
     }
     case "this_week": {
-      const day = now.getDay();
-      const mon = new Date(now);
-      mon.setDate(now.getDate() - ((day + 6) % 7));
-      return { start: startOfDay(mon), end: endOfDay(now) };
+      const day = localNow.getDay();
+      const mon = new Date(localNow);
+      mon.setDate(localNow.getDate() - ((day + 6) % 7));
+      
+      const startDateStr = mon.toLocaleDateString('en-CA');
+      const endDateStr = localNow.toLocaleDateString('en-CA');
+      
+      const startRange = getUtcRangeForLocalDate(startDateStr, offset);
+      const endRange = getUtcRangeForLocalDate(endDateStr, offset);
+      return { start: startRange.start, end: endRange.end };
     }
     case "last_week": {
-      const day = now.getDay();
-      const thisMonday = new Date(now);
-      thisMonday.setDate(now.getDate() - ((day + 6) % 7));
+      const day = localNow.getDay();
+      const thisMonday = new Date(localNow);
+      thisMonday.setDate(localNow.getDate() - ((day + 6) % 7));
+      
       const lastMon = new Date(thisMonday);
       lastMon.setDate(thisMonday.getDate() - 7);
       const lastSun = new Date(thisMonday);
       lastSun.setDate(thisMonday.getDate() - 1);
-      return { start: startOfDay(lastMon), end: endOfDay(lastSun) };
+      
+      const startDateStr = lastMon.toLocaleDateString('en-CA');
+      const endDateStr = lastSun.toLocaleDateString('en-CA');
+      
+      const startRange = getUtcRangeForLocalDate(startDateStr, offset);
+      const endRange = getUtcRangeForLocalDate(endDateStr, offset);
+      return { start: startRange.start, end: endRange.end };
     }
     case "this_month": {
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { start: startOfDay(firstDay), end: endOfDay(now) };
+      const firstDay = new Date(localNow.getFullYear(), localNow.getMonth(), 1);
+      
+      const startDateStr = firstDay.toLocaleDateString('en-CA');
+      const endDateStr = localNow.toLocaleDateString('en-CA');
+      
+      const startRange = getUtcRangeForLocalDate(startDateStr, offset);
+      const endRange = getUtcRangeForLocalDate(endDateStr, offset);
+      return { start: startRange.start, end: endRange.end };
     }
     case "custom":
       return custom;
@@ -143,14 +177,21 @@ export default function AgentLogsScreen() {
   const { agentId, agentName } = useLocalSearchParams<{ agentId: string; agentName: string }>();
 
   const [preset, setPreset] = useState<PresetKey>("today");
-  const [custom, setCustom] = useState<DateRange>({ start: startOfDay(new Date()), end: endOfDay(new Date()) });
+  const [custom, setCustom] = useState<DateRange>({ start: new Date(), end: new Date() });
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [pickingField, setPickingField] = useState<"start" | "end">("start");
-  const [tempStart, setTempStart] = useState<Date>(startOfDay(new Date()));
-  const [tempEnd, setTempEnd]   = useState<Date>(endOfDay(new Date()));
+  const [tempStart, setTempStart] = useState<Date>(new Date());
+  const [tempEnd, setTempEnd]   = useState<Date>(new Date());
   const [exporting, setExporting] = useState(false);
 
-  const range = getPresetRange(preset, custom);
+  const { data: agentProfile } = useQuery<any>({
+    queryKey: ["agent-profile", agentId],
+    queryFn: () => api.get(`/profiles/${agentId}`),
+    enabled: !!agentId,
+  });
+
+  const agentCountry = agentProfile?.country || user?.country || 'UG';
+  const range = getPresetRange(preset, agentCountry, custom);
 
   const { data: calls, isLoading: callsLoading } = useQuery<CallActivity[]>({
     queryKey: ["agent-calls", agentId, range.start.toISOString(), range.end.toISOString()],
@@ -176,8 +217,8 @@ export default function AgentLogsScreen() {
   }, [callbacks]);
 
   const totalCalls  = Array.isArray(calls) ? calls.length : 0;
-  const connects    = Array.isArray(calls) ? calls.filter((c) => ["connected", "interested", "converted"].includes(c.status)).length : 0;
-  const conversions = Array.isArray(calls) ? calls.filter((c) => c.deposit_amount && c.deposit_amount > 0).length : 0;
+  const connects    = Array.isArray(calls) ? calls.filter((c) => ["connected", "converted", "interested", "not_interested", "answered_no_response"].includes(c.status) || (c.duration_seconds || 0) > 0).length : 0;
+  const conversions = Array.isArray(calls) ? calls.filter((c) => c.status === "converted" || (c.deposit_amount && c.deposit_amount > 0)).length : 0;
 
   function openCustomModal() {
     setTempStart(custom.start);
@@ -187,9 +228,15 @@ export default function AgentLogsScreen() {
   }
 
   function applyCustomRange() {
-    const start = startOfDay(tempStart);
-    const end   = endOfDay(tempEnd < tempStart ? tempStart : tempEnd);
-    setCustom({ start, end });
+    const offset = COUNTRY_OFFSETS[agentCountry] ?? 3;
+    
+    const startDateStr = tempStart.toLocaleDateString('en-CA');
+    const endDateStr = (tempEnd < tempStart ? tempStart : tempEnd).toLocaleDateString('en-CA');
+    
+    const startRange = getUtcRangeForLocalDate(startDateStr, offset);
+    const endRange = getUtcRangeForLocalDate(endDateStr, offset);
+    
+    setCustom({ start: startRange.start, end: endRange.end });
     setPreset("custom");
     setShowCustomModal(false);
   }

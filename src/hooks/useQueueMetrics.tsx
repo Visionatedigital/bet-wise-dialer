@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { COUNTRY_MAP, COUNTRY_OFFSETS } from '@/config/countries';
 
 interface QueueMetric {
   id: string;
@@ -11,6 +13,7 @@ interface QueueMetric {
 }
 
 export function useQueueMetrics() {
+  const { user } = useAuth();
   const [queues, setQueues] = useState<QueueMetric[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,17 +28,18 @@ export function useQueueMetrics() {
         return;
       }
 
-      // Fetch calls for today in Uganda timezone (EAT = UTC+3)
+      // Fetch calls for today in user's country timezone
       const now = new Date();
-      // Uganda start of day (00:00:00 EAT) is 21:00:00 UTC of previous day
-      const startOfTodayEAT = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Kampala' }));
-      startOfTodayEAT.setHours(0, 0, 0, 0);
-      // EAT is 3 hours ahead of UTC, so subtract 3 hours to get the UTC time
-      const startOfTodayUTC = new Date(startOfTodayEAT.getTime() - (3 * 60 * 60 * 1000));
+      const countryCode = user?.country || 'UG';
+      const tz = COUNTRY_MAP[countryCode]?.timezone || 'Africa/Kampala';
+      const offsetHours = COUNTRY_OFFSETS[countryCode] ?? 3;
+
+      const dateStr = now.toLocaleDateString('en-CA', { timeZone: tz });
+      const startOfTodayLocal = new Date(`${dateStr}T00:00:00.000Z`);
+      const startOfTodayUTC = new Date(startOfTodayLocal.getTime() - (offsetHours * 60 * 60 * 1000));
       
-      const endOfTodayEAT = new Date(startOfTodayEAT);
-      endOfTodayEAT.setHours(23, 59, 59, 999);
-      const endOfTodayUTC = new Date(endOfTodayEAT.getTime() - (3 * 60 * 60 * 1000));
+      const endOfTodayLocal = new Date(`${dateStr}T23:59:59.999Z`);
+      const endOfTodayUTC = new Date(endOfTodayLocal.getTime() - (offsetHours * 60 * 60 * 1000));
 
       const callActivities = await api.get<any[]>(`/call-activities?start_date=${startOfTodayUTC.toISOString()}&end_date=${endOfTodayUTC.toISOString()}&limit=5000`);
 
@@ -77,7 +81,7 @@ export function useQueueMetrics() {
     // Refresh every 30 seconds
     const interval = setInterval(fetchQueueMetrics, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   return { queues, loading, refetch: fetchQueueMetrics };
 }

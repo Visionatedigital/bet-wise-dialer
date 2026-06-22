@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Download, Loader2, Sparkles, FileText, FileSpreadsheet, File } from "lucide-react";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
@@ -14,6 +15,7 @@ import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { COUNTRY_MAP } from "@/config/countries";
 
 interface ExportReportModalProps {
   open: boolean;
@@ -28,19 +30,19 @@ interface AgentOption {
   email: string;
 }
 
-// Helper function to format date and time for Excel export (in EAT - Africa/Kampala timezone)
-const formatDateForExport = (dateString: string) => {
+// Helper function to format date and time for Excel export (in branch timezone)
+const formatDateForExport = (dateString: string, timezone: string = 'Africa/Kampala') => {
   const callDate = new Date(dateString);
-  // Format date as YYYY-MM-DD for better Excel compatibility (in EAT timezone)
+  // Format date as YYYY-MM-DD for better Excel compatibility (in branch timezone)
   const formattedDate = callDate.toLocaleDateString('en-CA', { 
-    timeZone: 'Africa/Kampala',
+    timeZone: timezone,
     year: 'numeric', 
     month: '2-digit', 
     day: '2-digit' 
   }) || callDate.toISOString().split('T')[0];
-  // Format time as HH:MM:SS (in EAT timezone)
+  // Format time as HH:MM:SS (in branch timezone)
   const formattedTime = callDate.toLocaleTimeString('en-US', { 
-    timeZone: 'Africa/Kampala',
+    timeZone: timezone,
     hour12: false, 
     hour: '2-digit', 
     minute: '2-digit', 
@@ -52,6 +54,9 @@ const formatDateForExport = (dateString: string) => {
 export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent: initialSelectedAgent }: ExportReportModalProps) {
   const { user } = useAuth();
   const { isManagement, isAdmin } = useUserRole();
+  const userCountry = user?.country || 'UG';
+  const userTimezone = COUNTRY_MAP[userCountry]?.timezone || 'Africa/Kampala';
+  const currencyLabel = COUNTRY_MAP[userCountry]?.currency || 'UGX';
   const [verbosity, setVerbosity] = useState("balanced");
   const [focusArea, setFocusArea] = useState("all");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -154,8 +159,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         dateRange,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        startDateLocal: startDate.toLocaleString('en-US', { timeZone: 'Africa/Kampala' }),
-        endDateLocal: endDate.toLocaleString('en-US', { timeZone: 'Africa/Kampala' })
+        startDateLocal: startDate.toLocaleString('en-US', { timeZone: userTimezone }),
+        endDateLocal: endDate.toLocaleString('en-US', { timeZone: userTimezone })
       });
 
       let callActivities: any[] = [];
@@ -456,8 +461,22 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           totalRevenue,
           avgHandleTime: formatDuration(avgHandleTime),
           avgHandleTimeSeconds: avgHandleTime,
-          callsPerHour: parseFloat(callsPerHour)
+          callsPerHour: parseFloat(callsPerHour),
+          numbersAssigned: 0 // will be populated below
         };
+
+        // Fetch numbers (leads) assigned to this agent in the selected date range
+        try {
+          const { count: assignedCount } = await supabase
+            .from('leads')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', selectedAgent)
+            .gte('assigned_at', startDate.toISOString())
+            .lte('assigned_at', endDate.toISOString());
+          agentKPIs.numbersAssigned = assignedCount || 0;
+        } catch (leadErr) {
+          console.warn('[ExportReportModal] Could not fetch assigned leads count:', leadErr);
+        }
       }
 
       // Parse the report text into paragraphs (only for summary reports)
@@ -509,7 +528,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         new Paragraph({
           children: [
             new TextRun({
-              text: `Generated: ${new Date().toLocaleDateString('en-US', { timeZone: 'Africa/Kampala' })}`,
+              text: `Generated: ${new Date().toLocaleDateString('en-US', { timeZone: userTimezone })}`,
               italics: true,
             }),
           ],
@@ -529,6 +548,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
 
         // KPI Table-like structure using paragraphs
         const kpiItems = [
+          { label: "Numbers Assigned", value: (agentKPIs.numbersAssigned || 0).toString(), target: "Leads assigned in period" },
           { label: "Total Calls Made", value: agentKPIs.totalCalls.toString(), target: "60 calls/day" },
           { label: "Calls Per Hour", value: agentKPIs.callsPerHour.toFixed(1), target: "7.5 calls/hour target" },
           { label: "Connects", value: agentKPIs.connects.toString(), target: "40 connects/day" },
@@ -661,7 +681,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           const callsByDate = new Map<string, typeof sortedCalls>();
           sortedCalls.forEach(call => {
             const date = new Date(call.start_time).toLocaleDateString('en-US', { 
-              timeZone: 'Africa/Kampala',
+              timeZone: userTimezone,
               year: 'numeric', 
               month: 'short', 
               day: 'numeric' 
@@ -692,7 +712,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
                 ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}`
                 : '0:00';
               const callTime = new Date(call.start_time).toLocaleTimeString('en-US', { 
-                timeZone: 'Africa/Kampala',
+                timeZone: userTimezone,
                 hour: '2-digit', 
                 minute: '2-digit' 
               });
@@ -837,7 +857,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         summarySheet.properties.defaultRowHeight = 15;
         
         // Create shared summary data array - used by both ExcelJS download and preview
-        const generatedDate = new Date().toLocaleDateString('en-US', { timeZone: 'Africa/Kampala' });
+        const generatedDate = new Date().toLocaleDateString('en-US', { timeZone: userTimezone });
         const summaryDataRows: any[][] = [
           ['Performance Report Summary'],
           [],
@@ -852,13 +872,14 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             [],
             ['Key Performance Indicators'],
             ['Metric', 'Value', 'Target'],
+            ['Numbers Assigned', agentKPIs.numbersAssigned || 0, 'Leads assigned in period'],
             ['Total Calls Made', agentKPIs.totalCalls || 0, '60 calls/day'],
             ['Calls Per Hour', parseFloat(agentKPIs.callsPerHour.toFixed(1)), '7.5 calls/hour'],
             ['Connects', agentKPIs.connects || 0, '40 connects/day'],
             ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'],
             ['Conversions', agentKPIs.conversions || 0, '12 conversions/day'],
             ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'],
-            ['Total Revenue', `UGX ${agentKPIs.totalRevenue.toLocaleString()}`, ''],
+            ['Total Revenue', `${currencyLabel} ${agentKPIs.totalRevenue.toLocaleString()}`, ''],
             ['Average Handle Time', agentKPIs.avgHandleTime || '0:00', '3-5 min']
           );
         } else {
@@ -903,7 +924,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
             'Total Calls', 'Calls/Hour',
             'Connects', 'Connect Rate',
             'Conversions', 'Conversion Rate',
-            'Total Revenue (UGX)', 'Avg Handle Time'
+            `Total Revenue (${currencyLabel})`, 'Avg Handle Time'
           ]);
 
           // Group enrichedCallActivities by user_id
@@ -1074,10 +1095,10 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           console.error('[ExcelJS] Error generating Excel file:', excelError);
           // Fallback to XLSX library if ExcelJS fails
           const xlsxWorkbook = XLSX.utils.book_new();
-          const summaryData: any[][] = [['Performance Report Summary'], [], ['Report Period:', dateRange.charAt(0).toUpperCase() + dateRange.slice(1)], ['Generated:', new Date().toLocaleDateString('en-US', { timeZone: 'Africa/Kampala' })]];
+          const summaryData: any[][] = [['Performance Report Summary'], [], ['Report Period:', dateRange.charAt(0).toUpperCase() + dateRange.slice(1)], ['Generated:', new Date().toLocaleDateString('en-US', { timeZone: userTimezone })]];
           if (selectedAgent !== 'all' && agentKPIs) {
             summaryData.push(['Agent:', agentKPIs.agentName], ['Email:', agentKPIs.email], [], ['Key Performance Indicators'], ['Metric', 'Value', 'Target']);
-            summaryData.push(['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `UGX ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
+            summaryData.push(['Numbers Assigned', agentKPIs.numbersAssigned || 0, 'Leads assigned in period'], ['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `${currencyLabel} ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
             summaryData.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Call Attempts (Raw)', teamRawCalls], ['Unique Contacts (Deduplicated)', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
           }
           const xlsxSummarySheet = XLSX.utils.aoa_to_sheet(summaryData);
@@ -1085,7 +1106,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           const callLogData: any[][] = [['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']];
           sortedCalls.forEach(call => {
             const callDate = new Date(call.start_time);
-            const { formattedDate, formattedTime } = formatDateForExport(call.start_time);
+            const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
             const agentName = call.profiles?.full_name || 'Unknown Agent';
             const phoneNumber = call.phone_number || 'N/A';
             const remarks = call.notes || 'No remarks';
@@ -1107,7 +1128,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxSummarySheet, 'Summary');
         const callLogData: any[][] = [['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']];
         sortedCalls.forEach(call => {
-          const { formattedDate, formattedTime } = formatDateForExport(call.start_time);
+          const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
           callLogData.push([formattedDate, formattedTime, call.profiles?.full_name || 'Unknown Agent', call.phone_number || 'N/A', call.lead_name || 'Unknown Lead', call.status || 'unknown', call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}` : '0:00', call.notes || 'No remarks']);
         });
         const xlsxCallLogSheet = XLSX.utils.aoa_to_sheet(callLogData);
@@ -1127,7 +1148,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         csvRows.push('Performance Report Summary');
         csvRows.push('');
         csvRows.push(`Report Period,${dateRange.charAt(0).toUpperCase() + dateRange.slice(1)}`);
-        csvRows.push(`Generated,${new Date().toLocaleDateString('en-US', { timeZone: 'Africa/Kampala' })}`);
+        csvRows.push(`Generated,${new Date().toLocaleDateString('en-US', { timeZone: userTimezone })}`);
         csvRows.push('');
         
         if (selectedAgent !== 'all' && agentKPIs) {
@@ -1142,7 +1163,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           csvRows.push(`Connect Rate,${agentKPIs.connectRate}%,70%`);
           csvRows.push(`Conversions,${agentKPIs.conversions},12 conversions/day`);
           csvRows.push(`Conversion Rate,${agentKPIs.conversionRate}%,25%`);
-          csvRows.push(`Total Revenue,UGX ${agentKPIs.totalRevenue.toLocaleString()},`);
+          csvRows.push(`Total Revenue,${currencyLabel} ${agentKPIs.totalRevenue.toLocaleString()},`);
           csvRows.push(`Average Handle Time,${agentKPIs.avgHandleTime},3-5 min`);
         } else {
           csvRows.push('Team Performance Summary');
@@ -1247,7 +1268,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         summarySheet.addRow(['Performance Report Summary']);
         summarySheet.addRow([]);
         summarySheet.addRow(['Report Period:', dateRange.charAt(0).toUpperCase() + dateRange.slice(1)]);
-        summarySheet.addRow(['Generated:', new Date().toLocaleDateString('en-US', { timeZone: 'Africa/Kampala' })]);
+        summarySheet.addRow(['Generated:', new Date().toLocaleDateString('en-US', { timeZone: userTimezone })]);
         
         if (selectedAgent !== 'all' && agentKPIs) {
           summarySheet.addRow(['Agent:', agentKPIs.agentName]);
@@ -1275,7 +1296,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           row6.getCell(2).value = `${agentKPIs.conversionRate}%`;
           row6.getCell(3).value = '25%';
           const row7 = summarySheet.addRow(['Total Revenue']);
-          row7.getCell(2).value = `UGX ${agentKPIs.totalRevenue.toLocaleString()}`;
+          row7.getCell(2).value = `${currencyLabel} ${agentKPIs.totalRevenue.toLocaleString()}`;
           row7.getCell(3).value = '';
           const row8 = summarySheet.addRow(['Average Handle Time']);
           row8.getCell(2).value = agentKPIs.avgHandleTime || '0:00';
@@ -1321,7 +1342,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         
         // Use the shared sortedCalls array defined above to ensure consistency with preview
         sortedCalls.forEach(call => {
-          const { formattedDate, formattedTime } = formatDateForExport(call.start_time);
+          const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
           const agentName = call.profiles?.full_name || 'Unknown Agent';
           const phoneNumber = call.phone_number || 'N/A';
           const remarks = call.notes || 'No remarks';
@@ -1416,10 +1437,10 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           console.error('[ExcelJS] Error generating Excel file:', excelError);
           // Fallback to XLSX library if ExcelJS fails
           const xlsxWorkbook = XLSX.utils.book_new();
-          const summaryData: any[][] = [['Performance Report Summary'], [], ['Report Period:', dateRange.charAt(0).toUpperCase() + dateRange.slice(1)], ['Generated:', new Date().toLocaleDateString('en-US', { timeZone: 'Africa/Kampala' })]];
+          const summaryData: any[][] = [['Performance Report Summary'], [], ['Report Period:', dateRange.charAt(0).toUpperCase() + dateRange.slice(1)], ['Generated:', new Date().toLocaleDateString('en-US', { timeZone: userTimezone })]];
           if (selectedAgent !== 'all' && agentKPIs) {
             summaryData.push(['Agent:', agentKPIs.agentName], ['Email:', agentKPIs.email], [], ['Key Performance Indicators'], ['Metric', 'Value', 'Target']);
-            summaryData.push(['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `UGX ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
+            summaryData.push(['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `${currencyLabel} ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
           } else {
             summaryData.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Call Attempts (Raw)', teamRawCalls], ['Unique Contacts (Deduplicated)', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
           }
@@ -1428,7 +1449,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           const callLogData: any[][] = [['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']];
           sortedCalls.forEach(call => {
             const callDate = new Date(call.start_time);
-            const { formattedDate, formattedTime } = formatDateForExport(call.start_time);
+            const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
             const agentName = call.profiles?.full_name || 'Unknown Agent';
             const phoneNumber = call.phone_number || 'N/A';
             const remarks = call.notes || 'No remarks';
@@ -1443,7 +1464,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         
         // Store Excel data as JSON for preview/editing (using XLSX for reading)
         // Create summaryDataRows array to match the ExcelJS download structure
-        const generatedDate = new Date().toLocaleDateString('en-US', { timeZone: 'Africa/Kampala' });
+        const generatedDate = new Date().toLocaleDateString('en-US', { timeZone: userTimezone });
         const summaryDataRows: any[][] = [
           ['Performance Report Summary'],
           [],
@@ -1452,7 +1473,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         ];
         if (selectedAgent !== 'all' && agentKPIs) {
           summaryDataRows.push(['Agent:', agentKPIs.agentName], ['Email:', agentKPIs.email], [], ['Key Performance Indicators'], ['Metric', 'Value', 'Target']);
-          summaryDataRows.push(['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `UGX ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
+          summaryDataRows.push(['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `${currencyLabel} ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
         } else {
           summaryDataRows.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Call Attempts (Raw)', teamRawCalls], ['Unique Contacts (Deduplicated)', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
         }
@@ -1465,7 +1486,7 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxSummarySheet, 'Summary');
         const callLogData: any[][] = [['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']];
         sortedCalls.forEach(call => {
-          const { formattedDate, formattedTime } = formatDateForExport(call.start_time);
+          const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
           callLogData.push([formattedDate, formattedTime, call.profiles?.full_name || 'Unknown Agent', call.phone_number || 'N/A', call.lead_name || 'Unknown Lead', call.status || 'unknown', call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}` : '0:00', call.notes || 'No remarks']);
         });
         const xlsxCallLogSheet = XLSX.utils.aoa_to_sheet(callLogData);

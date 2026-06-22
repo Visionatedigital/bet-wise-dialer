@@ -173,8 +173,8 @@ export function usePerformanceData(dateRange: string, campaignId?: string, force
 
         const deduplicatedAllCalls = deduplicateAllCalls(callsData);
         const totalCalls = deduplicatedAllCalls.length;
-        const connects = deduplicatedAllCalls.filter(call => call.status === "converted" || (call.status === "connected" && Number(call.duration_seconds) > 0)).length;
-        const conversions = callsData.filter(call => call.status === "converted").length;
+        const connects = deduplicatedAllCalls.filter(call => ["connected", "converted", "interested", "not_interested", "answered_no_response"].includes(call.status) || (Number(call.duration_seconds) > 0)).length;
+        const conversions = callsData.filter(call => call.status === "converted" || (call.deposit_amount && Number(call.deposit_amount) > 0)).length;
         const totalRevenue = 0; // Official verified revenue
         const reportedRevenue = callsData.reduce((sum, call) => sum + (Number(call.deposit_amount) || 0), 0);
 

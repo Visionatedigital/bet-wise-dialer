@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/integrations/supabase/client';
+import { COUNTRY_MAP } from '@/config/countries';
 
 export interface DailyMetrics {
   id: string;
@@ -46,10 +47,13 @@ export const useCallMetrics = () => {
     setError(null);
 
     try {
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
+      const countryCode = user.country || 'UG';
+      const tz = COUNTRY_MAP[countryCode]?.timezone || 'Africa/Kampala';
+      
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
       const yesterdayDate = new Date();
       yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-      const yesterday = yesterdayDate.toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
+      const yesterday = yesterdayDate.toLocaleDateString('en-CA', { timeZone: tz });
 
       // Fetch daily metrics
       const fetchedMetrics = await api.get<DailyMetrics[]>(`/daily-metrics?user_id=${user.id}&start_date=${yesterday}&end_date=${today}`);

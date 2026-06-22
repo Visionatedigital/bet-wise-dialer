@@ -154,8 +154,8 @@ serve(async (req) => {
       try {
         const agentCalls = (callActivities || []).filter((call: any) => call?.user_id === profile.id);
         const totalCalls = agentCalls.length;
-        const connects = agentCalls.filter((call: any) => call?.status === 'connected' || call?.status === 'converted').length;
-        const conversions = agentCalls.filter((call: any) => call?.status === 'converted').length;
+        const connects = agentCalls.filter((call: any) => ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(call?.status) || (Number(call?.duration_seconds) || 0) > 0).length;
+        const conversions = agentCalls.filter((call: any) => call?.status === 'converted' || (call?.deposit_amount && Number(call?.deposit_amount) > 0)).length;
         const totalRevenue = agentCalls.reduce((sum: number, call: any) => sum + (Number(call?.deposit_amount) || 0), 0);
         const totalDuration = agentCalls.reduce((sum: number, call: any) => sum + (Number(call?.duration_seconds) || 0), 0);
         const avgHandleTime = totalCalls > 0 ? Math.floor(totalDuration / totalCalls) : 0;

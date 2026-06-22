@@ -70,8 +70,8 @@ serve(async (req) => {
     const agentMetrics = profiles.map(profile => {
       const agentCalls = calls?.filter(c => c.user_id === profile.id) || [];
       const totalCalls = agentCalls.length;
-      const connects = agentCalls.filter(c => c.status === 'connected' || c.status === 'converted').length;
-      const conversions = agentCalls.filter(c => c.status === 'converted').length;
+      const connects = agentCalls.filter(c => ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(c.status) || (c.duration_seconds || 0) > 0).length;
+      const conversions = agentCalls.filter(c => c.status === 'converted' || (c.deposit_amount && Number(c.deposit_amount) > 0)).length;
       const totalRevenue = agentCalls.reduce((sum, c) => sum + (c.deposit_amount || 0), 0);
       const totalDuration = agentCalls.reduce((sum, c) => sum + (c.duration_seconds || 0), 0);
       const avgHandleTime = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;

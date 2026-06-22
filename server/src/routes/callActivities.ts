@@ -67,11 +67,23 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       [req.user!.id, phone_number, lead_name, call_type, status, duration_seconds, deposit_amount, notes, campaign_id]
     );
 
-    // Update daily metrics
-    const dateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
-    const ANSWERED_STATUSES = ['interested', 'not_interested', 'answered_no_response', 'connected'];
+    // Fetch user's country to determine local timezone
+    const userProfile = await query('SELECT country FROM profiles WHERE id = $1', [req.user!.id]);
+    const country = userProfile.rows[0]?.country || 'UG';
+    const countryTimezones: Record<string, string> = {
+      UG: 'Africa/Kampala',
+      KE: 'Africa/Nairobi',
+      TZ: 'Africa/Dar_es_Salaam',
+      NG: 'Africa/Lagos',
+      GH: 'Africa/Accra'
+    };
+    const userTimezone = countryTimezones[country] || 'Africa/Kampala';
+
+    // Update daily metrics in the user's branch timezone
+    const dateStr = new Date().toLocaleDateString('en-CA', { timeZone: userTimezone });
+    const ANSWERED_STATUSES = ['interested', 'not_interested', 'answered_no_response', 'connected', 'converted'];
     const isConnect = duration_seconds > 0 || ANSWERED_STATUSES.includes(status);
-    const isConversion = deposit_amount !== null && deposit_amount > 0;
+    const isConversion = status === 'converted' || (deposit_amount !== null && Number(deposit_amount) > 0);
 
     await query(
       `INSERT INTO daily_metrics (user_id, date, calls_made, connects, conversions, total_handle_time_seconds, total_deposit_value)

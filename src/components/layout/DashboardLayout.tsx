@@ -15,6 +15,7 @@ import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { AdminSidebar } from "./AdminSidebar";
 import { ManagementSidebar } from "./ManagementSidebar";
 import { CrmSidebar } from "./CrmSidebar";
+import { COUNTRY_MAP } from "@/config/countries";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -90,7 +91,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         setQueueCount(leadsCount || 0);
 
         // Fetch today's calls count - for managers, sum across all agents
-        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Kampala' });
+        const countryCode = user?.country || 'UG';
+        const tz = COUNTRY_MAP[countryCode]?.timezone || 'Africa/Kampala';
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
         let callsQuery = supabase
           .from('call_activities')
           .select('*', { count: 'exact', head: true })
@@ -351,7 +354,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Please bet responsibly. 18+ Only.</span>
               <div className="flex items-center gap-4">
-                <span>Bangbet Uganda • EAT (UTC+3) • Support: +256 800 123456</span>
+                <span>
+                  Bangbet {COUNTRY_MAP[user?.country || 'UG']?.name || 'Uganda'} • {
+                    user?.country === 'GH' ? 'GMT (UTC+0)' :
+                    user?.country === 'NG' ? 'WAT (UTC+1)' :
+                    'EAT (UTC+3)'
+                  } • Support: {COUNTRY_MAP[user?.country || 'UG']?.supportNumber || '+256 800 123456'}
+                </span>
                 <span className="font-mono">v{currentVersion}</span>
               </div>
             </div>

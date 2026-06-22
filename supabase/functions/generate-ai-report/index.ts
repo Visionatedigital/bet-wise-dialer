@@ -101,15 +101,12 @@ serve(async (req) => {
     });
 
     // Calculate metrics
-    // Only count calls that actually rang and were answered (duration > 0 OR status is converted)
     const connects = callActivities.filter((call: any) => {
-      if (call.status === 'converted') return true;
-      if (call.status === 'connected') {
-        return (Number(call.duration_seconds) || 0) > 0;
-      }
-      return false;
+      return ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(call.status) || (Number(call.duration_seconds) || 0) > 0;
     }).length;
-    const conversions = statusCounts['converted'] || 0;
+    const conversions = callActivities.filter((call: any) => {
+      return call.status === 'converted' || (call.deposit_amount && Number(call.deposit_amount) > 0);
+    }).length;
     const totalDeposits = callActivities.reduce((sum: number, call: any) => 
       sum + (Number(call.deposit_amount) || 0), 0
     );

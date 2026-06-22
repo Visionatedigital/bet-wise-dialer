@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { COUNTRY_MAP, COUNTRY_OFFSETS } from '@/config/countries';
 
 interface TodayMetrics {
   totalCalls: number;
@@ -11,6 +13,7 @@ interface TodayMetrics {
 }
 
 export function useTodayMetrics() {
+  const { user } = useAuth();
   const [metrics, setMetrics] = useState<TodayMetrics>({
     totalCalls: 0,
     answered: 0,
@@ -23,17 +26,18 @@ export function useTodayMetrics() {
 
   const fetchMetrics = async () => {
     try {
-      // Get start and end of today in Uganda timezone (EAT = UTC+3)
+      // Get start and end of today in user's timezone
       const now = new Date();
-      // Uganda start of day (00:00:00 EAT) is 21:00:00 UTC of previous day
-      const startOfTodayEAT = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Kampala' }));
-      startOfTodayEAT.setHours(0, 0, 0, 0);
-      // EAT is 3 hours ahead of UTC, so subtract 3 hours to get the UTC time
-      const startOfTodayUTC = new Date(startOfTodayEAT.getTime() - (3 * 60 * 60 * 1000));
+      const countryCode = user?.country || 'UG';
+      const tz = COUNTRY_MAP[countryCode]?.timezone || 'Africa/Kampala';
+      const offsetHours = COUNTRY_OFFSETS[countryCode] ?? 3;
+
+      const dateStr = now.toLocaleDateString('en-CA', { timeZone: tz });
+      const startOfTodayLocal = new Date(`${dateStr}T00:00:00.000Z`);
+      const startOfTodayUTC = new Date(startOfTodayLocal.getTime() - (offsetHours * 60 * 60 * 1000));
       
-      const endOfTodayEAT = new Date(startOfTodayEAT);
-      endOfTodayEAT.setHours(23, 59, 59, 999);
-      const endOfTodayUTC = new Date(endOfTodayEAT.getTime() - (3 * 60 * 60 * 1000));
+      const endOfTodayLocal = new Date(`${dateStr}T23:59:59.999Z`);
+      const endOfTodayUTC = new Date(endOfTodayLocal.getTime() - (offsetHours * 60 * 60 * 1000));
 
       // Fetch all call activities for today
       // Setting high limit to get all calls for today.
@@ -43,7 +47,7 @@ export function useTodayMetrics() {
       
       // Count answered calls (connected, converted)
       const answered = callActivities?.filter(
-        call => call.status === 'connected' || call.status === 'converted'
+        call => ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(call.status) || (call.duration_seconds || 0) > 0
       ).length || 0;
 
       // Calculate abandoned (calls that weren't answered)
@@ -64,7 +68,7 @@ export function useTodayMetrics() {
 
       // Calculate conversion rate
       const conversions = callActivities?.filter(
-        call => call.status === 'converted'
+        call => call.status === 'converted' || (call.deposit_amount && Number(call.deposit_amount) > 0)
       ).length || 0;
       const conversionRate = totalCalls > 0 
         ? Math.round((conversions / totalCalls) * 100 * 10) / 10 
@@ -92,7 +96,7 @@ export function useTodayMetrics() {
     const interval = setInterval(fetchMetrics, 60000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   return { metrics, loading, refetch: fetchMetrics };
 }

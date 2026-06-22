@@ -144,9 +144,9 @@ BEGIN
     user_uuid,
     call_date,
     COUNT(*) as calls_made,
-    COUNT(*) FILTER (WHERE status = 'connected') as connects,
+    COUNT(*) FILTER (WHERE status IN ('connected', 'converted', 'interested', 'not_interested', 'answered_no_response') OR duration_seconds > 0) as connects,
     COALESCE(SUM(duration_seconds), 0) as total_handle_time_seconds,
-    COUNT(*) FILTER (WHERE status = 'converted') as conversions,
+    COUNT(*) FILTER (WHERE status = 'converted' OR deposit_amount > 0) as conversions,
     COALESCE(SUM(deposit_amount), 0) as total_deposit_value
   FROM public.call_activities 
   WHERE user_id = user_uuid 

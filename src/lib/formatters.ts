@@ -21,14 +21,26 @@ export const formatCurrency = (amount: number, countryCode: string): string => {
   return `${symbol} ${formatted}`;
 };
 
-// Format Ugandan Shillings (kept for backwards compat)
-export const formatUGX = (amount: number): string => formatCurrency(amount, 'UG');
+export const getCurrentCountryCode = (): string => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('bangbet_user_country') || 'UG';
+  }
+  return 'UG';
+};
 
-// Format date/time in Kampala timezone
+// Format branch currency based on current user context
+export const formatUGX = (amount: number): string => {
+  const countryCode = getCurrentCountryCode();
+  return formatCurrency(amount, countryCode);
+};
+
+// Format date/time in Kampala/branch timezone
 export const formatKampalaTime = (date: Date | string): string => {
   const d = typeof date === 'string' ? new Date(date) : date;
+  const countryCode = getCurrentCountryCode();
+  const tz = COUNTRY_MAP[countryCode]?.timezone || 'Africa/Kampala';
   return new Intl.DateTimeFormat('en-UG', {
-    timeZone: 'Africa/Kampala',
+    timeZone: tz,
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -38,61 +50,45 @@ export const formatKampalaTime = (date: Date | string): string => {
   }).format(d);
 };
 
-// Get current time in EAT (East Africa Time, UTC+3)
+// Get current time in EAT (East Africa Time, UTC+3) or other local timezone
 // This ensures timestamps are always saved in the correct timezone
 // regardless of the agent's computer timezone settings
 export const getEATTimestamp = (): string => {
   const now = new Date();
-  // Get UTC time
-  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-  // Add 3 hours for EAT (UTC+3)
-  const eatTime = new Date(utcTime + (3 * 60 * 60 * 1000));
-  // Return as ISO string (this will be UTC, but represents EAT time)
-  // Actually, we need to return it in a way that represents the EAT moment correctly
-  // The best approach is to create a date string that represents the EAT time as UTC
-  // But actually, PostgreSQL TIMESTAMP WITH TIME ZONE stores UTC internally
-  // So we should save the actual UTC time that corresponds to the current EAT time
-  // If it's 1:47 PM EAT, that's 10:47 AM UTC
-  // So we need to subtract 3 hours from the current UTC time if the computer is in EAT
-  // Or we can use the server's timezone
-  
-  // Actually, the simplest solution: use the current UTC time
-  // The database will store it correctly as UTC
-  // When displaying, we convert UTC to EAT
   return now.toISOString();
 };
 
-// Format date/time for display in EAT (East Africa Time)
-// Converts UTC timestamps from database to EAT (UTC+3) for display
+// Format date/time for display in branch timezone
+// Converts UTC timestamps from database to local branch timezone for display
 export const formatEAT = (dateString: string): string => {
   if (!dateString) return 'N/A';
   
-  // Supabase returns TIMESTAMP WITH TIME ZONE as ISO strings
-  // These are always in UTC format (ending with 'Z' or '+00:00')
-  // Parse the date - JavaScript will interpret ISO strings as UTC
   const date = new Date(dateString);
   
   if (isNaN(date.getTime())) {
     return 'Invalid Date';
   }
   
-  // If times are showing 3 hours ahead when they shouldn't be,
-  // it means the stored timestamps might already be in EAT (not UTC)
-  // OR Supabase is returning them in a different format
+  const countryCode = getCurrentCountryCode();
+  const c = COUNTRY_MAP[countryCode] || COUNTRY_MAP['UG'];
+  const tz = c.timezone;
   
-  // Based on debug logs, timestamps are being stored incorrectly:
-  // They're stored as if EAT time is UTC (e.g., 1:41 PM EAT stored as 1:41 PM UTC)
-  // Instead of being stored as UTC (e.g., 1:41 PM EAT should be 10:41 AM UTC)
-  // 
-  // To fix display: subtract 3 hours from the stored UTC time before converting to EAT
-  // This compensates for the incorrect storage
+  // Get offset in hours
+  const COUNTRY_OFFSETS: Record<string, number> = {
+    UG: 3,
+    KE: 3,
+    TZ: 3,
+    NG: 1,
+    GH: 0,
+  };
+  const offsetHours = COUNTRY_OFFSETS[countryCode] ?? 3;
   
-  // Subtract 3 hours (10800000 ms) to account for timestamps being stored incorrectly
-  const correctedDate = new Date(date.getTime() - (3 * 60 * 60 * 1000));
+  // Subtract the offset hours to account for timestamps being stored as if local time was UTC
+  const correctedDate = new Date(date.getTime() - (offsetHours * 60 * 60 * 1000));
   
-  // Now convert to EAT for display
+  // Now convert to branch timezone for display
   return correctedDate.toLocaleString('en-US', {
-    timeZone: 'Africa/Kampala',
+    timeZone: tz,
     month: 'short',
     day: 'numeric',
     hour: '2-digit',

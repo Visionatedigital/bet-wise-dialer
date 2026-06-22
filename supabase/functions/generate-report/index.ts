@@ -39,8 +39,8 @@ serve(async (req) => {
       
       reportData.metrics = {
         totalCalls: callActivities?.length || 0,
-        answered: callActivities?.filter(c => c.status === 'connected' || c.status === 'converted').length || 0,
-        conversions: callActivities?.filter(c => c.status === 'converted').length || 0,
+        answered: callActivities?.filter(c => ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(c.status) || (c.duration_seconds || 0) > 0).length || 0,
+        conversions: callActivities?.filter(c => c.status === 'converted' || (c.deposit_amount && Number(c.deposit_amount) > 0)).length || 0,
         totalDeposits: callActivities?.reduce((sum, c) => sum + (c.deposit_amount || 0), 0) || 0,
         avgHandleTime: callActivities && callActivities.length > 0 
           ? Math.floor(callActivities.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) / callActivities.length)
@@ -64,7 +64,7 @@ serve(async (req) => {
         return {
           name: profile.full_name || profile.email,
           totalCalls: agentCalls.length,
-          conversions: agentCalls.filter((c: any) => c.status === 'converted').length,
+          conversions: agentCalls.filter((c: any) => c.status === 'converted' || (c.deposit_amount && Number(c.deposit_amount) > 0)).length,
           totalDuration: agentCalls.reduce((sum: number, c: any) => sum + (c.duration_seconds || 0), 0),
         };
       }) || [];

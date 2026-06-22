@@ -48,10 +48,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     api.get<BangbetUser>('/auth/me')
       .then((userData) => {
         setUser(userData);
+        if (userData.country) {
+          localStorage.setItem('bangbet_user_country', userData.country);
+        }
       })
       .catch((err) => {
         console.warn('[Auth] Initial check failed (token possibly expired)', err);
         localStorage.removeItem('bangbet_token');
+        localStorage.removeItem('bangbet_user_country');
         setUser(null);
       })
       .finally(() => {
@@ -63,6 +67,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await api.post<{ token: string; user: BangbetUser }>('/auth/login', { email, password });
       localStorage.setItem('bangbet_token', response.token);
+      if (response.user.country) {
+        localStorage.setItem('bangbet_user_country', response.user.country);
+      }
       setUser(response.user);
       return { error: null };
     } catch (err: any) {
@@ -96,6 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Clear token completely
       localStorage.removeItem('bangbet_token');
+      localStorage.removeItem('bangbet_user_country');
       
       setUser(null);
       
@@ -114,6 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('[Auth] Sign out failed:', error);
       setUser(null);
       localStorage.removeItem('bangbet_token');
+      localStorage.removeItem('bangbet_user_country');
       localStorage.removeItem('adminViewMode');
       sessionStorage.clear();
       

@@ -6,15 +6,24 @@ export interface CountryConfig {
   localLength: number; // digits after country code
   currency: string;
   timezone: string;
+  supportNumber: string;
 }
 
 export const COUNTRIES: CountryConfig[] = [
-  { code: 'UG', name: 'Uganda',   dialCode: '256', flag: '🇺🇬', localLength: 9,  currency: 'UGX', timezone: 'Africa/Kampala'       },
-  { code: 'GH', name: 'Ghana',    dialCode: '233', flag: '🇬🇭', localLength: 9,  currency: 'GHS', timezone: 'Africa/Accra'         },
-  { code: 'NG', name: 'Nigeria',  dialCode: '234', flag: '🇳🇬', localLength: 10, currency: 'NGN', timezone: 'Africa/Lagos'         },
-  { code: 'TZ', name: 'Tanzania', dialCode: '255', flag: '🇹🇿', localLength: 9,  currency: 'TZS', timezone: 'Africa/Dar_es_Salaam' },
-  { code: 'KE', name: 'Kenya',    dialCode: '254', flag: '🇰🇪', localLength: 9,  currency: 'KES', timezone: 'Africa/Nairobi'       },
+  { code: 'UG', name: 'Uganda',   dialCode: '256', flag: '🇺🇬', localLength: 9,  currency: 'UGX', timezone: 'Africa/Kampala',       supportNumber: '+256 800 123456' },
+  { code: 'GH', name: 'Ghana',    dialCode: '233', flag: '🇬🇭', localLength: 9,  currency: 'GHS', timezone: 'Africa/Accra',         supportNumber: '+233 800 123456' },
+  { code: 'NG', name: 'Nigeria',  dialCode: '234', flag: '🇳🇬', localLength: 10, currency: 'NGN', timezone: 'Africa/Lagos',         supportNumber: '+234 800 123456' },
+  { code: 'TZ', name: 'Tanzania', dialCode: '255', flag: '🇹🇿', localLength: 9,  currency: 'TZS', timezone: 'Africa/Dar_es_Salaam', supportNumber: '+255 800 123456' },
+  { code: 'KE', name: 'Kenya',    dialCode: '254', flag: '🇰🇪', localLength: 9,  currency: 'KES', timezone: 'Africa/Nairobi',       supportNumber: '+254 800 123456' },
 ];
+
+export const COUNTRY_OFFSETS: Record<string, number> = {
+  UG: 3,
+  KE: 3,
+  TZ: 3,
+  NG: 1,
+  GH: 0,
+};
 
 export const COUNTRY_MAP: Record<string, CountryConfig> = Object.fromEntries(
   COUNTRIES.map(c => [c.code, c])

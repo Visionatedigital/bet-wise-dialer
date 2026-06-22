@@ -58,8 +58,8 @@ serve(async (req) => {
 
     // Generate HTML report
     const totalCalls = calls?.length || 0;
-    const totalConnects = calls?.filter(c => c.status === 'connected' || c.status === 'converted').length || 0;
-    const totalConversions = calls?.filter(c => c.status === 'converted').length || 0;
+    const totalConnects = calls?.filter(c => ['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(c.status) || (c.duration_seconds || 0) > 0).length || 0;
+    const totalConversions = calls?.filter(c => c.status === 'converted' || (c.deposit_amount && Number(c.deposit_amount) > 0)).length || 0;
     const totalRevenue = calls?.reduce((sum, c) => sum + (c.deposit_amount || 0), 0) || 0;
     const connectRate = totalCalls > 0 ? ((totalConnects / totalCalls) * 100).toFixed(1) : '0.0';
     const conversionRate = totalConnects > 0 ? ((totalConversions / totalConnects) * 100).toFixed(1) : '0.0';
@@ -78,8 +78,8 @@ serve(async (req) => {
       }
       const stats = agentStats.get(agentName);
       stats.calls++;
-      if (call.status === 'connected' || call.status === 'converted') stats.connects++;
-      if (call.status === 'converted') stats.conversions++;
+      if (['connected', 'converted', 'interested', 'not_interested', 'answered_no_response'].includes(call.status) || (call.duration_seconds || 0) > 0) stats.connects++;
+      if (call.status === 'converted' || (call.deposit_amount && Number(call.deposit_amount) > 0)) stats.conversions++;
       stats.revenue += call.deposit_amount || 0;
     });
 
