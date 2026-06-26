@@ -9,6 +9,7 @@ import {
   Alert,
   Modal,
   Share,
+  FlatList,
 } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -208,6 +209,23 @@ export default function AgentLogsScreen() {
     refetchInterval: 60000,
   });
 
+  const { data: numbersAssigned = 0 } = useQuery<number>({
+    queryKey: ["agent-assigned-leads", agentId, range.start.toISOString(), range.end.toISOString()],
+    queryFn: async () => {
+      try {
+        const data = await api.get<{ count: number }>(
+          `/leads/assigned-count?user_id=${agentId}&since=${encodeURIComponent(range.start.toISOString())}&until=${encodeURIComponent(range.end.toISOString())}`
+        );
+        return data.count ?? 0;
+      } catch {
+        // Endpoint not available — fall back to 0 gracefully
+        return 0;
+      }
+    },
+    enabled: !!agentId,
+    refetchInterval: 60000,
+  });
+
   const callbacksByPhone = React.useMemo(() => {
     const map: Record<string, Callback> = {};
     if (Array.isArray(callbacks)) {
@@ -216,9 +234,15 @@ export default function AgentLogsScreen() {
     return map;
   }, [callbacks]);
 
-  const totalCalls  = Array.isArray(calls) ? calls.length : 0;
-  const connects    = Array.isArray(calls) ? calls.filter((c) => ["connected", "converted", "interested", "not_interested", "answered_no_response"].includes(c.status) || (c.duration_seconds || 0) > 0).length : 0;
-  const conversions = Array.isArray(calls) ? calls.filter((c) => c.status === "converted" || (c.deposit_amount && c.deposit_amount > 0)).length : 0;
+  const { totalCalls, connects, conversions } = React.useMemo(() => {
+    const total = Array.isArray(calls) ? calls.length : 0;
+    if (!Array.isArray(calls)) {
+      return { totalCalls: 0, connects: 0, conversions: 0 };
+    }
+    const conn = calls.filter((c) => ["connected", "converted", "interested", "not_interested", "answered_no_response"].includes(c.status) || (c.duration_seconds || 0) > 0).length;
+    const conv = calls.filter((c) => c.status === "converted" || (c.deposit_amount && c.deposit_amount > 0)).length;
+    return { totalCalls: total, connects: conn, conversions: conv };
+  }, [calls]);
 
   function openCustomModal() {
     setTempStart(custom.start);
@@ -249,6 +273,22 @@ export default function AgentLogsScreen() {
     setExporting(true);
     try {
       const rangeLabel = formatRangeLabel(range);
+
+      // ── Summary sheet: Numbers Assigned + key KPIs ──────────────────────
+      const connectRate = totalCalls > 0 ? `${Math.round((connects / totalCalls) * 100)}%` : "0%";
+      const summaryHeaders = ["Metric", "Value"];
+      const summaryRows = [
+        ["Agent", agentName || agentId],
+        ["Period", rangeLabel],
+        ["Numbers Assigned", numbersAssigned],
+        ["Total Calls Made", totalCalls],
+        ["Connects", connects],
+        ["Connect Rate", connectRate],
+        ["Conversions / Deposits", conversions],
+      ];
+      const wsSummary = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]);
+
+      // ── Call Log sheet ───────────────────────────────────────────────────
       const headers = ["Phone Number", "Lead Name", "Status", "Notes", "Follow Up", "Follow Up Date", "Follow Up Notes", "Deposit Amount", "Call Time", "Call Date"];
 
       const rows = calls.map((call) => {
@@ -269,6 +309,7 @@ export default function AgentLogsScreen() {
 
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
       const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
       XLSX.utils.book_append_sheet(wb, ws, "Calls");
       const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
 
@@ -325,131 +366,145 @@ export default function AgentLogsScreen() {
         }}
       />
 
-      <ScrollView style={styles.container}>
-
-        {/* Date range presets */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetRow}>
-          {PRESETS.map((p) => {
-            const active = preset === p.key;
-            return (
-              <TouchableOpacity
-                key={p.key}
-                style={[styles.presetChip, active && styles.presetChipActive]}
-                onPress={() => p.key === "custom" ? openCustomModal() : setPreset(p.key)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.presetChipText, active && styles.presetChipTextActive]}>{p.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Active range label */}
-        <View style={styles.rangeLabelRow}>
-          <Feather name="calendar" size={12} color={colors.text.muted} />
-          <Text style={styles.rangeLabel}>{formatRangeLabel(range)}</Text>
-        </View>
-
-        {/* KPIs */}
-        <View style={styles.kpiRow}>
-          <View style={styles.kpiCard}>
-            <Text style={[styles.kpiValue, { color: colors.brand.green }]}>{totalCalls}</Text>
-            <Text style={styles.kpiLabel}>Calls</Text>
-          </View>
-          <View style={styles.kpiCard}>
-            <Text style={[styles.kpiValue, { color: "#10b981" }]}>{connects}</Text>
-            <Text style={styles.kpiLabel}>Connects</Text>
-          </View>
-          <View style={styles.kpiCard}>
-            <Text style={[styles.kpiValue, { color: "#6366f1" }]}>{conversions}</Text>
-            <Text style={styles.kpiLabel}>Deposits</Text>
-          </View>
-        </View>
-
-        {/* Generate Report */}
-        <TouchableOpacity style={styles.reportButton} onPress={handleGenerateReport} disabled={exporting} activeOpacity={0.8}>
-          {exporting
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Feather name="file-text" size={18} color="#fff" />
-          }
-          <Text style={styles.reportButtonText}>
-            {exporting ? "Generating..." : `Generate Report — ${formatRangeLabel(range)}`}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Call Logs */}
-        <View style={styles.logsSection}>
-          <View style={styles.logsSectionHeader}>
-            <View style={styles.logsTitleRow}>
-              <Feather name="phone" size={14} color={colors.text.secondary} />
-              <Text style={styles.sectionTitleInline}>Call Logs</Text>
+      <FlatList
+        style={styles.container}
+        data={Array.isArray(calls) ? calls : []}
+        keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+        renderItem={({ item: call, index }) => {
+          const i = index;
+          if (!call) return null;
+          const s  = STATUS_STYLE[call.status] || { bg: "#f3f4f6", text: "#374151", label: call.status };
+          const cb = callbacksByPhone[call.phone_number];
+          return (
+            <View style={[styles.logCard, i === 0 && { borderTopWidth: 0 }, { marginHorizontal: 20 }]}>
+              <View style={styles.logRow}>
+                <View style={[styles.logIcon, { backgroundColor: s.bg }]}>
+                  <Feather
+                    name={["connected","interested"].includes(call.status) ? "phone-incoming" : call.status === "no_answer" ? "phone-missed" : "phone-off"}
+                    size={13} color={s.text}
+                  />
+                </View>
+                <View style={styles.logInfo}>
+                  <Text style={styles.logPhone}>{call.phone_number}</Text>
+                  {call.lead_name ? <Text style={styles.logName}>{call.lead_name}</Text> : null}
+                </View>
+                <View style={styles.logRight}>
+                  <View style={[styles.statusChip, { backgroundColor: s.bg }]}>
+                    <Text style={[styles.statusChipText, { color: s.text }]}>{s.label}</Text>
+                  </View>
+                  <Text style={styles.logTime}>{formatTime(call.created_at)}</Text>
+                </View>
+              </View>
+              {call.notes ? (
+                <View style={styles.notesRow}>
+                  <Feather name="message-square" size={11} color={colors.text.muted} />
+                  <Text style={styles.notesText}>{call.notes}</Text>
+                </View>
+              ) : null}
+              {call.deposit_amount && call.deposit_amount > 0 ? (
+                <View style={styles.depositRow}>
+                  <Feather name="trending-up" size={11} color="#10b981" />
+                  <Text style={styles.depositText}>Deposit: {formatCurrency(call.deposit_amount, getCurrencyFromPhone(call.phone_number, user?.country || 'UG'))}</Text>
+                </View>
+              ) : null}
+              {cb ? (
+                <View style={styles.followUpRow}>
+                  <Feather name="calendar" size={11} color="#6366f1" />
+                  <Text style={styles.followUpText}>
+                    Follow-up: {formatDate(cb.scheduled_for)}{cb.notes ? ` — ${cb.notes}` : ""}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-            {totalCalls > 0 && <Text style={styles.logsCount}>{totalCalls} calls</Text>}
-          </View>
+          );
+        }}
+        ListHeaderComponent={
+          <>
+            {/* Date range presets */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetRow}>
+              {PRESETS.map((p) => {
+                const active = preset === p.key;
+                return (
+                  <TouchableOpacity
+                    key={p.key}
+                    style={[styles.presetChip, active && styles.presetChipActive]}
+                    onPress={() => p.key === "custom" ? openCustomModal() : setPreset(p.key)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.presetChipText, active && styles.presetChipTextActive]}>{p.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
-          {callsLoading ? (
+            {/* Active range label */}
+            <View style={styles.rangeLabelRow}>
+              <Feather name="calendar" size={12} color={colors.text.muted} />
+              <Text style={styles.rangeLabel}>{formatRangeLabel(range)}</Text>
+            </View>
+
+            {/* KPIs */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiCard}>
+                <Text style={[styles.kpiValue, { color: "#2563eb" }]}>{numbersAssigned}</Text>
+                <Text style={styles.kpiLabel}>Assigned</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <Text style={[styles.kpiValue, { color: colors.brand.green }]}>{totalCalls}</Text>
+                <Text style={styles.kpiLabel}>Calls</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <Text style={[styles.kpiValue, { color: "#10b981" }]}>{connects}</Text>
+                <Text style={styles.kpiLabel}>Connects</Text>
+              </View>
+              <View style={styles.kpiCard}>
+                <Text style={[styles.kpiValue, { color: "#6366f1" }]}>{conversions}</Text>
+                <Text style={styles.kpiLabel}>Deposits</Text>
+              </View>
+            </View>
+
+            {/* Generate Report */}
+            <TouchableOpacity style={styles.reportButton} onPress={handleGenerateReport} disabled={exporting} activeOpacity={0.8}>
+              {exporting
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Feather name="file-text" size={18} color="#fff" />
+              }
+              <Text style={styles.reportButtonText}>
+                {exporting ? "Generating..." : `Generate Report — ${formatRangeLabel(range)}`}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Call Logs Section Header */}
+            <View style={[styles.logsSection, { marginBottom: 10 }]}>
+              <View style={styles.logsSectionHeader}>
+                <View style={styles.logsTitleRow}>
+                  <Feather name="phone" size={14} color={colors.text.secondary} />
+                  <Text style={styles.sectionTitleInline}>Call Logs</Text>
+                </View>
+                {totalCalls > 0 && <Text style={styles.logsCount}>{totalCalls} calls</Text>}
+              </View>
+            </View>
+          </>
+        }
+        ListEmptyComponent={
+          callsLoading ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator color={colors.brand.green} />
               <Text style={styles.loadingText}>Loading logs...</Text>
             </View>
-          ) : !Array.isArray(calls) || calls.length === 0 ? (
-            <View style={styles.emptyBox}>
+          ) : (
+            <View style={[styles.emptyBox, { marginHorizontal: 20 }]}>
               <Feather name="phone-off" size={22} color={colors.text.muted} />
               <Text style={styles.emptyText}>No calls in this period</Text>
             </View>
-          ) : (
-            calls.map((call, i) => {
-              if (!call) return null;
-              const s  = STATUS_STYLE[call.status] || { bg: "#f3f4f6", text: "#374151", label: call.status };
-              const cb = callbacksByPhone[call.phone_number];
-              return (
-                <View key={call.id || i} style={[styles.logCard, i === 0 && { borderTopWidth: 0 }]}>
-                  <View style={styles.logRow}>
-                    <View style={[styles.logIcon, { backgroundColor: s.bg }]}>
-                      <Feather
-                        name={["connected","interested"].includes(call.status) ? "phone-incoming" : call.status === "no_answer" ? "phone-missed" : "phone-off"}
-                        size={13} color={s.text}
-                      />
-                    </View>
-                    <View style={styles.logInfo}>
-                      <Text style={styles.logPhone}>{call.phone_number}</Text>
-                      {call.lead_name ? <Text style={styles.logName}>{call.lead_name}</Text> : null}
-                    </View>
-                    <View style={styles.logRight}>
-                      <View style={[styles.statusChip, { backgroundColor: s.bg }]}>
-                        <Text style={[styles.statusChipText, { color: s.text }]}>{s.label}</Text>
-                      </View>
-                      <Text style={styles.logTime}>{formatTime(call.created_at)}</Text>
-                    </View>
-                  </View>
-                  {call.notes ? (
-                    <View style={styles.notesRow}>
-                      <Feather name="message-square" size={11} color={colors.text.muted} />
-                      <Text style={styles.notesText}>{call.notes}</Text>
-                    </View>
-                  ) : null}
-                  {call.deposit_amount && call.deposit_amount > 0 ? (
-                    <View style={styles.depositRow}>
-                      <Feather name="trending-up" size={11} color="#10b981" />
-                      <Text style={styles.depositText}>Deposit: {formatCurrency(call.deposit_amount, getCurrencyFromPhone(call.phone_number, user?.country || 'UG'))}</Text>
-                    </View>
-                  ) : null}
-                  {cb ? (
-                    <View style={styles.followUpRow}>
-                      <Feather name="calendar" size={11} color="#6366f1" />
-                      <Text style={styles.followUpText}>
-                        Follow-up: {formatDate(cb.scheduled_for)}{cb.notes ? ` — ${cb.notes}` : ""}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              );
-            })
-          )}
-        </View>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
+          )
+        }
+        ListFooterComponent={<View style={{ height: 40 }} />}
+        initialNumToRender={20}
+        maxToRenderPerBatch={20}
+        windowSize={10}
+        removeClippedSubviews={true}
+      />
 
       {/* Custom date range modal */}
       <Modal visible={showCustomModal} transparent animationType="slide" onRequestClose={() => setShowCustomModal(false)}>
