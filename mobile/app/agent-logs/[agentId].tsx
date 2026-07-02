@@ -49,61 +49,63 @@ function getUtcRangeForLocalDate(dateStr: string, offsetHours: number): DateRang
   return { start, end };
 }
 
+function formatUtcAsYmd(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+  const day = d.getUTCDate().toString().padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function getPresetRange(preset: PresetKey, countryCode: string, custom: DateRange): DateRange {
-  const tz = COUNTRY_MAP[countryCode]?.timezone || 'Africa/Kampala';
   const offset = COUNTRY_OFFSETS[countryCode] ?? 3;
 
   const getAgentLocalTime = (d = new Date()) => {
-    return new Date(d.toLocaleString('en-US', { timeZone: tz }));
+    return new Date(d.getTime() + offset * 60 * 60 * 1000);
   };
 
   const localNow = getAgentLocalTime();
 
   switch (preset) {
     case "today": {
-      const dateStr = localNow.toLocaleDateString('en-CA'); // 'YYYY-MM-DD'
+      const dateStr = formatUtcAsYmd(localNow);
       return getUtcRangeForLocalDate(dateStr, offset);
     }
     case "yesterday": {
-      const yesterday = new Date(localNow);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const dateStr = yesterday.toLocaleDateString('en-CA');
+      const yesterday = new Date(localNow.getTime() - 24 * 60 * 60 * 1000);
+      const dateStr = formatUtcAsYmd(yesterday);
       return getUtcRangeForLocalDate(dateStr, offset);
     }
     case "this_week": {
-      const day = localNow.getDay();
-      const mon = new Date(localNow);
-      mon.setDate(localNow.getDate() - ((day + 6) % 7));
+      const day = localNow.getUTCDay();
+      const diff = (day + 6) % 7;
+      const mon = new Date(localNow.getTime() - diff * 24 * 60 * 60 * 1000);
       
-      const startDateStr = mon.toLocaleDateString('en-CA');
-      const endDateStr = localNow.toLocaleDateString('en-CA');
+      const startDateStr = formatUtcAsYmd(mon);
+      const endDateStr = formatUtcAsYmd(localNow);
       
       const startRange = getUtcRangeForLocalDate(startDateStr, offset);
       const endRange = getUtcRangeForLocalDate(endDateStr, offset);
       return { start: startRange.start, end: endRange.end };
     }
     case "last_week": {
-      const day = localNow.getDay();
-      const thisMonday = new Date(localNow);
-      thisMonday.setDate(localNow.getDate() - ((day + 6) % 7));
+      const day = localNow.getUTCDay();
+      const thisMonday = new Date(localNow.getTime() - ((day + 6) % 7) * 24 * 60 * 60 * 1000);
       
-      const lastMon = new Date(thisMonday);
-      lastMon.setDate(thisMonday.getDate() - 7);
-      const lastSun = new Date(thisMonday);
-      lastSun.setDate(thisMonday.getDate() - 1);
+      const lastMon = new Date(thisMonday.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const lastSun = new Date(thisMonday.getTime() - 1 * 24 * 60 * 60 * 1000);
       
-      const startDateStr = lastMon.toLocaleDateString('en-CA');
-      const endDateStr = lastSun.toLocaleDateString('en-CA');
+      const startDateStr = formatUtcAsYmd(lastMon);
+      const endDateStr = formatUtcAsYmd(lastSun);
       
       const startRange = getUtcRangeForLocalDate(startDateStr, offset);
       const endRange = getUtcRangeForLocalDate(endDateStr, offset);
       return { start: startRange.start, end: endRange.end };
     }
     case "this_month": {
-      const firstDay = new Date(localNow.getFullYear(), localNow.getMonth(), 1);
+      const firstDay = new Date(Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), 1, 0, 0, 0, 0));
       
-      const startDateStr = firstDay.toLocaleDateString('en-CA');
-      const endDateStr = localNow.toLocaleDateString('en-CA');
+      const startDateStr = formatUtcAsYmd(firstDay);
+      const endDateStr = formatUtcAsYmd(localNow);
       
       const startRange = getUtcRangeForLocalDate(startDateStr, offset);
       const endRange = getUtcRangeForLocalDate(endDateStr, offset);

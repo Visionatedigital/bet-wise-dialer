@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image, ActivityIndicator, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -17,6 +17,19 @@ import { FloatingAssistant } from "../../src/components/FloatingAssistant";
 import { CrmDashboard } from "../../src/components/CrmDashboard";
 import { getCurrencyFromCountry } from "../../src/utils/formatCurrency";
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type TimePeriod = "today" | "week" | "month" | "all";
+
+const PERIOD_LABELS: Record<TimePeriod, string> = {
+  today: "Today",
+  week: "This Week",
+  month: "This Month",
+  all: "All Time",
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function maskPhone(phone: string): string {
   if (!phone || phone.length < 6) return phone || "";
   return "***" + phone.replace(/[^0-9]/g, "").slice(-4);
@@ -32,6 +45,22 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+/** Returns ISO start timestamp for the selected time period */
+function getPeriodStart(period: TimePeriod): string | null {
+  if (period === "all") return null;
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  if (period === "week") {
+    // Monday as start of week
+    const day = d.getDay();
+    const diff = (day + 6) % 7;
+    d.setDate(d.getDate() - diff);
+  } else if (period === "month") {
+    d.setDate(1);
+  }
+  return d.toISOString();
+}
+
 const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> = {
   connected: { bg: "#dcfce7", text: "#166534", label: "Connected" },
   converted: { bg: "#dcfce7", text: "#166534", label: "Converted" },
@@ -41,18 +70,88 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> 
   not_interested: { bg: "#f3f4f6", text: "#374151", label: "Not Interested" },
 };
 
+// ─── Manager Dashboard ───────────────────────────────────────────────────────
+
 function ManagerDashboard() {
   const router = useRouter();
+  const { user } = useAuth();
+  const [timePeriod, setTimePeriod] = React.useState<TimePeriod>("today");
   const { data: agents, refetch: refetchAgents } = useAgentsAvailable();
-  const { data: teamData, refetch: refetchTeam } = useTeamMetrics();
+  const { data: teamData, refetch: refetchTeam } = useTeamMetrics(timePeriod);
   const totals = teamData?.totals;
   const metricsByAgent = teamData?.byAgent ?? [];
+  const [redistributing, setRedistributing] = React.useState(false);
 
   const activeAgents = agents?.filter((a) => a.status === "online").length ?? 0;
+
+  // ── Period-filtered: assigned lead counts per agent ──────────────────────
+  const periodStart = getPeriodStart(timePeriod);
+
+  const { data: periodLeadsData, refetch: refetchPeriodLeads } = useQuery<Record<string, number>>({
+    queryKey: ["period-assigned-leads", timePeriod],
+    queryFn: async () => {
+      if (!agents || agents.length === 0) return {};
+      // Build query string: fetch leads assigned to agents in this period
+      let url = `/leads/assigned-counts`;
+      if (periodStart) url += `?since=${encodeURIComponent(periodStart)}`;
+      try {
+        const data = await api.get<{ counts: Record<string, number>; total: number }>(url);
+        return data.counts ?? {};
+      } catch {
+        // Fallback: use agent's assigned_leads total for "all", 0 for periods
+        const map: Record<string, number> = {};
+        if (timePeriod === "all" && agents) {
+          agents.forEach((a) => { map[a.id] = parseInt(a.assigned_leads as any) || 0; });
+        }
+        return map;
+      }
+    },
+    enabled: !!agents && agents.length > 0,
+    refetchInterval: 30000,
+  });
+
+  // ── Total assigned across all team agents ────────────────────────────────
+  const totalAssigned = React.useMemo(() => {
+    if (!periodLeadsData) return null;
+    return Object.values(periodLeadsData).reduce((s, v) => s + v, 0);
+  }, [periodLeadsData]);
 
   const refetchAll = () => {
     refetchAgents();
     refetchTeam();
+    refetchPeriodLeads();
+  };
+
+  const handleRedistribute = async () => {
+    Alert.alert(
+      "Re-distribute Leads",
+      "This will redistribute unassigned leads to your team agents. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Redistribute",
+          style: "default",
+          onPress: async () => {
+            setRedistributing(true);
+            try {
+              const res = await api.post<{ message: string; total_distributed: number }>(
+                "/leads/distribute",
+                { limit: 10000 }
+              );
+              Alert.alert(
+                "Done",
+                res.message || `Redistributed ${res.total_distributed ?? 0} leads to your team.`
+              );
+              refetchAll();
+            } catch (err: any) {
+              Alert.alert("Error", err?.message || "Failed to redistribute leads.");
+            } finally {
+              setRedistributing(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -61,14 +160,49 @@ function ManagerDashboard() {
       refreshControl={<RefreshControl refreshing={false} onRefresh={refetchAll} tintColor={colors.brand.green} />}
     >
       {/* Team KPIs */}
-      <Text style={styles.sectionTitle}>Team Performance Today</Text>
+      <Text style={styles.sectionTitle}>Team Performance {PERIOD_LABELS[timePeriod]}</Text>
       <View style={styles.kpiRow}>
         <KpiCard label="Calls" value={totals?.calls_made ?? 0} color={colors.brand.green} />
         <KpiCard label="Connects" value={totals?.connects ?? 0} color={colors.status.success} />
         <KpiCard label="Converts" value={totals?.conversions ?? 0} color={colors.status.info} />
       </View>
 
-      {/* Agent Overview */}
+      {/* ── Numbers Assigned Card + Re-distribute ── */}
+      <View style={styles.assignedCard}>
+        <View style={styles.assignedCardLeft}>
+          <View style={styles.assignedIconWrap}>
+            <Feather name="users" size={16} color="#2563eb" />
+          </View>
+          <View style={{ marginLeft: 10 }}>
+            <Text style={styles.assignedCardLabel}>Numbers Assigned</Text>
+            <Text style={styles.assignedCardSub}>
+              {PERIOD_LABELS[timePeriod]} • across team
+            </Text>
+          </View>
+        </View>
+        <View style={styles.assignedCardRight}>
+          <Text style={styles.assignedCardValue}>
+            {totalAssigned !== null ? totalAssigned.toLocaleString() : "—"}
+          </Text>
+          <TouchableOpacity
+            style={styles.redistributeBtn}
+            onPress={handleRedistribute}
+            disabled={redistributing}
+            activeOpacity={0.8}
+          >
+            {redistributing ? (
+              <ActivityIndicator size="small" color="#2563eb" />
+            ) : (
+              <>
+                <Feather name="shuffle" size={12} color="#2563eb" />
+                <Text style={styles.redistributeBtnText}>Re-distribute</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ── Agent Overview with Period Selector ── */}
       <View style={styles.agentSection}>
         <View style={styles.agentSectionHeader}>
           <View style={styles.rowGap6}>
@@ -80,6 +214,26 @@ function ManagerDashboard() {
             <Text style={styles.agentsCount}>{activeAgents} online · {agents?.length ?? 0} total</Text>
           </View>
         </View>
+
+        {/* Period Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.periodChipsRow}
+        >
+          {(Object.keys(PERIOD_LABELS) as TimePeriod[]).map((p) => (
+            <TouchableOpacity
+              key={p}
+              style={[styles.periodChip, timePeriod === p && styles.periodChipActive]}
+              onPress={() => setTimePeriod(p)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.periodChipText, timePeriod === p && styles.periodChipTextActive]}>
+                {PERIOD_LABELS[p]}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
         {!agents || agents.length === 0 ? (
           <View style={styles.emptyBox}>
@@ -97,10 +251,15 @@ function ManagerDashboard() {
               .slice(0, 2);
             const isOnline = agent.status === "online";
             const agentMetrics = metricsByAgent.find((m) => m.user_id === agent.id);
-            const callsToday = agentMetrics?.calls_made ?? 0;
-            const connectsToday = agentMetrics?.connects ?? 0;
+            const callsCount = agentMetrics?.calls_made ?? 0;
+            const connectsCount = agentMetrics?.connects ?? 0;
             const connectRate =
-              callsToday > 0 ? Math.round((connectsToday / callsToday) * 100) : 0;
+              callsCount > 0 ? Math.round((connectsCount / callsCount) * 100) : 0;
+
+            // Period-filtered assigned count; fall back to all-time if not available
+            const assignedCount =
+              periodLeadsData?.[agent.id] ??
+              (timePeriod === "all" ? parseInt(agent.assigned_leads as any) || 0 : 0);
 
             return (
               <TouchableOpacity
@@ -128,7 +287,7 @@ function ManagerDashboard() {
                 </View>
                 <View style={styles.agentStats}>
                   <View style={styles.agentStat}>
-                    <Text style={styles.agentStatValue}>{callsToday}</Text>
+                    <Text style={styles.agentStatValue}>{callsCount}</Text>
                     <Text style={styles.agentStatLabel}>Calls</Text>
                   </View>
                   <View style={styles.agentStatDivider} />
@@ -140,8 +299,8 @@ function ManagerDashboard() {
                   </View>
                   <View style={styles.agentStatDivider} />
                   <View style={styles.agentStat}>
-                    <Text style={styles.agentStatValue}>{agent.assigned_leads}</Text>
-                    <Text style={styles.agentStatLabel}>Leads</Text>
+                    <Text style={[styles.agentStatValue, { color: "#2563eb" }]}>{assignedCount}</Text>
+                    <Text style={styles.agentStatLabel}>Assigned</Text>
                   </View>
                 </View>
                 <Feather name="chevron-right" size={16} color={colors.text.muted} />
@@ -182,6 +341,8 @@ function ManagerDashboard() {
     </ScrollView>
   );
 }
+
+// ─── Agent Dashboard ─────────────────────────────────────────────────────────
 
 function AgentDashboard() {
   const { data: metrics, refetch, isLoading } = useTodayMetrics();
@@ -420,6 +581,8 @@ function AgentDashboard() {
   );
 }
 
+// ─── Home Screen (role router) ───────────────────────────────────────────────
+
 export default function HomeScreen() {
   const { user } = useAuth();
   const isManager = user?.role === "management" || user?.role === "admin";
@@ -456,6 +619,8 @@ export default function HomeScreen() {
   );
 }
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg.dashboard },
   topBar: {
@@ -478,10 +643,66 @@ const styles = StyleSheet.create({
   kpiRow: { flexDirection: "row", paddingHorizontal: 16 },
   rowGap6: { flexDirection: "row", alignItems: "center", gap: 6 },
 
+  // ── Numbers Assigned card ──────────────────────────────────────────────────
+  assignedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 20,
+    marginTop: 14,
+    backgroundColor: "#eff6ff",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  assignedCardLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
+  assignedIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: "#dbeafe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  assignedCardLabel: { fontSize: 13, fontWeight: "700", color: "#1e40af" },
+  assignedCardSub: { fontSize: 11, color: "#3b82f6", marginTop: 1 },
+  assignedCardRight: { alignItems: "flex-end", gap: 6 },
+  assignedCardValue: { fontSize: 22, fontWeight: "800", color: "#1d4ed8" },
+  redistributeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#dbeafe",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#93c5fd",
+    minWidth: 100,
+    justifyContent: "center",
+  },
+  redistributeBtnText: { fontSize: 12, fontWeight: "700", color: "#2563eb" },
+
   // Manager: Agent section
   agentSection: { marginHorizontal: 20, marginTop: 20 },
   agentSectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   agentsCount: { fontSize: 12, color: colors.text.muted, fontWeight: "500" },
+
+  // Period chips
+  periodChipsRow: { paddingBottom: 10, gap: 8 },
+  periodChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  periodChipActive: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+  periodChipText: { fontSize: 12, fontWeight: "600", color: colors.text.secondary },
+  periodChipTextActive: { color: "#fff" },
+
   agentCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -511,7 +732,7 @@ const styles = StyleSheet.create({
   agentName: { fontSize: 14, fontWeight: "600", color: colors.text.primary },
   agentEmail: { fontSize: 11, color: colors.text.muted, marginTop: 1 },
   agentStats: { flexDirection: "row", alignItems: "center", gap: 6 },
-  agentStat: { alignItems: "center", minWidth: 30 },
+  agentStat: { alignItems: "center", minWidth: 34 },
   agentStatValue: { fontSize: 14, fontWeight: "700", color: colors.text.primary },
   agentStatLabel: { fontSize: 9, color: colors.text.muted, fontWeight: "600", textTransform: "uppercase" },
   agentStatDivider: { width: 1, height: 20, backgroundColor: colors.border.default },
