@@ -35,7 +35,10 @@ const ManagementReports = () => {
   const [activeExcelTab, setActiveExcelTab] = useState<string>(''); // Track active Excel tab
 
   // Daily call-notes export state
-  const [selectedDate, setSelectedDate] = useState<string>(
+  const [startDate, setStartDate] = useState<string>(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [endDate, setEndDate] = useState<string>(
     new Date().toISOString().slice(0, 10)
   );
   const [exportingDaily, setExportingDaily] = useState(false);
@@ -54,10 +57,10 @@ const ManagementReports = () => {
         date: string;
         total: number;
         rows: { date: string; agent_name: string; phone: string; remarks: string }[];
-      }>(`/reports/daily-call-notes?date=${selectedDate}`);
+      }>(`/reports/daily-call-notes?start_date=${startDate}&end_date=${endDate}`);
 
       if (!data.rows || data.rows.length === 0) {
-        toast.info(`No calls recorded for ${selectedDate}`);
+        toast.info(`No calls recorded for selected date range`);
         return;
       }
 
@@ -65,11 +68,12 @@ const ManagementReports = () => {
       const header = ['Date', 'Name', 'Numbers', 'Remarks'];
 
       // Format date as DD/MM/YYYY to match the supervisor report style
-      const [y, m, d] = selectedDate.split('-');
-      const displayDate = `${d}/${m}/${y}`;
+      const [sy, sm, sd] = startDate.split('-');
+      const [ey, em, ed] = endDate.split('-');
+      const displayDate = startDate === endDate ? `${sd}/${sm}/${sy}` : `${sd}/${sm}/${sy} - ${ed}/${em}/${ey}`;
 
       const dataRows = data.rows.map(r => [
-        displayDate,
+        r.date ? new Date(r.date).toLocaleDateString('en-GB') : displayDate,
         r.agent_name,
         r.phone,
         r.remarks,
@@ -93,7 +97,7 @@ const ManagementReports = () => {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
 
-      const fileName = `call-notes-${selectedDate}.xlsx`;
+      const fileName = `call-notes-${startDate}_to_${endDate}.xlsx`;
       XLSX.writeFile(wb, fileName);
       toast.success(`Downloaded ${fileName} — ${data.total} rows`);
     } catch (err: any) {
@@ -574,7 +578,7 @@ const ManagementReports = () => {
               Export Daily Call Notes
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Download all agent call notes for a chosen date as an Excel spreadsheet (.xlsx) —
+              Download all agent call notes for a chosen date range as an Excel spreadsheet (.xlsx) —
               ready to submit to your supervisor.
             </p>
           </CardHeader>
@@ -582,17 +586,26 @@ const ManagementReports = () => {
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">From:</span>
                 <input
                   type="date"
-                  value={selectedDate}
+                  value={startDate}
                   max={new Date().toISOString().slice(0, 10)}
-                  onChange={e => setSelectedDate(e.target.value)}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="border rounded-md px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <span className="text-sm font-medium ml-2">To:</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => setEndDate(e.target.value)}
                   className="border rounded-md px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <Button
                 onClick={exportDailyCallNotes}
-                disabled={exportingDaily || !selectedDate}
+                disabled={exportingDaily || !startDate || !endDate}
                 className="gap-2"
               >
                 {exportingDaily ? (

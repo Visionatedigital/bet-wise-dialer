@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
+import { DateRange } from "react-day-picker";
 import { 
   BarChart3, 
   TrendingUp, 
@@ -106,7 +107,10 @@ export default function Reports() {
   const { isManagement, isAdmin } = useUserRole();
   const [selectedDateRange, setSelectedDateRange] = useState("30d");
   const [selectedCampaign, setSelectedCampaign] = useState("all");
-  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [date, setDate] = useState<DateRange | undefined>({
+    from: new Date(new Date().setDate(new Date().getDate() - 30)),
+    to: new Date()
+  });
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [transcriptText, setTranscriptText] = useState<string>("");
   const [keyMoments, setKeyMoments] = useState<Array<{time: string; type: string; text: string}>>([]);
@@ -120,7 +124,8 @@ export default function Reports() {
   const { campaigns, metrics, dailyPerformance, loading } = usePerformanceData(
     selectedDateRange,
     selectedCampaign,
-    true // forceIndividual = true to always show individual stats
+    true, // forceIndividual = true to always show individual stats
+    { from: date?.from, to: date?.to } // Pass custom date range
   );
 
   // For agents (non-managers, non-admins), pass their own user ID to show only their own data
@@ -273,17 +278,29 @@ export default function Reports() {
               {selectedDateRange === "custom" && (
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="justify-start text-left font-normal w-[260px]">
                       <CalendarIcon className="h-4 w-4 mr-2" />
-                      {date ? format(date, "PPP") : "Pick a date"}
+                      {date?.from ? (
+                        date.to ? (
+                          <>
+                            {format(date.from, "LLL dd, y")} -{" "}
+                            {format(date.to, "LLL dd, y")}
+                          </>
+                        ) : (
+                          format(date.from, "LLL dd, y")
+                        )
+                      ) : (
+                        <span>Pick a date</span>
+                      )}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
+                  <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
-                      mode="single"
+                      mode="range"
                       selected={date}
                       onSelect={setDate}
                       initialFocus
+                      numberOfMonths={2}
                     />
                   </PopoverContent>
                 </Popover>
@@ -965,6 +982,7 @@ export default function Reports() {
         onOpenChange={setExportOpen}
         dateRange={selectedDateRange}
         selectedAgent={user?.id || 'all'}
+        customDateRange={{ from: date?.from, to: date?.to }}
       />
     </DashboardLayout>
   );

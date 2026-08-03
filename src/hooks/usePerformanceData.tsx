@@ -27,7 +27,12 @@ interface DailyPerformance {
   conversions: number;
 }
 
-export function usePerformanceData(dateRange: string, campaignId?: string, forceIndividual?: boolean) {
+export function usePerformanceData(
+  dateRange: string, 
+  campaignId?: string, 
+  forceIndividual?: boolean,
+  customDateRange?: { from?: Date; to?: Date }
+) {
   const { user } = useAuth();
   const { isManagement, isAdmin } = useUserRole();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -63,6 +68,7 @@ export function usePerformanceData(dateRange: string, campaignId?: string, force
               connects: 0,
               conversions: 0,
               totalRevenue: 0,
+              reportedRevenue: 0,
               connectRate: 0,
               conversionRate: 0,
             });
@@ -120,6 +126,24 @@ export function usePerformanceData(dateRange: string, campaignId?: string, force
             startDate.setHours(0, 0, 0, 0);
             endDate = new Date(endDate.getFullYear(), endDate.getMonth(), 0);
             endDate.setHours(23, 59, 59, 999);
+            break;
+          case "custom":
+            if (customDateRange?.from) {
+              startDate = new Date(customDateRange.from);
+              startDate.setHours(0, 0, 0, 0);
+            } else {
+              startDate.setDate(startDate.getDate() - 30);
+              startDate.setHours(0, 0, 0, 0);
+            }
+            if (customDateRange?.to) {
+              endDate = new Date(customDateRange.to);
+              endDate.setHours(23, 59, 59, 999);
+            } else if (customDateRange?.from) {
+              endDate = new Date(customDateRange.from);
+              endDate.setHours(23, 59, 59, 999);
+            } else {
+              endDate.setHours(23, 59, 59, 999);
+            }
             break;
         }
 

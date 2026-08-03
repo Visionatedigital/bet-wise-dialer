@@ -22,6 +22,7 @@ interface ExportReportModalProps {
   onOpenChange: (open: boolean) => void;
   dateRange: string;
   selectedAgent: string;
+  customDateRange?: { from?: Date; to?: Date };
 }
 
 interface AgentOption {
@@ -51,7 +52,7 @@ const formatDateForExport = (dateString: string, timezone: string = 'Africa/Kamp
   return { formattedDate, formattedTime };
 };
 
-export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent: initialSelectedAgent }: ExportReportModalProps) {
+export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent: initialSelectedAgent, customDateRange }: ExportReportModalProps) {
   const { user } = useAuth();
   const { isManagement, isAdmin } = useUserRole();
   const userCountry = user?.country || 'UG';
@@ -134,6 +135,25 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         startDate.setHours(0, 0, 0, 0);
         endDate = new Date();
         endDate.setHours(23, 59, 59, 999);
+      } else if (dateRange === 'custom') {
+        if (customDateRange?.from) {
+          startDate = new Date(customDateRange.from);
+          startDate.setHours(0, 0, 0, 0);
+        } else {
+          startDate = new Date();
+          startDate.setDate(startDate.getDate() - 30);
+          startDate.setHours(0, 0, 0, 0);
+        }
+        if (customDateRange?.to) {
+          endDate = new Date(customDateRange.to);
+          endDate.setHours(23, 59, 59, 999);
+        } else if (customDateRange?.from) {
+          endDate = new Date(customDateRange.from);
+          endDate.setHours(23, 59, 59, 999);
+        } else {
+          endDate = new Date();
+          endDate.setHours(23, 59, 59, 999);
+        }
       } else {
         const daysMap: Record<string, number> = {
           'week': 7,
@@ -167,8 +187,8 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
       let profiles: any[] = [];
       let campaigns: any[] = [];
 
-      // Fetch all call activities (date filtering done client-side below)
-      const fetchedCalls = await api.get<any[]>('/call-activities?limit=99999').catch((err: any) => {
+      // Fetch all call activities bounded by date
+      const fetchedCalls = await api.get<any[]>(`/call-activities?limit=99999&start_date=${startDate.toISOString()}&end_date=${endDate.toISOString()}`).catch((err: any) => {
         throw new Error(`Failed to fetch call data: ${err?.message || 'Unknown error'}`);
       });
 
@@ -841,177 +861,22 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
       // Handle Excel Report (structured data only)
       if (reportType === 'excel') {
         // Generate Excel spreadsheet with structured data using ExcelJS for better compatibility
-        // Use minimal metadata for maximum Google Drive compatibility
         const excelWorkbook = new ExcelJS.Workbook();
-        // Removed metadata properties that might cause Google Drive conversion issues
-        // excelWorkbook.creator = 'BetSure Dialer';
-        // excelWorkbook.created = new Date();
-        // excelWorkbook.modified = new Date();
-        // excelWorkbook.lastModifiedBy = 'BetSure Dialer';
-        // excelWorkbook.company = 'BetSure';
-        
-        // Create Summary sheet with KPIs
-        const summarySheet = excelWorkbook.addWorksheet('Summary');
-        
-        // Ensure sheet has proper properties
-        summarySheet.properties.defaultRowHeight = 15;
-        
-        // Create shared summary data array - used by both ExcelJS download and preview
-        const generatedDate = new Date().toLocaleDateString('en-US', { timeZone: userTimezone });
-        const summaryDataRows: any[][] = [
-          ['Performance Report Summary'],
-          [],
-          ['Report Period:', dateRange.charAt(0).toUpperCase() + dateRange.slice(1)],
-          ['Generated:', generatedDate]
-        ];
-        
-        if (selectedAgent !== 'all' && agentKPIs) {
-          summaryDataRows.push(
-            ['Agent:', agentKPIs.agentName],
-            ['Email:', agentKPIs.email],
-            [],
-            ['Key Performance Indicators'],
-            ['Metric', 'Value', 'Target'],
-            ['Numbers Assigned', agentKPIs.numbersAssigned || 0, 'Leads assigned in period'],
-            ['Total Calls Made', agentKPIs.totalCalls || 0, '60 calls/day'],
-            ['Calls Per Hour', parseFloat(agentKPIs.callsPerHour.toFixed(1)), '7.5 calls/hour'],
-            ['Connects', agentKPIs.connects || 0, '40 connects/day'],
-            ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'],
-            ['Conversions', agentKPIs.conversions || 0, '12 conversions/day'],
-            ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'],
-            ['Total Revenue', `${currencyLabel} ${agentKPIs.totalRevenue.toLocaleString()}`, ''],
-            ['Average Handle Time', agentKPIs.avgHandleTime || '0:00', '3-5 min']
-          );
-        } else {
-          summaryDataRows.push(
-            [],
-            ['Team Performance Summary'],
-            ['Metric', 'Value'],
-            ['Total Call Attempts (Raw)', teamRawCalls],
-            ['Unique Contacts (Deduplicated)', teamTotalCalls],
-            ['Calls Per Hour', parseFloat(teamCallsPerHour)],
-            ['Connects', teamConnects],
-            ['Connect Rate', teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%'],
-            ['Conversions', teamConversions],
-            ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']
-          );
-        }
-        
-        // Add rows to ExcelJS sheet using the shared data
-        summaryDataRows.forEach(row => {
-          if (row.length === 3 && row[0] !== 'Metric') {
-            // Row with 3 columns - use explicit cell assignment
-            const excelRow = summarySheet.addRow([row[0]]);
-            excelRow.getCell(2).value = row[1];
-            excelRow.getCell(3).value = row[2] || '';
-          } else if (row.length === 2 && row[0] !== 'Metric') {
-            // Row with 2 columns - use explicit cell assignment
-            const excelRow = summarySheet.addRow([row[0]]);
-            excelRow.getCell(2).value = row[1];
-          } else {
-            // Header rows or empty rows - add as-is
-            summarySheet.addRow(row);
-          }
-        });
-
-        // ── Per-Agent Breakdown sheet (team reports only) ──────────────────────
-        if (selectedAgent === 'all') {
-          const agentBreakdownSheet = excelWorkbook.addWorksheet('Per Agent Breakdown');
-
-          // Header row
-          agentBreakdownSheet.addRow([
-            'Agent Name', 'Email',
-            'Total Calls', 'Calls/Hour',
-            'Connects', 'Connect Rate',
-            'Conversions', 'Conversion Rate',
-            `Total Revenue (${currencyLabel})`, 'Avg Handle Time'
-          ]);
-
-          // Group enrichedCallActivities by user_id
-          const agentCallMap = new Map<string, any[]>();
-          enrichedCallActivities.forEach(call => {
-            const uid = call.user_id;
-            if (!agentCallMap.has(uid)) agentCallMap.set(uid, []);
-            agentCallMap.get(uid)!.push(call);
-          });
-
-          const daysForBreakdown: Record<string, number> = {
-            today: 1, week: 7, month: 30, quarter: 90,
-            '7d': 7, '30d': 30, '90d': 90
-          };
-          const breakdownDays = daysForBreakdown[dateRange] || 30;
-          const breakdownWorkingHours = breakdownDays * 8;
-
-          agentCallMap.forEach((agentCalls, uid) => {
-            const prof = profiles?.find((p: any) => p.id === uid);
-            const agentName = prof?.full_name || prof?.email || 'Unknown';
-            const agentEmail = prof?.email || '';
-
-            const totalCalls = agentCalls.length;
-            const connects = agentCalls.filter(c => {
-              if (c.status === 'converted') return true;
-              if (c.status === 'connected') return (Number(c.duration_seconds) || 0) > 0;
-              return false;
-            }).length;
-            const conversions = agentCalls.filter(c => c.status === 'converted').length;
-            const revenue = agentCalls.reduce((s, c) => s + (Number(c.deposit_amount) || 0), 0);
-
-            const connectedCalls = agentCalls.filter(c => {
-              if (c.status === 'converted') return true;
-              if (c.status === 'connected') return (Number(c.duration_seconds) || 0) > 0;
-              return false;
-            });
-            const totalDurSec = connectedCalls.reduce((s, c) => s + (Number(c.duration_seconds) || 0), 0);
-            const avgHandleSec = connects > 0 ? Math.round(totalDurSec / connects) : 0;
-            const ahtFormatted = `${Math.floor(avgHandleSec / 60)}:${(avgHandleSec % 60).toString().padStart(2, '0')}`;
-
-            const connectRate = totalCalls > 0 ? ((connects / totalCalls) * 100).toFixed(1) + '%' : '0%';
-            const convRate = connects > 0 ? ((conversions / connects) * 100).toFixed(1) + '%' : '0%';
-            const callsPerHour = breakdownWorkingHours > 0 ? (totalCalls / breakdownWorkingHours).toFixed(1) : '0.0';
-
-            agentBreakdownSheet.addRow([
-              agentName, agentEmail,
-              totalCalls, parseFloat(callsPerHour),
-              connects, connectRate,
-              conversions, convRate,
-              revenue, ahtFormatted
-            ]);
-          });
-        }
-        // ──────────────────────────────────────────────────────────────────────
-
-        // Create Call Log sheet
-        const callLogSheet = excelWorkbook.addWorksheet('Call Log');
-        
-        // Ensure sheet has proper properties (minimal for Google Drive compatibility)
-        // callLogSheet.properties.defaultRowHeight = 15;  // Commented for compatibility
+        const callLogSheet = excelWorkbook.addWorksheet('Daily Report');
         
         // Add header row
-        const headerRow = callLogSheet.addRow(['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']);
+        callLogSheet.addRow(['Date', 'Name', 'Number', 'Remarks']);
         
-        // Style header row (commented out for Google Drive compatibility)
-        // Google Drive converter may not support all formatting
-        // headerRow.font = { bold: true };
-        // headerRow.fill = {
-        //   type: 'pattern',
-        //   pattern: 'solid',
-        //   fgColor: { argb: 'FFE0E0E0' }
-        // };
-        
-        // Use the shared sortedCalls array defined above to ensure consistency with preview
+        // Add data rows
         sortedCalls.forEach(call => {
-          const { formattedDate, formattedTime } = formatDateForExport(call.start_time);
+          const { formattedDate } = formatDateForExport(call.start_time, userTimezone);
           const agentName = call.profiles?.full_name || 'Unknown Agent';
           const phoneNumber = call.phone_number || 'N/A';
-          const remarks = call.notes || 'No remarks';
+          const remarks = call.notes || call.status || '';
           callLogSheet.addRow([
             formattedDate,
-            formattedTime,
             agentName,
             phoneNumber,
-            call.lead_name || 'Unknown Lead',
-            call.status || 'unknown',
-            call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}` : '0:00',
             remarks
           ]);
         });
@@ -1095,25 +960,16 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           console.error('[ExcelJS] Error generating Excel file:', excelError);
           // Fallback to XLSX library if ExcelJS fails
           const xlsxWorkbook = XLSX.utils.book_new();
-          const summaryData: any[][] = [['Performance Report Summary'], [], ['Report Period:', dateRange.charAt(0).toUpperCase() + dateRange.slice(1)], ['Generated:', new Date().toLocaleDateString('en-US', { timeZone: userTimezone })]];
-          if (selectedAgent !== 'all' && agentKPIs) {
-            summaryData.push(['Agent:', agentKPIs.agentName], ['Email:', agentKPIs.email], [], ['Key Performance Indicators'], ['Metric', 'Value', 'Target']);
-            summaryData.push(['Numbers Assigned', agentKPIs.numbersAssigned || 0, 'Leads assigned in period'], ['Total Calls Made', agentKPIs.totalCalls, '60 calls/day'], ['Calls Per Hour', agentKPIs.callsPerHour.toFixed(1), '7.5 calls/hour'], ['Connects', agentKPIs.connects, '40 connects/day'], ['Connect Rate', `${agentKPIs.connectRate}%`, '70%'], ['Conversions', agentKPIs.conversions, '12 conversions/day'], ['Conversion Rate', `${agentKPIs.conversionRate}%`, '25%'], ['Total Revenue', `${currencyLabel} ${agentKPIs.totalRevenue.toLocaleString()}`, ''], ['Average Handle Time', agentKPIs.avgHandleTime, '3-5 min']);
-            summaryData.push([], ['Team Performance Summary'], ['Metric', 'Value'], ['Total Call Attempts (Raw)', teamRawCalls], ['Unique Contacts (Deduplicated)', teamTotalCalls], ['Calls Per Hour', teamCallsPerHour], ['Connects', teamConnects], ['Connect Rate', teamRawCalls > 0 ? `${((teamConnects / teamRawCalls) * 100).toFixed(1)}%` : '0%'], ['Conversions', teamConversions], ['Conversion Rate', teamConnects > 0 ? `${((teamConversions / teamConnects) * 100).toFixed(1)}%` : '0%']);
-          }
-          const xlsxSummarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-          XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxSummarySheet, 'Summary');
-          const callLogData: any[][] = [['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']];
+          const callLogData: any[][] = [['Date', 'Name', 'Number', 'Remarks']];
           sortedCalls.forEach(call => {
-            const callDate = new Date(call.start_time);
-            const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
+            const { formattedDate } = formatDateForExport(call.start_time, userTimezone);
             const agentName = call.profiles?.full_name || 'Unknown Agent';
             const phoneNumber = call.phone_number || 'N/A';
-            const remarks = call.notes || 'No remarks';
-            callLogData.push([formattedDate, formattedTime, agentName, phoneNumber, call.lead_name || 'Unknown Lead', call.status || 'unknown', call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}` : '0:00', remarks]);
+            const remarks = call.notes || call.status || '';
+            callLogData.push([formattedDate, agentName, phoneNumber, remarks]);
           });
           const xlsxCallLogSheet = XLSX.utils.aoa_to_sheet(callLogData);
-          XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxCallLogSheet, 'Call Log');
+          XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxCallLogSheet, 'Daily Report');
           const excelArray = XLSX.write(xlsxWorkbook, { type: 'array', bookType: 'xlsx', cellStyles: false, cellDates: true });
           blob = new Blob([new Uint8Array(excelArray)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         }
@@ -1121,18 +977,16 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         
         // Store Excel data as JSON for preview/editing (using XLSX for reading)
         const xlsxWorkbook = XLSX.utils.book_new();
-        // Use the SAME summaryDataRows array created above to ensure preview matches download exactly
-        // Deep copy summaryDataRows to avoid mutation
-        const summaryData = summaryDataRows.map(row => [...row]);
-        const xlsxSummarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-        XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxSummarySheet, 'Summary');
-        const callLogData: any[][] = [['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']];
+        const callLogData: any[][] = [['Date', 'Name', 'Number', 'Remarks']];
         sortedCalls.forEach(call => {
-          const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
-          callLogData.push([formattedDate, formattedTime, call.profiles?.full_name || 'Unknown Agent', call.phone_number || 'N/A', call.lead_name || 'Unknown Lead', call.status || 'unknown', call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}` : '0:00', call.notes || 'No remarks']);
+          const { formattedDate } = formatDateForExport(call.start_time, userTimezone);
+          const agentName = call.profiles?.full_name || 'Unknown Agent';
+          const phoneNumber = call.phone_number || 'N/A';
+          const remarks = call.notes || call.status || '';
+          callLogData.push([formattedDate, agentName, phoneNumber, remarks]);
         });
         const xlsxCallLogSheet = XLSX.utils.aoa_to_sheet(callLogData);
-        XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxCallLogSheet, 'Call Log');
+        XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxCallLogSheet, 'Daily Report');
         const excelData = {
           sheets: xlsxWorkbook.SheetNames.map(sheetName => ({
             name: sheetName,
@@ -1328,32 +1182,19 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         // Ensure sheet has proper properties (minimal for Google Drive compatibility)
         // callLogSheet.properties.defaultRowHeight = 15;  // Commented for compatibility
         
-        // Add header row
-        const headerRow = callLogSheet.addRow(['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']);
-        
-        // Style header row (commented out for Google Drive compatibility)
-        // Google Drive converter may not support all formatting
-        // headerRow.font = { bold: true };
-        // headerRow.fill = {
-        //   type: 'pattern',
-        //   pattern: 'solid',
-        //   fgColor: { argb: 'FFE0E0E0' }
-        // };
+        // Add header row — 4 columns matching the manager's boss report
+        callLogSheet.addRow(['Date', 'Name', 'Number', 'Remarks']);
         
         // Use the shared sortedCalls array defined above to ensure consistency with preview
         sortedCalls.forEach(call => {
-          const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
+          const { formattedDate } = formatDateForExport(call.start_time, userTimezone);
           const agentName = call.profiles?.full_name || 'Unknown Agent';
           const phoneNumber = call.phone_number || 'N/A';
-          const remarks = call.notes || 'No remarks';
+          const remarks = call.notes || call.status || '';
           callLogSheet.addRow([
             formattedDate,
-            formattedTime,
             agentName,
             phoneNumber,
-            call.lead_name || 'Unknown Lead',
-            call.status || 'unknown',
-            call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}` : '0:00',
             remarks
           ]);
         });
@@ -1446,14 +1287,13 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
           }
           const xlsxSummarySheet = XLSX.utils.aoa_to_sheet(summaryData);
           XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxSummarySheet, 'Summary');
-          const callLogData: any[][] = [['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']];
+          const callLogData: any[][] = [['Date', 'Name', 'Number', 'Remarks']];
           sortedCalls.forEach(call => {
-            const callDate = new Date(call.start_time);
-            const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
+            const { formattedDate } = formatDateForExport(call.start_time, userTimezone);
             const agentName = call.profiles?.full_name || 'Unknown Agent';
             const phoneNumber = call.phone_number || 'N/A';
-            const remarks = call.notes || 'No remarks';
-            callLogData.push([formattedDate, formattedTime, agentName, phoneNumber, call.lead_name || 'Unknown Lead', call.status || 'unknown', call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}` : '0:00', remarks]);
+            const remarks = call.notes || call.status || '';
+            callLogData.push([formattedDate, agentName, phoneNumber, remarks]);
           });
           const xlsxCallLogSheet = XLSX.utils.aoa_to_sheet(callLogData);
           XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxCallLogSheet, 'Call Log');
@@ -1484,10 +1324,10 @@ export function ExportReportModal({ open, onOpenChange, dateRange, selectedAgent
         const summaryData = summaryDataRows.map(row => [...row]);
         const xlsxSummarySheet = XLSX.utils.aoa_to_sheet(summaryData);
         XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxSummarySheet, 'Summary');
-        const callLogData: any[][] = [['Date', 'Time', 'Agent Name', 'Phone Number', 'Lead Name', 'Status', 'Duration', 'Remarks']];
+        const callLogData: any[][] = [['Date', 'Name', 'Number', 'Remarks']];
         sortedCalls.forEach(call => {
-          const { formattedDate, formattedTime } = formatDateForExport(call.start_time, userTimezone);
-          callLogData.push([formattedDate, formattedTime, call.profiles?.full_name || 'Unknown Agent', call.phone_number || 'N/A', call.lead_name || 'Unknown Lead', call.status || 'unknown', call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}:${(call.duration_seconds % 60).toString().padStart(2, '0')}` : '0:00', call.notes || 'No remarks']);
+          const { formattedDate } = formatDateForExport(call.start_time, userTimezone);
+          callLogData.push([formattedDate, call.profiles?.full_name || 'Unknown Agent', call.phone_number || 'N/A', call.notes || call.status || '']);
         });
         const xlsxCallLogSheet = XLSX.utils.aoa_to_sheet(callLogData);
         XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxCallLogSheet, 'Call Log');
